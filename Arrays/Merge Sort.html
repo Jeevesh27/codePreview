@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Merge Sort — Clear Bar Chart</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --active:#6cf3ff; --pair:#ffd166; --done:#8ae9c1;
+    --left:#3aa1ff55; --right:#ff8b3a55; --write:#ffd16688;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:radial-gradient(1200px 800px at 70% -10%,#20264a 0%,var(--bg) 40%);
+    color:var(--text); font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+    min-height:100vh; display:grid; place-items:start center; padding:28px 14px 64px;
+  }
+  .panel{ width:min(1100px,100%); background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid #1a2040; border-radius:14px; padding:16px 18px; box-shadow:var(--shadow); margin-bottom:14px;}
+  h1{margin:0 0 10px; font-size:clamp(22px,3vw,28px)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{background:#0e1736;color:var(--text);border:1px solid #2b3563;border-radius:10px;padding:10px 14px;cursor:pointer}
+  button:hover{background:#121c44} button:disabled{opacity:.55;cursor:not-allowed}
+  input[type="range"]{accent-color:var(--active)}
+  .muted{color:var(--muted)}
+
+  /* Chart area */
+  .chart{
+    position:relative; background:#101634; border:1px solid #222a55; border-radius:12px;
+    padding:46px 14px 64px; /* top space for labels, bottom for pointers */
+    min-height:360px; overflow:hidden;
+  }
+  .lane{position:relative; height:260px;}
+  .bars{position:absolute; inset:0; display:flex; align-items:flex-end; gap:8px; padding:0 2px}
+  .bar{ width:26px; background:linear-gradient(180deg,#0c1128,#0a0f22); border:1px solid #27305b; border-radius:8px 8px 4px 4px;
+        position:relative; transition:height .25s ease, background .2s ease, outline .2s ease }
+  .bar.done{ background:#0d1f22; border-color:#2a5b4e }
+  .bar .val{ position:absolute; top:-20px; left:50%; transform:translateX(-50%); font:11px/1 ui-monospace; color:var(--muted) }
+
+  /* Range bands */
+  .band{ position:absolute; height:100%; top:0; border-radius:10px; pointer-events:none }
+  .band.left{ background:var(--left); }
+  .band.right{ background:var(--right); }
+  .band.write{ background:var(--write); }
+
+  /* Pointers under bars */
+  .ptrs{ position:absolute; left:0; right:0; bottom:18px; height:30px; pointer-events:none }
+  .ptr{ position:absolute; width:26px; height:14px; border-radius:2px; transform:translateX(-50%); font:10px/14px ui-monospace; text-align:center; color:#091018; }
+  .ptr.i{ background:#3aa1ff; } .ptr.j{ background:#ff8b3a; } .ptr.k{ background:#ffd166; }
+
+  .stats{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .badge{background:#0b1022;border:1px solid #28305a;color:var(--muted);padding:6px 10px;border-radius:999px;font-size:12px}
+  .badge b{color:var(--text)}
+</style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Merge Sort</h1>
+    <div class="row">
+      <button id="play">▶ Play</button>
+      <button id="step">⏭ Step</button>
+      <button id="reset">♻ Reset</button>
+      <button id="random">🎲 Random</button>
+      <span class="muted">Speed</span>
+      <input id="speed" type="range" min="0" max="100" value="45" />
+      <span id="spdLbl" class="muted">Medium</span>
+    </div>
+  </div>
+
+  <div class="panel chart">
+    <div class="lane">
+      <div class="band left"  id="bandL" style="display:none"></div>
+      <div class="band right" id="bandR" style="display:none"></div>
+      <div class="band write" id="bandW" style="display:none"></div>
+
+      <div class="bars" id="bars"></div>
+      <div class="ptrs">
+        <div class="ptr i" id="ptrI" style="display:none">i</div>
+        <div class="ptr j" id="ptrJ" style="display:none">j</div>
+        <div class="ptr k" id="ptrK" style="display:none">k</div>
+      </div>
+    </div>
+    <div class="stats">
+      <span class="badge">Pass width: <b id="pass">1</b></span>
+      <span class="badge">Segment: <b id="seg">0</b></span>
+      <span class="badge">lo–mid–hi: <b id="rng">–</b></span>
+      <span class="badge">Comparisons: <b id="cmp">0</b></span>
+      <span class="badge">Writes: <b id="wrt">0</b></span>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---------- helpers ----------
+  const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+  function speedToDelay(v){ const t=clamp(v,0,100)/100; const eased=1-Math.pow(t,1.6); return 70+Math.round(eased*700); }
+  function labelSpeed(v){ v=+v; if(v<20) return 'Fastest'; if(v<40) return 'Fast'; if(v<60) return 'Medium'; if(v<80) return 'Slow'; return 'Slowest'; }
+  const wait = ms => new Promise(r=>setTimeout(r,ms));
+
+  // ---------- DOM ----------
+  const barsWrap = document.getElementById('bars');
+  const bandL = document.getElementById('bandL');
+  const bandR = document.getElementById('bandR');
+  const bandW = document.getElementById('bandW');
+  const ptrI = document.getElementById('ptrI');
+  const ptrJ = document.getElementById('ptrJ');
+  const ptrK = document.getElementById('ptrK');
+
+  const playBtn = document.getElementById('play');
+  const stepBtn = document.getElementById('step');
+  const resetBtn = document.getElementById('reset');
+  const randomBtn= document.getElementById('random');
+  const passLbl = document.getElementById('pass');
+  const segLbl  = document.getElementById('seg');
+  const rngLbl  = document.getElementById('rng');
+  const cmpLbl  = document.getElementById('cmp');
+  const wrtLbl  = document.getElementById('wrt');
+
+  const spd = document.getElementById('speed');
+  const spdLbl = document.getElementById('spdLbl');
+
+  // ---------- state ----------
+  const S = {
+    arr: [],
+    n: 0,
+    width: 1,
+    lo: 0, mid: -1, hi: -1,
+    li: 0, rj: 0, k: 0,     // relative pointers within [lo..hi]
+    tmp: null,              // snapshot lo..hi
+    seg: 0,
+    cmp: 0, wrt: 0,
+    running: false,
+    delay: speedToDelay(+spd.value),
+    active: false
+  };
+
+  // ---------- building / painting ----------
+  function randomArray(n=24){ return Array.from({length:n},()=>Math.floor(Math.random()*95)+5); }
+  function maxVal(a){ return a.reduce((m,v)=>v>m?v:m,1); }
+  function buildBars(){
+    barsWrap.innerHTML='';
+    const M = maxVal(S.arr);
+    S.arr.forEach(v=>{
+      const b = document.createElement('div');
+      b.className='bar';
+      b.style.height = `${(v/M)*100}%`;
+      b.innerHTML = `<div class="val">${v}</div>`;
+      barsWrap.appendChild(b);
+    });
+  }
+  function updateHeights(){
+    const M = maxVal(S.arr);
+    [...barsWrap.children].forEach((b,i)=>{
+      b.style.height = `${(S.arr[i]/M)*100}%`;
+      b.querySelector('.val').textContent = S.arr[i];
+    });
+  }
+
+  function posOf(index){
+    const el = barsWrap.children[index];
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const wrapRect = barsWrap.getBoundingClientRect();
+    return rect.left - wrapRect.left + rect.width/2;
+  }
+
+  function showPointers(){
+    if (!S.active){
+      ptrI.style.display = ptrJ.style.display = ptrK.style.display = 'none';
+      return;
+    }
+    const iAbs = S.lo + S.li;
+    const jAbs = S.lo + S.rj;
+    const kAbs = S.k;
+
+    const xi = posOf(iAbs);
+    const xj = posOf(jAbs);
+    const xk = posOf(kAbs);
+
+    if (xi == null) ptrI.style.display = 'none';
+    else { ptrI.style.display = 'block'; ptrI.style.left = xi + 'px'; }
+
+    if (xj == null) ptrJ.style.display = 'none';
+    else { ptrJ.style.display = 'block'; ptrJ.style.left = xj + 'px'; }
+
+    if (xk == null) ptrK.style.display = 'none';
+    else { ptrK.style.display = 'block'; ptrK.style.left = xk + 'px'; }
+  }
+
+  function showBands(){
+    if (!S.active){
+      bandL.style.display = bandR.style.display = bandW.style.display = 'none';
+      return;
+    }
+    const leftStart  = S.lo,      leftEnd  = S.mid;
+    const rightStart = S.mid + 1, rightEnd = S.hi;
+
+    const wrapRect = barsWrap.getBoundingClientRect();
+    const setBand = (el, startIdx, endIdx, cls) => {
+      const aEl = barsWrap.children[startIdx];
+      const bEl = barsWrap.children[endIdx];
+      if (!aEl || !bEl){ el.style.display = 'none'; return; }
+      const a = aEl.getBoundingClientRect();
+      const b = bEl.getBoundingClientRect();
+      el.style.display = 'block';
+      el.style.left = (a.left - wrapRect.left) + 'px';
+      el.style.width = (b.right - a.left) + 'px';
+      el.className = `band ${cls}`;
+    };
+
+    setBand(bandL, leftStart,  leftEnd,  'left');
+    setBand(bandR, rightStart, rightEnd, 'right');
+
+    // write band = [lo .. k-1]
+    const kEnd = Math.max(S.k, S.lo) - 1;
+    if (kEnd >= S.lo) setBand(bandW, S.lo, kEnd, 'write');
+    else bandW.style.display = 'none';
+  }
+
+  function markDoneIfFinished(){
+    if (S.width >= S.n && !S.active){
+      [...barsWrap.children].forEach(b=>b.classList.add('done'));
+    }
+  }
+  function paint(){
+    document.getElementById('pass').textContent = S.width;
+    document.getElementById('seg').textContent  = S.seg;
+    document.getElementById('rng').textContent  = S.active ? `${S.lo}–${S.mid}–${S.hi}` : '–';
+    document.getElementById('cmp').textContent  = S.cmp;
+    document.getElementById('wrt').textContent  = S.wrt;
+    showBands(); showPointers(); markDoneIfFinished();
+  }
+
+  // ---------- engine (bottom-up) ----------
+  function setupNextSegment(){
+    while (S.lo < S.n){
+      S.mid = Math.min(S.lo + S.width - 1, S.n - 1);
+      S.hi  = Math.min(S.lo + 2*S.width - 1, S.n - 1);
+      if (S.mid < S.hi){
+        S.tmp = S.arr.slice(S.lo, S.hi+1);
+        S.li  = 0;
+        S.rj  = (S.mid - S.lo) + 1;
+        S.k   = S.lo;
+        S.active = true;
+        paint();
+        return true;
+      } else {
+        S.lo += 2*S.width; S.seg++;
+      }
+    }
+    // pass done → expand width
+    S.width *= 2;
+    S.lo = 0; S.seg = 0;
+    if (S.width >= S.n){ S.active=false; paint(); return false; }
+    return setupNextSegment();
+  }
+
+  function stepOnce(){
+    if (!S.active){
+      const ok = setupNextSegment();
+      if (!ok){ S.running=false; playBtn.textContent='▶ Play'; paint(); return; }
+      return;
+    }
+    const leftEnd  = S.mid - S.lo;
+    const rightEnd = S.hi  - S.lo;
+    const leftHas  = S.li <= leftEnd;
+    const rightHas = S.rj <= rightEnd;
+
+    if (!leftHas && !rightHas){
+      // segment finished
+      S.lo += 2*S.width; S.seg++; S.active=false;
+      paint(); return;
+    }
+
+    // choose from left/right
+    if (leftHas && rightHas){
+      S.cmp++;
+      const a = S.tmp[S.li], b = S.tmp[S.rj];
+      if (a <= b){ S.arr[S.k]=a; S.li++; }
+      else       { S.arr[S.k]=b; S.rj++; }
+    } else if (leftHas){ S.arr[S.k]=S.tmp[S.li]; S.li++; }
+      else             { S.arr[S.k]=S.tmp[S.rj]; S.rj++; }
+
+    S.wrt++;
+    updateHeights(); // one write -> one bar updates
+    S.k++;
+    paint();
+  }
+
+  async function runAuto(){
+    if (S.running){ S.running=false; playBtn.textContent='▶ Play'; return; }
+    S.running=true; playBtn.textContent='⏸ Pause';
+    while (S.running){
+      stepOnce();
+      if (S.width >= S.n && !S.active){ S.running=false; break; }
+      await wait(S.delay*0.45);
+    }
+    playBtn.textContent='▶ Play';
+  }
+
+  // ---------- controls ----------
+  function reset(arr){
+    S.arr = arr.slice();
+    S.n = S.arr.length;
+    S.width=1; S.lo=0; S.mid=-1; S.hi=-1;
+    S.li=0; S.rj=0; S.k=0; S.tmp=null; S.seg=0;
+    S.cmp=0; S.wrt=0; S.active=false; S.running=false;
+    playBtn.textContent='▶ Play';
+    buildBars(); paint();
+  }
+
+  // init
+  reset(randomArray(24));
+
+  playBtn.addEventListener('click', runAuto);
+  stepBtn.addEventListener('click', stepOnce);
+  resetBtn.addEventListener('click', ()=> reset(S.arr));
+  randomBtn.addEventListener('click', ()=> reset(randomArray(24)));
+
+  spd.addEventListener('input', e=>{
+    S.delay = speedToDelay(+e.target.value);
+    spdLbl.textContent = labelSpeed(+e.target.value);
+  });
+  spdLbl.textContent = labelSpeed(+spd.value);
+
+  // keep pointers/bands aligned on resize
+  window.addEventListener('resize', paint);
+})();
+</script>
+</body>
+</html>
