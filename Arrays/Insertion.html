@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Array Insertion Visualizer (Stable)</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --edge:#556; --edge-pair:#e3b84a; --edge-done:#6fae97;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background: radial-gradient(1200px 800px at 70% -10%, #20264a 0%, var(--bg) 40%);
+    color:var(--text); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
+    min-height:100vh; padding:32px 16px 64px; display:grid; place-items:start center;
+  }
+  .app{ width:min(1050px,100%); display:grid; gap:16px; }
+  .panel{
+    background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%);
+    border:1px solid #1a2040; border-radius:14px; box-shadow:var(--shadow); padding:18px;
+  }
+  .title-row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+  h1{ margin:0; font-size:clamp(22px,3vw,28px);}
+  .badge{ background:#0b1022; border:1px solid #28305a; color:var(--muted); padding:6px 10px; border-radius:999px; font-size:12px; display:inline-flex; gap:6px; align-items:center;}
+  .badge b{ color:var(--text); }
+  .meta{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; color:var(--muted); font-size:14px;}
+  .pill{ background:#0e1430; border:1px dashed #2a325e; padding:6px 10px; border-radius:10px;}
+  .pill b{ color:var(--pair); }
+
+  .controls{ display:grid; gap:12px; }
+  @media (min-width: 860px){
+    .controls{ grid-template-columns: 1.2fr .8fr; }
+  }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  label{ color:var(--muted); font-size:14px;}
+  input[type="number"], input[type="text"]{
+    background:#0d1126; border:1px solid #242b51; color:var(--text); border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input[type="text"]{ min-width:280px; }
+  button{
+    background:#0e1736; color:var(--text); border:1px solid #2b3563; border-radius:12px; padding:10px 14px; cursor:pointer;
+    transition:transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button:hover{ background:#121c44; }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:linear-gradient(180deg,#0f2b3a,#0b1f2b); border-color:#284a60; }
+  button:disabled{ opacity:.55; cursor:not-allowed; }
+
+  .array{
+    display:grid; grid-auto-flow:column; grid-auto-columns:minmax(64px,1fr);
+    gap:10px; padding:12px; border-radius:12px; background:#101634; border:1px solid #222a55; overflow-x:auto;
+  }
+  .cell{
+    position:relative; background:#0c1128; border:1px solid #27305b; border-radius:10px; min-height:70px;
+    display:grid; place-items:center; color:var(--text); font-weight:600; letter-spacing:.2px; box-shadow:inset 0 0 0 1px #0b1026, var(--shadow);
+    transition: transform .28s ease, outline .2s ease, background .2s ease, border-color .2s ease, opacity .2s ease;
+  }
+  .index{ position:absolute; top:6px; left:8px; font:11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas; color:var(--muted); opacity:.85;}
+  .cell.active{ outline:2px solid var(--active); }
+  .cell.shift{ border-color:var(--edge-pair); box-shadow:0 0 0 1px var(--edge-pair) inset, var(--shadow); }
+  .cell.done{ background:#0d1f22; border-color:var(--edge-done); }
+  .ghost{ opacity:.55; border-style:dashed; transform: scale(.96); }
+
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; color:var(--muted); font-size:14px;}
+  .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; vertical-align:middle;}
+  .dot.active{ background:var(--active); }
+  .dot.pair{ background:var(--pair); }
+  .dot.done{ background:var(--done); }
+
+  pre{ margin:0; background:#0b1026; border:1px solid #222a55; border-radius:12px; padding:14px; overflow:auto; box-shadow:var(--shadow); color:var(--text);}
+  code{ font:13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas; }
+
+  .note{ color:var(--muted); }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="panel">
+    <div class="title-row">
+      <h1>🔹 Insertion — add a new element</h1>
+      <span class="badge">⏱ End: <b>O(1)*</b></span>
+      <span class="badge">⏱ At index: <b>O(n)</b></span>
+      <span class="badge">📦 Space: <b>O(1)</b></span>
+    </div>
+    <div class="meta">
+      <span class="pill">*Dynamic arrays: amortized O(1) append; static may need resizing ➜ O(n)</span>
+    </div>
+  </section>
+
+  <section class="panel controls" aria-label="Controls">
+    <div class="row">
+      <label for="contents">Array (comma-separated)</label>
+      <input id="contents" type="text" value="10, 20, 30, 40" />
+      <button id="apply" class="primary">Apply</button>
+      <button id="shuffle">Randomize</button>
+      <span class="pill">Length: <b id="len">4</b></span>
+    </div>
+    <div class="row">
+      <label for="value">Value</label>
+      <input id="value" type="text" value="50" style="min-width:100px" />
+      <label for="index">Index</label>
+      <input id="index" type="number" min="0" value="2" style="width:90px" />
+      <button id="insertbtn" class="primary">➕ Insert</button>
+      <button id="append">⤵️ Append (end)</button>
+      <button id="reset">♻️ Reset</button>
+    </div>
+    <div class="row">
+      <label for="speed">Speed</label>
+      <input id="speed" type="range" min="0" max="100" value="45" />
+      <span id="speedLabel">Medium</span>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Visualization">
+    <div id="array" class="array" role="list" aria-label="Array"></div>
+    <div class="legend" style="margin-top:8px;">
+      <span><span class="dot active"></span> Active (insert position)</span>
+      <span><span class="dot pair"></span> Shifting right</span>
+      <span><span class="dot done"></span> Finalized</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin:0 0 10px;">Pseudo-code</h2>
+<pre><code>// Insert x at position k in array arr (0 ≤ k ≤ n)
+function insert(arr, x, k):
+    for i ← n-1 down to k:
+        arr[i+1] ← arr[i]
+    arr[k] ← x
+    n ← n + 1
+// End insertion (append) is k = n
+</code></pre>
+    <p class="note">At a specific index we must shift elements → <b>O(n)</b>. Appending at the end is amortized <b>O(1)</b> for dynamic arrays (until a resize happens), but can be <b>O(n)</b> if a static array needs reallocation.</p>
+  </section>
+</main>
+
+<script>
+  // ===== State =====
+  const state = {
+    baseArr: [10,20,30,40],
+    arr: [],
+    delay: 380,
+    animating: false
+  };
+
+  // ===== Elements =====
+  const elArray = document.getElementById('array');
+  const elContents = document.getElementById('contents');
+  const elApply = document.getElementById('apply');
+  const elShuffle = document.getElementById('shuffle');
+  const elLen = document.getElementById('len');
+  const elValue = document.getElementById('value');
+  const elIndex = document.getElementById('index');
+  const elInsert = document.getElementById('insertbtn');
+  const elAppend = document.getElementById('append');
+  const elReset = document.getElementById('reset');
+  const elSpeed = document.getElementById('speed');
+  const elSpeedLabel = document.getElementById('speedLabel');
+
+  // ===== Utils =====
+  const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+  function speedToDelay(v){
+    const t = clamp(v,0,100)/100;
+    const eased = 1 - Math.pow(t,1.6);
+    return 70 + Math.round(eased*700);
+  }
+  function labelSpeed(v){
+    v = +v;
+    if (v<20) return 'Fastest';
+    if (v<40) return 'Fast';
+    if (v<60) return 'Medium';
+    if (v<80) return 'Slow';
+    return 'Slowest';
+  }
+  const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
+  function randomArray(n=clamp(Math.floor(Math.random()*7)+4,3,10)){
+    return Array.from({length:n},()=>Math.floor(Math.random()*90)+10);
+  }
+
+  // ===== DOM Build (one-time for each render) =====
+  function renderFromArray(){
+    elArray.innerHTML = '';
+    state.arr.forEach((val, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.index = idx;
+
+      const idxTag = document.createElement('div');
+      idxTag.className = 'index';
+      idxTag.textContent = idx;
+
+      const txt = document.createElement('div');
+      txt.className = 'value';
+      txt.textContent = val;
+
+      cell.appendChild(idxTag);
+      cell.appendChild(txt);
+      elArray.appendChild(cell);
+    });
+    elLen.textContent = state.arr.length;
+    elIndex.max = state.arr.length; // allow insert at end
+  }
+
+  // ===== Direct DOM Animation (no rerenders during steps) =====
+  async function animateInsertion(value, k){
+    if (state.animating) return;
+    state.animating = true;
+
+    const n = state.arr.length;
+    k = clamp(parseInt(elIndex.value || '0',10), 0, n);
+    elIndex.value = k; // normalize UI
+
+    // If appending: just create a ghost cell, then fill it
+    if (k === n){
+      // add one visual cell
+      const ghost = document.createElement('div');
+      ghost.className = 'cell ghost';
+      ghost.dataset.index = n;
+      ghost.innerHTML = `<div class="index">${n}</div><div class="value"></div>`;
+      elArray.appendChild(ghost);
+      elLen.textContent = n+1;
+
+      await wait(state.delay);
+      ghost.querySelector('.value').textContent = value;
+      ghost.classList.remove('ghost');
+      ghost.classList.add('done');
+
+      // sync data
+      state.arr.push(value);
+      state.baseArr = [...state.arr];
+
+      state.animating = false;
+      return;
+    }
+
+    // Insert at index: make a slot at the end, then shift values right in DOM
+    // 1) Ensure a trailing visual slot for shifting
+    const lastIdx = n; // new last index (temporary visual)
+    const tail = document.createElement('div');
+    tail.className = 'cell ghost';
+    tail.dataset.index = lastIdx;
+    tail.innerHTML = `<div class="index">${lastIdx}</div><div class="value"></div>`;
+    elArray.appendChild(tail);
+    elLen.textContent = n+1;
+
+    // 2) Shift from n-1 down to k
+    for (let i = n-1; i >= k; i--){
+      const src = elArray.children[i];
+      const dst = elArray.children[i+1];
+
+      // highlight
+      src.classList.add('shift');
+      dst.classList.add('shift');
+
+      await wait(state.delay);
+
+      // copy text from src to dst
+      const srcVal = src.querySelector('.value').textContent;
+      dst.querySelector('.value').textContent = srcVal;
+
+      // mark src as "moved"
+      src.classList.remove('shift');
+      src.classList.add('done');
+
+      await wait(state.delay * 0.5);
+      dst.classList.remove('shift');
+    }
+
+    // 3) Place new value at k
+    const target = elArray.children[k];
+    target.classList.add('active');
+    await wait(state.delay);
+    target.querySelector('.value').textContent = value;
+    target.classList.remove('active');
+    target.classList.add('done');
+
+    // 4) Sync underlying array data
+    const newArr = new Array(n+1);
+    for (let i=0; i<k; i++) newArr[i] = state.arr[i];
+    newArr[k] = value;
+    for (let i=k; i<n; i++) newArr[i+1] = state.arr[i];
+    state.arr = newArr;
+    state.baseArr = [...state.arr];
+
+    // 5) Re-render once to clean up classes and fix index labels
+    renderFromArray();
+
+    state.animating = false;
+  }
+
+  // ===== Events =====
+  elApply.addEventListener('click', ()=>{
+    const parts = elContents.value.split(',').map(s=>s.trim()).filter(Boolean);
+    state.arr = parts.map(x => (x === '' ? '' : (isNaN(+x) ? x : +x)));
+    state.baseArr = [...state.arr];
+    renderFromArray();
+  });
+
+  elShuffle.addEventListener('click', ()=>{
+    state.arr = randomArray();
+    state.baseArr = [...state.arr];
+    elContents.value = state.arr.join(', ');
+    renderFromArray();
+  });
+
+  elInsert.addEventListener('click', async ()=>{
+    const raw = elValue.value.trim();
+    const v = (raw === '') ? '' : (isNaN(+raw) ? raw : +raw);
+    await animateInsertion(v, parseInt(elIndex.value||'0',10));
+  });
+
+  elAppend.addEventListener('click', async ()=>{
+    const raw = elValue.value.trim();
+    const v = (raw === '') ? '' : (isNaN(+raw) ? raw : +raw);
+    elIndex.value = state.arr.length; // show it's an append
+    await animateInsertion(v, state.arr.length);
+  });
+
+  elReset.addEventListener('click', ()=>{
+    state.arr = [...state.baseArr];
+    renderFromArray();
+  });
+
+  elSpeed.addEventListener('input', (e)=>{
+    state.delay = speedToDelay(+e.target.value);
+    elSpeedLabel.textContent = labelSpeed(+e.target.value);
+  });
+
+  // ===== Init =====
+  (function init(){
+    state.arr = [...state.baseArr];
+    elContents.value = state.arr.join(', ');
+    state.delay = speedToDelay(+elSpeed.value);
+    elSpeedLabel.textContent = labelSpeed(+elSpeed.value);
+    renderFromArray();
+  })();
+</script>
+</body>
+</html>
