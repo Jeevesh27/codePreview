@@ -1,147 +1,373 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Find Minimum Visualizer</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Engaging Min Finder — Visual Algorithm</title>
 <style>
-  :root {
-    --bg: #0f1220;
-    --panel: #161a2d;
-    --accent: #6cf3ff;
-    --ok: #8ae9c1;
-    --danger: #ff6b6b;
-    --text: #ecf2ff;
-    --muted:#a6b0cf;
-    --radius:14px;
-    --shadow: 0 8px 24px rgba(0,0,0,.35);
+  :root{
+    --bg:#0e1224; --panel:#151a33; --panel-2:#1b2144; --glass:rgba(255,255,255,.06);
+    --text:#eef2ff; --muted:#9aa4d4; --accent:#7be3ff; --accent-2:#9af0c6; --danger:#ff7b7b;
+    --ok:#98f5a1; --chip:#2a305a; --chip-2:#3a4181; --radius:16px; --shadow:0 12px 28px rgba(0,0,0,.35);
+    --ring:0 0 0 2px rgba(123,227,255,.3), 0 0 0 6px rgba(123,227,255,.12);
   }
-  body {
-    margin:0;
-    font-family: system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    min-height:100vh;
-    padding:20px;
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+    color:var(--text); background:
+      radial-gradient(1200px 800px at 10% -10%, #21295b 0%, #0e1224 45%, #0a0e1c 100%);
+    min-height:100svh; display:grid; place-items:start center; padding:24px;
   }
-  h1{margin-bottom:20px}
-  .panel {
-    background: var(--panel);
-    padding:20px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    max-width: 600px;
-    width:100%;
+  .app{width:min(1100px,100%); display:grid; gap:16px}
+  header{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+  h1{font-size:clamp(20px,3.2vw,28px); margin:0}
+  .sub{color:var(--muted); font-size:14px}
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid #283069; border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:16px;
   }
-  .array {
-    display:flex;
-    gap:12px;
-    justify-content:center;
-    margin-bottom:20px;
+  /* Controls */
+  .controls{display:grid; grid-template-columns: 1fr auto; gap:12px}
+  @media (max-width:860px){ .controls{grid-template-columns: 1fr} }
+  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  input[type="text"]{
+    flex:1; background:#0f1433; color:var(--text); border:1px solid #2d3570; border-radius:12px;
+    padding:12px 14px; outline:none;
   }
-  .cell {
-    width:60px;
-    height:60px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    border-radius: var(--radius);
-    background:#2a305a;
-    font-size:18px;
-    position:relative;
-    transition: transform .3s ease, background .3s ease;
+  input[type="text"]:focus{ box-shadow:var(--ring); border-color:#3a49b3 }
+  .btn{
+    border:1px solid #2d3570; background:#121742; color:var(--text);
+    padding:10px 14px; border-radius:12px; cursor:pointer; user-select:none;
+    transition:transform .06s ease,border-color .2s ease,background .2s ease,filter .2s ease;
   }
-  .cell.active { background:#39407a; transform: scale(1.1); }
-  .cell.min { background:var(--ok); color:#000; }
-  .cell.done { opacity:.6; }
-  .console {
-    background:#0b0f28;
-    padding:12px;
-    border-radius: var(--radius);
-    max-height:150px;
-    overflow:auto;
-    font-family:monospace;
-    font-size:14px;
+  .btn:hover{ border-color:#4253c7; filter:brightness(1.08) }
+  .btn:active{ transform:translateY(1px) }
+  .btn.primary{ background:linear-gradient(180deg,#1a2260,#141a45); border-color:#4454e1 }
+  .btn.good{ background:linear-gradient(180deg,#1b4e37,#133628); border-color:#2f8e67 }
+  .btn.danger{ background:linear-gradient(180deg,#4a1d2b,#32131d); border-color:#a33e59 }
+  .btn.ghost{ background:transparent }
+  .slider-wrap{display:flex; align-items:center; gap:10px}
+  .slider-wrap input[type="range"]{width:160px}
+  .kbd{font-family:ui-monospace,Menlo,monospace; background:#11163a; border:1px solid #2b3268; padding:2px 6px; border-radius:6px}
+
+  /* Stats */
+  .stats{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px}
+  @media (max-width:720px){ .stats{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  .stat{background:#12173a; border:1px solid #283069; border-radius:12px; padding:12px; text-align:center}
+  .stat .k{font-weight:700; font-size:20px}
+  .stat .l{font-size:12px; color:var(--muted)}
+
+  /* Array track */
+  .track-wrap{overflow:auto; border-radius:16px; border:1px dashed #2b336a; background:repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 40px, transparent 40px 80px)}
+  .track{display:flex; gap:12px; align-items:flex-end; padding:18px; min-height:120px}
+  .cell{
+    width:78px; height:70px; flex:0 0 auto; display:grid; place-items:center;
+    background:var(--chip); border:1px solid #2f3680; border-radius:14px;
+    font-weight:600; font-size:18px; position:relative; transform-origin:bottom center;
+    transition:transform .25s ease, background .25s ease, border-color .25s ease, color .25s ease, filter .25s ease;
   }
-  .btn {
-    padding:10px 16px;
-    border:none;
-    border-radius: var(--radius);
-    background:#1a2259;
-    color:var(--text);
-    cursor:pointer;
-    margin-top:15px;
+  .cell:hover{ filter:brightness(1.06) }
+  .cell .idx{position:absolute; top:6px; right:8px; font-size:11px; color:#a1a9e3; opacity:.85}
+  .cell.active{ background:#3b448e; transform:translateY(-8px) scale(1.03); border-color:#5867ff }
+  .cell.min{ background:linear-gradient(180deg,#53d393,#2a7f58); color:#052b1d; border-color:#7cf0b2; box-shadow:0 10px 26px rgba(83,211,147,.35) }
+  .cell.done{ opacity:.7 }
+  .badge{
+    position:absolute; bottom:-12px; left:50%; transform:translateX(-50%);
+    font-size:11px; padding:3px 8px; border-radius:999px; background:#10153b; border:1px solid #2d3570; color:#cfe1ff;
   }
-  .btn:hover { background:#26308a; }
+  .badge.min{ background:#0f2f23; border-color:#3e8d6e; color:#aaf5c5 }
+  .halo{position:absolute; inset:-6px; border-radius:14px; pointer-events:none; box-shadow:0 0 0 0 rgba(123,227,255,.0); transition:box-shadow .25s ease}
+  .cell.active .halo{ box-shadow:0 0 0 4px rgba(123,227,255,.15) }
+
+  /* Narration + console */
+  .narrate{font-size:15px}
+  .console{
+    background:#0b0f28; border:1px solid #23306b; border-radius:16px; padding:12px; min-height:86px; max-height:180px; overflow:auto;
+    font-family:ui-monospace,Menlo,monospace; font-size:13px;
+  }
+  .line{ color:#d7e6ff } .line .kw{ color:#ffd166 } .line .ok{ color:#98f5a1 } .line .er{ color:#ff9aa8 } .line .muted{ color:#9aa4d4 }
+
+  /* Progress */
+  .progress{height:8px; background:#0c1232; border:1px solid #27306b; border-radius:999px; overflow:hidden}
+  .bar{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .25s ease}
+
+  /* Animations */
+  @keyframes popIn{ 0%{transform:translateY(10px) scale(.95); opacity:0} 100%{transform:translateY(0) scale(1); opacity:1} }
+  @keyframes pulse{ 0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)} }
+  .anim-in{ animation:popIn .35s cubic-bezier(.2,.8,.2,1) both }
+  .pulse{ animation:pulse .35s ease-out }
+
+  /* Canvas confetti */
+  canvas#fx{position:fixed; inset:0; pointer-events:none}
+  /* Motion reduce */
+  @media (prefers-reduced-motion: reduce){
+    .cell, .bar{ transition:none !important }
+    .anim-in, .pulse{ animation:none !important }
+  }
 </style>
 </head>
 <body>
-  <h1>Find Minimum Visualizer</h1>
-  <div class="panel">
-    <div id="array" class="array"></div>
-    <div id="console" class="console"></div>
-    <button id="startBtn" class="btn">▶ Run Algorithm</button>
-  </div>
+<canvas id="fx"></canvas>
+<div class="app">
+  <header>
+    <div>
+      <h1>Find the Minimum — Interactive Visualizer</h1>
+      <div class="sub">Scan the array, track <code>minVal</code>, and celebrate the winner 🎉</div>
+    </div>
+  </header>
+
+  <section class="panel controls" aria-labelledby="controlsLabel">
+    <h2 id="controlsLabel" class="sub" style="margin:0 0 8px">Controls</h2>
+    <div class="row">
+      <input id="arrayInput" type="text" value="7, 12, 9, 4, 11" placeholder="comma-separated numbers (e.g. 5,2,9,1)" />
+      <button id="applyBtn" class="btn primary" title="Apply array">Apply</button>
+      <button id="shuffleBtn" class="btn" title="Shuffle">Shuffle</button>
+      <button id="randomBtn" class="btn" title="Random small set">Random</button>
+      <button id="resetBtn" class="btn ghost" title="Reset states">Reset</button>
+    </div>
+    <div class="row">
+      <button id="stepBtn" class="btn" title="Step (space)">Step</button>
+      <button id="runBtn" class="btn good" title="Run">Run</button>
+      <button id="pauseBtn" class="btn danger" title="Pause">Pause</button>
+      <div class="slider-wrap">
+        <span class="sub">Speed</span>
+        <input id="speed" type="range" min="0" max="100" value="55" />
+      </div>
+      <div class="sub">Hotkeys: <span class="kbd">Space</span> Step, <span class="kbd">R</span> Run/Pause</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="stats">
+      <div class="stat"><div class="k" id="minK">—</div><div class="l">minVal</div></div>
+      <div class="stat"><div class="k" id="idxK">—</div><div class="l">minIndex</div></div>
+      <div class="stat"><div class="k" id="iK">—</div><div class="l">i (cursor)</div></div>
+      <div class="stat"><div class="k" id="cmpK">0</div><div class="l">Comparisons</div></div>
+      <div class="stat"><div class="k" id="lenK">0</div><div class="l">Length</div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="progress" aria-label="progress">
+      <div id="bar" class="bar"></div>
+    </div>
+    <div class="track-wrap" style="margin-top:12px" aria-live="polite" aria-label="Array track">
+      <div id="track" class="track"></div>
+    </div>
+    <div id="narrate" class="narrate" style="margin-top:10px">Press <strong>Run</strong> to start or <strong>Step</strong> to advance manually.</div>
+  </section>
+
+  <section class="panel">
+    <div class="sub" style="margin-bottom:6px">Console</div>
+    <div id="console" class="console" aria-live="polite"></div>
+  </section>
+</div>
 
 <script>
-const arr = [7, 12, 9, 4, 11];
-const arrayEl = document.getElementById('array');
+/* ---------- State ---------- */
+let arr = [7,12,9,4,11];
+let i = 0, minVal = null, minIndex = null, comparisons = 0;
+let running = false, timer = null;
+
+/* ---------- DOM ---------- */
+const track = document.getElementById('track');
 const consoleEl = document.getElementById('console');
-const startBtn = document.getElementById('startBtn');
+const narrateEl = document.getElementById('narrate');
+const bar = document.getElementById('bar');
 
-let cells = [];
+const minK = document.getElementById('minK');
+const idxK = document.getElementById('idxK');
+const iK = document.getElementById('iK');
+const cmpK = document.getElementById('cmpK');
+const lenK = document.getElementById('lenK');
 
-function renderArray(){
-  arrayEl.innerHTML='';
-  arr.forEach((val,i)=>{
-    const div=document.createElement('div');
-    div.className='cell';
-    div.textContent=val;
-    arrayEl.appendChild(div);
-    cells.push(div);
+const arrayInput = document.getElementById('arrayInput');
+const applyBtn = document.getElementById('applyBtn');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const randomBtn = document.getElementById('randomBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+const stepBtn = document.getElementById('stepBtn');
+const runBtn = document.getElementById('runBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const speed = document.getElementById('speed');
+
+/* ---------- Helpers ---------- */
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function msFromSlider(){ // 0..100 → 40..1200ms (ease-out-ish)
+  const t = Number(speed.value)/100;
+  const eased = 1 - Math.pow(1 - t, 2);
+  return Math.round(1200 - eased*1160);
+}
+function log(html, cls){
+  const div = document.createElement('div'); div.className='line ' + (cls||'');
+  div.innerHTML = html; consoleEl.appendChild(div); consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+function setStats(){
+  minK.textContent = (minVal===null?'—':minVal);
+  idxK.textContent = (minIndex===null?'—':minIndex);
+  iK.textContent = (i < arr.length ? i : '—');
+  cmpK.textContent = comparisons;
+  lenK.textContent = arr.length;
+  bar.style.width = (arr.length? Math.min(100, (i/arr.length)*100):0) + '%';
+}
+function makeCell(v, idx){
+  const d = document.createElement('div');
+  d.className = 'cell anim-in';
+  d.innerHTML = `<span class="idx">#${idx}</span>${v}<span class="badge" hidden>current</span><span class="halo"></span>`;
+  return d;
+}
+function render(){
+  track.innerHTML = ''; track.scrollLeft = 0;
+  arr.forEach((v,idx)=>{
+    const c = makeCell(v, idx);
+    if(idx === minIndex) { c.classList.add('min'); c.querySelector('.badge').textContent='minVal'; c.querySelector('.badge').classList.add('min'); c.querySelector('.badge').hidden=false; }
+    if(idx < i){ c.classList.add('done'); }
+    track.appendChild(c);
   });
+  if(arr.length) focusIndex(Math.min(i, arr.length-1));
+  setStats();
 }
-
-function log(msg){
-  const p=document.createElement('div');
-  p.textContent=msg;
-  consoleEl.appendChild(p);
-  consoleEl.scrollTop=consoleEl.scrollHeight;
-}
-
-async function run(){
-  consoleEl.innerHTML='';
-  cells.forEach(c=>c.className='cell');
-  let minVal=arr[0];
-  let minIndex=0;
-  cells[0].classList.add('min');
-  log(`Start: minVal = ${minVal}`);
-  
-  for(let i=0;i<arr.length;i++){
-    cells[i].classList.add('active');
-    log(`Check ${arr[i]} vs minVal ${minVal}`);
-    await sleep(1000);
-    if(arr[i] < minVal){
-      cells[minIndex].classList.remove('min');
-      minVal=arr[i];
-      minIndex=i;
-      cells[minIndex].classList.add('min');
-      log(`→ New minVal = ${minVal}`);
-    }
-    cells[i].classList.remove('active');
-    cells[i].classList.add('done');
+function focusIndex(idx){
+  const cells = [...track.children];
+  cells.forEach(c=>c.classList.remove('active'));
+  if(cells[idx]) {
+    cells[idx].classList.add('active');
+    cells[idx].querySelector('.badge').hidden=false;
+    cells[idx].querySelector('.badge').textContent = 'checking';
+    // ensure visible
+    const wrap = track.parentElement;
+    const rect = cells[idx].getBoundingClientRect();
+    const wrect = wrap.getBoundingClientRect();
+    if(rect.right > wrect.right - 40) wrap.scrollLeft += (rect.right - wrect.right) + 40;
+    if(rect.left < wrect.left + 40) wrap.scrollLeft -= (wrect.left - rect.left) + 40;
   }
-  log(`✅ Lowest value: ${minVal}`);
 }
 
-function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
+/* ---------- Algorithm Steps ---------- */
+function resetStates(){
+  i = 0; comparisons = 0; running = false; clearInterval(timer); timer=null;
+  minVal = (arr.length? arr[0] : null); minIndex = (arr.length? 0 : null);
+  consoleEl.innerHTML = '';
+  if(arr.length){
+    log(`Start: <span class="kw">minVal</span> = <span class="ok">${minVal}</span> at index 0`);
+    narrateEl.innerHTML = `Initialized <strong>minVal=${minVal}</strong>. We'll scan left → right.`;
+  } else {
+    narrateEl.textContent = 'Provide some numbers and press Apply.';
+  }
+  render();
+}
+function step(){
+  if(!arr.length) return;
+  if(i >= arr.length){
+    finish();
+    return;
+  }
+  focusIndex(i);
+  const v = arr[i];
+  comparisons++; setStats();
+  log(`Compare <span class="kw">${v}</span> <small>vs</small> minVal(<span class="ok">${minVal}</span>)`);
+  if(v < minVal){
+    // update min
+    const prev = minIndex;
+    minVal = v; minIndex = i;
+    const cells = [...track.children];
+    if(cells[prev]) { cells[prev].classList.remove('min'); cells[prev].querySelector('.badge').hidden=true; }
+    const cur = cells[i];
+    cur.classList.add('min','pulse'); setTimeout(()=>cur.classList.remove('pulse'), 360);
+    cur.querySelector('.badge').textContent='minVal'; cur.querySelector('.badge').classList.add('min');
+    narrateEl.innerHTML = `New minimum found: <strong>${minVal}</strong> at index <strong>${minIndex}</strong> 🎯`;
+    log(`→ <span class="ok">New minVal = ${minVal}</span> at index ${minIndex}`);
+  } else {
+    narrateEl.innerHTML = `${v} is not smaller than current min <strong>${minVal}</strong>. Continue →`;
+  }
+  // mark this index as processed and move on
+  const cell = track.children[i]; if(cell) cell.classList.add('done');
+  i++; setStats();
+  if(i >= arr.length) finish();
+}
+function finish(){
+  running = false; clearInterval(timer); timer=null;
+  setStats();
+  if(arr.length){
+    narrateEl.innerHTML = `✅ Lowest value is <strong>${minVal}</strong> (index ${minIndex}).`;
+    log(`✅ Lowest value: <span class="ok">${minVal}</span> at index ${minIndex}`);
+    confettiBurst();
+  }
+}
 
-startBtn.addEventListener('click', run);
+/* ---------- Confetti (tiny) ---------- */
+const fx = document.getElementById('fx'); const ctx = fx.getContext('2d');
+let particles = []; let raf = null;
+function confettiBurst(){
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  resizeCanvas();
+  const N = 110;
+  particles = Array.from({length:N}, ()=>({
+    x: fx.width/2, y: fx.height*0.25,
+    vx: (Math.random()*2-1)*6, vy: Math.random()*-6 - 3,
+    g: .18 + Math.random()*.08, life: 60 + Math.random()*40,
+    c: Math.random()>.5 ? '#7be3ff' : '#9af0c6', s: 2 + Math.random()*3, a:1
+  }));
+  cancelAnimationFrame(raf); tick();
+}
+function tick(){
+  ctx.clearRect(0,0,fx.width,fx.height);
+  particles.forEach(p=>{
+    p.vy += p.g; p.x += p.vx; p.y += p.vy; p.life -= 1; p.a = Math.max(0, p.life/100);
+    ctx.globalAlpha = p.a; ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, p.s, p.s);
+  });
+  particles = particles.filter(p=>p.life>0 && p.y < fx.height+10);
+  if(particles.length){ raf = requestAnimationFrame(tick); }
+  else { ctx.clearRect(0,0,fx.width,fx.height); }
+}
+function resizeCanvas(){ fx.width = window.innerWidth*devicePixelRatio; fx.height = window.innerHeight*devicePixelRatio; ctx.scale(devicePixelRatio, devicePixelRatio); }
+addEventListener('resize', resizeCanvas);
 
-renderArray();
+/* ---------- Wiring ---------- */
+function applyFromInput(){
+  const raw = arrayInput.value.trim();
+  const nums = raw.split(/[,\s]+/).filter(Boolean).map(Number);
+  if(nums.some(n=>!Number.isFinite(n))){
+    log('Please enter only numbers separated by commas/spaces.','er'); return;
+  }
+  arr = nums; resetStates();
+}
+function shuffle(){
+  for(let j=arr.length-1;j>0;j--){ const k=Math.floor(Math.random()*(j+1)); [arr[j],arr[k]]=[arr[k],arr[j]];}
+  resetStates();
+}
+function randomize(){
+  const n = Math.floor(Math.random()*5)+5; // 5..9
+  arr = Array.from({length:n}, ()=>Math.floor(Math.random()*90)+1);
+  arrayInput.value = arr.join(', ');
+  resetStates();
+}
+
+applyBtn.addEventListener('click', applyFromInput);
+shuffleBtn.addEventListener('click', shuffle);
+randomBtn.addEventListener('click', randomize);
+resetBtn.addEventListener('click', ()=>resetStates());
+
+stepBtn.addEventListener('click', ()=>step());
+runBtn.addEventListener('click', ()=>{
+  if(running) return; running = true;
+  timer = setInterval(()=>{ step(); if(!running) clearInterval(timer); }, Math.max(40, msFromSlider()));
+});
+pauseBtn.addEventListener('click', ()=>{ running=false; clearInterval(timer); timer=null; });
+
+speed.addEventListener('input', ()=>{
+  if(running){ clearInterval(timer); timer = setInterval(()=>{ step(); if(!running) clearInterval(timer); }, Math.max(40, msFromSlider())); }
+});
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === ' ') { e.preventDefault(); if(running){ pauseBtn.click(); } else { stepBtn.click(); } }
+  if(e.key.toLowerCase() === 'r'){ if(running){ pauseBtn.click(); } else { runBtn.click(); } }
+});
+
+/* ---------- Init ---------- */
+resetStates();
 </script>
 </body>
 </html>
