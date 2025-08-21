@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fibonacci Visualization</title>
+  <style>
+    :root{
+      --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+      --accent:#6cf3ff; --accent-2:#8ae9c1;
+      --text:#ecf2ff; --muted:#a6b0cf;
+      --danger:#ff6b6b; --warning:#ffd166; --ok:#84fab0;
+      --slot:#2a305a; --chip:#39407a;
+      --shadow:0 10px 30px rgba(0,0,0,.35);
+      --radius:16px; --radius-sm:10px;
+      --gap:14px; --speed:300ms;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Inter,Arial;
+      display:grid; place-items:center; min-height:100dvh; padding:24px;
+    }
+    .wrap{
+      width:min(900px,92vw);
+    }
+    .panel{
+      background:linear-gradient(180deg,var(--panel),var(--panel-2));
+      border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:22px;
+    }
+    h1{font-size:20px;margin:.25rem 0 1rem;color:var(--text)}
+    p{color:var(--muted); margin:.5rem 0 1.25rem}
+
+    .controls{
+      display:flex; flex-wrap:wrap; gap:var(--gap); align-items:center; margin-bottom:16px;
+    }
+    button{
+      appearance:none; border:0; border-radius:12px;
+      background:linear-gradient(180deg,var(--accent),var(--accent-2));
+      color:#041218; font-weight:700; padding:10px 16px; cursor:pointer;
+      transition:transform .08s ease; box-shadow:0 6px 18px rgba(0,0,0,.25);
+    }
+    button[disabled]{opacity:.6; cursor:not-allowed}
+    button:active{transform:translateY(1px)}
+    .slider{
+      display:flex; align-items:center; gap:8px; color:var(--muted);
+    }
+    .slider input{accent-color:var(--accent)}
+    .status{min-height:1.25rem; color:var(--ok); font-weight:600}
+
+    .chart{
+      height:280px; padding:16px; border-radius:12px; background:var(--slot);
+      display:flex; align-items:flex-end; gap:10px; overflow:hidden;
+    }
+    .bar{
+      flex:1 1 0; min-width:28px; position:relative;
+      background:linear-gradient(180deg, rgba(108,243,255,.35), rgba(138,233,193,.6));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:8px 8px 0 0;
+      height:0px;
+      transition:height var(--speed) ease, transform var(--speed) ease, box-shadow var(--speed) ease;
+    }
+    .bar.active{
+      box-shadow:0 0 0 2px rgba(108,243,255,.35) inset, 0 10px 24px rgba(0,0,0,.25);
+      transform:translateY(-2px);
+      background:linear-gradient(180deg, rgba(108,243,255,.75), rgba(138,233,193,.95));
+    }
+    .bar span{
+      position:absolute; left:50%; transform:translateX(-50%);
+      bottom:-28px; font-size:12px; color:var(--muted);
+      user-select:none; white-space:nowrap;
+    }
+    .bar .value{
+      position:absolute; top:-24px; left:50%; transform:translateX(-50%);
+      font-size:12px; color:var(--text); opacity:.85;
+    }
+
+    .legend{
+      display:flex; gap:10px; align-items:center; color:var(--muted);
+      font-size:12px; margin-top:10px;
+    }
+    .dot{width:10px; height:10px; border-radius:50%;}
+    .dot.active{background:var(--accent)}
+    .dot.normal{background:var(--chip)}
+  </style>
+</head>
+<body>
+  <div id="vueApp" class="wrap">
+    <div class="panel">
+      <h1>Fibonacci Visualization</h1>
+      <p>Watch the Fibonacci sequence build up term-by-term. Bars auto-scale so everything fits.</p>
+
+      <div class="controls">
+        <button :disabled="btnIsDisabled" @click="action">{{ buttonText }}</button>
+        <div class="slider">
+          <label for="spd">Speed:</label>
+          <input id="spd" type="range" min="50" max="1200" step="25" v-model.number="delay" />
+          <span>{{ delay }} ms</span>
+        </div>
+        <div class="slider" v-if="targetLenControl">
+          <label for="len">Terms:</label>
+          <input id="len" type="range" min="2" max="20" step="1" v-model.number="targetLen" />
+          <span>{{ targetLen }}</span>
+        </div>
+      </div>
+
+      <div class="chart">
+        <div
+          class="bar"
+          v-for="d in dice"
+          :key="d.keyNmbr"
+          :class="{ active: d.isSwapped }"
+          :style="{ height: barHeight(d.dieNmbr) + 'px' }"
+          >
+          <span class="value" v-if="d.dieNmbr">{{ d.dieNmbr }}</span>
+          <span>{{ $index !== undefined ? $index : '' }}</span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="dot active"></div> active term
+        <div class="dot normal" style="margin-left:10px;"></div> inactive
+        <div class="status" style="margin-left:auto">{{ msgDone }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>
+    const app = Vue.createApp({
+      data() {
+        return {
+          btnIsDisabled: false,
+          msgDone: '',
+          delay: 400,
+          dice: [],
+          keyNumber: 0,
+          buttonText: 'Create',
+          targetLen: 12,        // how many terms to generate
+          targetLenControl: true, // toggle to show/hide the terms slider
+          chartH: 240           // chart drawing height (px)
+        }
+      },
+      computed: {
+        maxVal() {
+          if (!this.dice.length) return 1;
+          return Math.max(1, ...this.dice.map(d => d.dieNmbr));
+        }
+      },
+      methods: {
+        action(){
+          if(this.buttonText === "Create") {
+            this.bblSort();
+          } else {
+            this.reset();
+          }
+        },
+        async bblSort() {
+          this.btnIsDisabled = true;
+          // build until targetLen terms exist
+          while (this.dice.length < this.targetLen) {
+            const i = this.dice.length - 1;
+            if (i >= 1) {
+              this.$set?.(this.dice[i], 'isSwapped', true);
+              this.dice[i].isSwapped = true;
+              this.dice[i-1].isSwapped = true;
+            }
+            await this.pause();
+
+            this.addDie(); // push next Fibonacci term
+
+            await this.pause();
+
+            if (i >= 1) {
+              this.dice[i].isSwapped = false;
+              this.dice[i-1].isSwapped = false;
+              this.dice[i+1] && (this.dice[i+1].isSwapped = false);
+            }
+
+            await this.pause();
+          }
+          this.msgDone = 'Done!';
+          this.buttonText = "Reset";
+          this.btnIsDisabled = false;
+        },
+        addDie() {
+          const n = this.dice.length;
+          const prev1 = this.dice[n-1].dieNmbr;
+          const prev2 = this.dice[n-2].dieNmbr;
+          const next = prev1 + prev2;
+          const newDie = {
+            dieNmbr: next,
+            keyNmbr: this.keyNumber++,
+            isSwapped: true,
+            isFinished: false
+          };
+          this.dice.push(newDie);
+        },
+        reset() {
+          this.msgDone = '';
+          this.buttonText = "Create";
+          this.dice = [];
+          this.keyNumber = 0;
+          // start with F0=0, F1=1
+          this.dice.push({ dieNmbr: 0, keyNmbr: this.keyNumber++, isSwapped: false, isFinished: false });
+          this.dice.push({ dieNmbr: 1, keyNmbr: this.keyNumber++, isSwapped: false, isFinished: false });
+        },
+        pause() {
+          return new Promise(res => setTimeout(res, this.delay));
+        },
+        // map value to pixel height within chart
+        barHeight(val) {
+          if (this.maxVal === 0) return 0;
+          const h = Math.round((val / this.maxVal) * this.chartH);
+          return h;
+        }
+      },
+      mounted() {
+        this.reset();
+      }
+    });
+
+    // tiny helper to expose $index in template for labels (optional)
+    app.config.compilerOptions = app.config.compilerOptions || {};
+    app.config.globalProperties.$index = undefined;
+
+    app.mount('#vueApp');
+  </script>
+</body>
+</html>
