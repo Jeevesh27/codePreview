@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Array Deletion Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --edge:#556; --edge-pair:#e3b84a; --edge-done:#6fae97;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background: radial-gradient(1200px 800px at 70% -10%, #20264a 0%, var(--bg) 40%);
+    color:var(--text); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
+    min-height:100vh; padding:32px 16px 64px; display:grid; place-items:start center;
+  }
+  .app{ width:min(1050px,100%); display:grid; gap:16px; }
+  .panel{
+    background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%);
+    border:1px solid #1a2040; border-radius:14px; box-shadow:var(--shadow); padding:18px;
+  }
+  .title-row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+  h1{ margin:0; font-size:clamp(22px,3vw,28px);}
+  .badge{ background:#0b1022; border:1px solid #28305a; color:var(--muted); padding:6px 10px; border-radius:999px; font-size:12px; display:inline-flex; gap:6px; align-items:center;}
+  .badge b{ color:var(--text); }
+  .meta{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; color:var(--muted); font-size:14px;}
+  .pill{ background:#0e1430; border:1px dashed #2a325e; padding:6px 10px; border-radius:10px;}
+  .pill b{ color:var(--pair); }
+
+  .controls{ display:grid; gap:12px; }
+  @media (min-width: 860px){
+    .controls{ grid-template-columns: 1.2fr .8fr; }
+  }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  label{ color:var(--muted); font-size:14px;}
+  input[type="number"], input[type="text"]{
+    background:#0d1126; border:1px solid #242b51; color:var(--text); border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input[type="text"]{ min-width:280px; }
+  button{
+    background:#0e1736; color:var(--text); border:1px solid #2b3563; border-radius:12px; padding:10px 14px; cursor:pointer;
+    transition:transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button:hover{ background:#121c44; }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:linear-gradient(180deg,#0f2b3a,#0b1f2b); border-color:#284a60; }
+  button:disabled{ opacity:.55; cursor:not-allowed; }
+
+  .array{
+    display:grid; grid-auto-flow:column; grid-auto-columns:minmax(64px,1fr);
+    gap:10px; padding:12px; border-radius:12px; background:#101634; border:1px solid #222a55; overflow-x:auto;
+  }
+  .cell{
+    position:relative; background:#0c1128; border:1px solid #27305b; border-radius:10px; min-height:70px;
+    display:grid; place-items:center; color:var(--text); font-weight:600; letter-spacing:.2px; box-shadow:inset 0 0 0 1px #0b1026, var(--shadow);
+    transition: transform .28s ease, outline .2s ease, background .2s ease, border-color .2s ease, opacity .2s ease;
+  }
+  .index{ position:absolute; top:6px; left:8px; font:11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas; color:var(--muted); opacity:.85;}
+  .cell.active{ outline:2px solid var(--active); }
+  .cell.shift{ border-color:var(--edge-pair); box-shadow:0 0 0 1px var(--edge-pair) inset, var(--shadow); }
+  .cell.done{ background:#0d1f22; border-color:var(--edge-done); }
+  .cell.remove{ outline:2px solid var(--danger); }
+  .ghost{ opacity:.55; border-style:dashed; transform: scale(.96); }
+
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; color:var(--muted); font-size:14px;}
+  .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; vertical-align:middle;}
+  .dot.active{ background:var(--active); }
+  .dot.pair{ background:var(--pair); }
+  .dot.done{ background:var(--done); }
+
+  pre{ margin:0; background:#0b1026; border:1px solid #222a55; border-radius:12px; padding:14px; overflow:auto; box-shadow:var(--shadow); color:var(--text);}
+  code{ font:13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas; }
+
+  .note{ color:var(--muted); }
+  .msg{ color:var(--muted); font-size:14px; }
+  .msg strong{ color:var(--text); }
+  .msg .bad{ color: var(--danger); }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="panel">
+    <div class="title-row">
+      <h1>🔹 Deletion — remove an element</h1>
+      <span class="badge">⏱ End (pop): <b>O(1)</b></span>
+      <span class="badge">⏱ At index/value: <b>O(n)</b></span>
+      <span class="badge">📦 Space: <b>O(1)</b></span>
+    </div>
+    <div class="meta">
+      <span class="pill">Deleting at a specific index shifts elements left ➜ <b>O(n)</b></span>
+    </div>
+  </section>
+
+  <section class="panel controls" aria-label="Controls">
+    <div class="row">
+      <label for="contents">Array (comma-separated)</label>
+      <input id="contents" type="text" value="10, 20, 30, 40" />
+      <button id="apply" class="primary">Apply</button>
+      <button id="shuffle">Randomize</button>
+      <span class="pill">Length: <b id="len">4</b></span>
+    </div>
+    <div class="row">
+      <label for="value">Value</label>
+      <input id="value" type="text" value="30" style="min-width:100px" />
+      <label for="index">Index</label>
+      <input id="index" type="number" min="0" value="2" style="width:90px" />
+      <button id="delIndex" class="primary">➖ Delete @ Index</button>
+      <button id="delValue">🔍 Delete Value</button>
+      <button id="popEnd">⤴️ Pop (end)</button>
+      <button id="reset">♻️ Reset</button>
+    </div>
+    <div class="row">
+      <label for="speed">Speed</label>
+      <input id="speed" type="range" min="0" max="100" value="45" />
+      <span id="speedLabel">Medium</span>
+      <span id="msg" class="msg"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Visualization">
+    <div id="array" class="array" role="list" aria-label="Array"></div>
+    <div class="legend" style="margin-top:8px;">
+      <span><span class="dot active"></span> Active (target)</span>
+      <span><span class="dot pair"></span> Shifting left</span>
+      <span><span class="dot done"></span> Finalized</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin:0 0 10px;">Pseudo-code</h2>
+<pre><code>// Delete element at index k (0 ≤ k &lt; n)
+function deleteAt(arr, k):
+    for i ← k to n-2:
+        arr[i] ← arr[i+1]   // shift left
+    n ← n - 1               // drop last slot
+
+// Delete last (pop) is k = n-1 (no shifts)
+</code></pre>
+    <p class="note">Deleting by value typically removes the first occurrence; under the hood it finds the index then performs the same left-shift.</p>
+  </section>
+</main>
+
+<script>
+  // ===== State =====
+  const state = {
+    baseArr: [10,20,30,40],
+    arr: [],
+    delay: 380,
+    animating: false
+  };
+
+  // ===== Elements =====
+  const elArray = document.getElementById('array');
+  const elContents = document.getElementById('contents');
+  const elApply = document.getElementById('apply');
+  const elShuffle = document.getElementById('shuffle');
+  const elLen = document.getElementById('len');
+  const elValue = document.getElementById('value');
+  const elIndex = document.getElementById('index');
+  const btnDelIndex = document.getElementById('delIndex');
+  const btnDelValue = document.getElementById('delValue');
+  const btnPopEnd = document.getElementById('popEnd');
+  const btnReset = document.getElementById('reset');
+  const elSpeed = document.getElementById('speed');
+  const elSpeedLabel = document.getElementById('speedLabel');
+  const elMsg = document.getElementById('msg');
+
+  // ===== Utils =====
+  const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+  const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
+  function speedToDelay(v){
+    v = clamp(v,0,100);
+    const t = v/100;
+    const eased = 1 - Math.pow(t,1.6);
+    return 70 + Math.round(eased*700);
+  }
+  function labelSpeed(v){
+    v = +v;
+    if (v<20) return 'Fastest';
+    if (v<40) return 'Fast';
+    if (v<60) return 'Medium';
+    if (v<80) return 'Slow';
+    return 'Slowest';
+  }
+  function randomArray(n=clamp(Math.floor(Math.random()*7)+4,3,10)){
+    return Array.from({length:n},()=>Math.floor(Math.random()*90)+10);
+  }
+  function coerceVal(s){
+    if (s === '') return '';
+    const n = +s;
+    return Number.isNaN(n) ? s : n;
+  }
+  function flashMsg(html, bad=false){
+    elMsg.innerHTML = html;
+    elMsg.classList.toggle('bad', bad);
+    if (html) setTimeout(()=>{ elMsg.textContent=''; elMsg.classList.remove('bad'); }, 2000);
+  }
+
+  // ===== Render once per data change (not during step animations) =====
+  function renderFromArray(){
+    elArray.innerHTML = '';
+    state.arr.forEach((val, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.index = idx;
+
+      const idxTag = document.createElement('div');
+      idxTag.className = 'index';
+      idxTag.textContent = idx;
+
+      const txt = document.createElement('div');
+      txt.className = 'value';
+      txt.textContent = val;
+
+      cell.appendChild(idxTag);
+      cell.appendChild(txt);
+      elArray.appendChild(cell);
+    });
+    elLen.textContent = state.arr.length;
+    elIndex.max = Math.max(0, state.arr.length-1);
+  }
+
+  // ===== Animations =====
+  async function animateDeleteAtIndex(k){
+    if (state.animating) return;
+    if (state.arr.length === 0) { flashMsg('Array is empty.', true); return; }
+
+    state.animating = true;
+    const n = state.arr.length;
+    k = clamp(parseInt(k,10), 0, n-1);
+    elIndex.value = k;
+
+    // highlight target
+    const target = elArray.children[k];
+    target.classList.add('active');
+
+    // Pop case (k == n-1) — O(1)
+    if (k === n-1){
+      await wait(state.delay);
+      target.classList.remove('active');
+      target.classList.add('remove');
+      await wait(state.delay * 0.6);
+      target.style.opacity = 0.2;
+      await wait(state.delay * 0.6);
+      elArray.removeChild(target);
+      state.arr.pop();
+      state.baseArr = [...state.arr];
+      renderFromArray();
+      state.animating = false;
+      return;
+    }
+
+    // Shift-left case — O(n)
+    // Shift from i = k to n-2: copy (i+1) -> i
+    for (let i = k; i <= n-2; i++){
+      const dst = elArray.children[i];
+      const src = elArray.children[i+1];
+      dst.classList.add('shift');
+      src.classList.add('shift');
+      await wait(state.delay);
+
+      const v = src.querySelector('.value').textContent;
+      dst.querySelector('.value').textContent = v;
+      dst.classList.remove('shift');
+      dst.classList.add('done');
+
+      await wait(state.delay * 0.5);
+      src.classList.remove('shift');
+    }
+
+    // Visually remove the last redundant cell
+    const last = elArray.children[n-1];
+    last.classList.add('remove');
+    await wait(state.delay * 0.6);
+    last.style.opacity = 0.2;
+    await wait(state.delay * 0.5);
+    elArray.removeChild(last);
+
+    // Sync data
+    state.arr.splice(k, 1);
+    state.baseArr = [...state.arr];
+
+    // Clean re-render to refresh indices
+    renderFromArray();
+
+    state.animating = false;
+  }
+
+  async function animateDeleteByValue(value){
+    if (state.animating) return;
+    if (state.arr.length === 0) { flashMsg('Array is empty.', true); return; }
+
+    const idx = state.arr.indexOf(value);
+    if (idx === -1){
+      // try numeric/string mismatch fallback
+      const altIdx = state.arr.findIndex(x => String(x) === String(value));
+      if (altIdx === -1){
+        flashMsg(`<strong>${value}</strong> not found.`, true);
+        return;
+      }
+      await animateDeleteAtIndex(altIdx);
+      return;
+    }
+    await animateDeleteAtIndex(idx);
+  }
+
+  // ===== Events =====
+  elApply.addEventListener('click', ()=>{
+    const parts = elContents.value.split(',').map(s=>s.trim()).filter(Boolean);
+    state.arr = parts.map(coerceVal);
+    state.baseArr = [...state.arr];
+    renderFromArray();
+  });
+
+  elShuffle.addEventListener('click', ()=>{
+    state.arr = randomArray();
+    state.baseArr = [...state.arr];
+    elContents.value = state.arr.join(', ');
+    renderFromArray();
+  });
+
+  btnDelIndex.addEventListener('click', async ()=>{
+    const k = parseInt(elIndex.value || '0', 10);
+    await animateDeleteAtIndex(k);
+  });
+
+  btnDelValue.addEventListener('click', async ()=>{
+    const v = coerceVal(elValue.value.trim());
+    await animateDeleteByValue(v);
+  });
+
+  btnPopEnd.addEventListener('click', async ()=>{
+    if (state.arr.length === 0){ flashMsg('Array is empty.', true); return; }
+    elIndex.value = state.arr.length - 1;
+    await animateDeleteAtIndex(state.arr.length - 1);
+  });
+
+  btnReset.addEventListener('click', ()=>{
+    state.arr = [...state.baseArr];
+    renderFromArray();
+  });
+
+  elSpeed.addEventListener('input', (e)=>{
+    state.delay = speedToDelay(+e.target.value);
+    elSpeedLabel.textContent = labelSpeed(+e.target.value);
+  });
+
+  // ===== Init =====
+  (function init(){
+    state.arr = [...state.baseArr];
+    elContents.value = state.arr.join(', ');
+    state.delay = speedToDelay(+elSpeed.value);
+    elSpeedLabel.textContent = labelSpeed(+elSpeed.value);
+    renderFromArray();
+  })();
+</script>
+</body>
+</html>
