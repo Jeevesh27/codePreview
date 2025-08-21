@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Fibonacci Visualization (Fixed Index Labels)</title>
+<title>Fibonacci Visualization (Yellow Pair)</title>
 <style>
   :root{
     --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
@@ -12,6 +12,8 @@
     --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
     --shadow:0 10px 30px rgba(0,0,0,.35);
     --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for selected terms */
+    --new:#8ae9c1;  /* green for newly added term */
   }
   *{box-sizing:border-box}
   body{
@@ -42,10 +44,9 @@
   .slider input{ accent-color:var(--accent) }
   .status{ min-height:1.25rem; color:var(--ok); font-weight:600; margin-left:auto; }
 
-  /* chart now has extra bottom padding so indices aren’t clipped */
   .chart{
-    height:320px; /* slightly taller */
-    padding:16px 16px 40px; /* extra bottom space */
+    height:320px;
+    padding:16px 16px 40px;
     border-radius:12px; background:var(--slot);
     display:flex; align-items:flex-end; gap:10px; overflow:hidden;
   }
@@ -58,13 +59,15 @@
     transition:height var(--speed) ease, transform var(--speed) ease, box-shadow var(--speed) ease, filter var(--speed) ease;
   }
   .bar.pair{
-    box-shadow:0 0 0 2px rgba(108,243,255,.55) inset, 0 10px 24px rgba(0,0,0,.25);
+    box-shadow:0 0 0 2px var(--pair) inset, 0 10px 24px rgba(0,0,0,.25);
     transform:translateY(-2px);
-    filter:brightness(1.15);
+    filter:brightness(1.2);
+    background:linear-gradient(180deg, rgba(255,209,102,.6), rgba(255,209,102,.9));
   }
   .bar.new{
-    box-shadow:0 0 0 2px rgba(138,233,193,.6) inset, 0 14px 28px rgba(0,0,0,.35);
+    box-shadow:0 0 0 2px var(--new) inset, 0 14px 28px rgba(0,0,0,.35);
     filter:brightness(1.25);
+    background:linear-gradient(180deg, rgba(138,233,193,.6), rgba(138,233,193,.95));
   }
   .bar .value{
     position:absolute; top:-24px; left:50%; transform:translateX(-50%);
@@ -72,7 +75,7 @@
   }
   .bar .label{
     position:absolute; left:50%; transform:translateX(-50%);
-    bottom:-22px; /* was -28px, brought closer */
+    bottom:-22px;
     font-size:12px; color:var(--muted); white-space:nowrap; user-select:none;
   }
 
@@ -81,15 +84,15 @@
     font-size:12px; margin-top:10px;
   }
   .dot{width:10px; height:10px; border-radius:50%;}
-  .dot.pair{background:var(--accent)}
-  .dot.new{background:var(--accent-2)}
+  .dot.pair{background:var(--pair)}
+  .dot.new{background:var(--new)}
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="panel">
       <h1>Fibonacci Visualization</h1>
-      <p>Generates the Fibonacci sequence, highlighting the <strong>two selected terms</strong> used for the next value.</p>
+      <p>Generates the Fibonacci sequence, highlighting the <strong>two selected terms</strong> (yellow) and the <strong>new term</strong> (green).</p>
 
       <div class="controls">
         <button id="actionBtn">Create</button>
@@ -109,8 +112,8 @@
       <div class="chart" id="chart" aria-label="Fibonacci bars"></div>
 
       <div class="legend">
-        <div class="dot pair"></div> selected pair (F(n−2), F(n−1))
-        <div class="dot new"></div> new term F(n)
+        <div class="dot pair"></div> selected pair
+        <div class="dot new"></div> new term
       </div>
     </div>
   </div>
@@ -125,7 +128,7 @@
   const lenVal = document.getElementById('lenVal');
   const status = document.getElementById('status');
 
-  const DRAW_HEIGHT = 240; // bar drawing height inside chart (excludes padding)
+  const DRAW_HEIGHT = 240;
 
   const state = {
     running: false,
@@ -138,53 +141,38 @@
     state.delay = +spd.value;
     spdVal.textContent = `${state.delay} ms`;
   });
-
   len.addEventListener('input', () => {
     state.targetLen = +len.value;
     lenVal.textContent = state.targetLen;
   });
-
   btn.addEventListener('click', () => {
-    if (!state.running && btn.textContent === 'Create') {
-      run();
-    } else {
-      reset();
-    }
+    if (!state.running && btn.textContent === 'Create') run();
+    else reset();
   });
 
   function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
-
   function maxVal(){ return Math.max(1, ...state.data); }
-  function heightFor(val){ return Math.round((val / maxVal()) * DRAW_HEIGHT); }
+  function heightFor(val){ return Math.round((val/maxVal())*DRAW_HEIGHT); }
 
-  function clearClasses(){
-    Array.from(chart.children).forEach(b => b.classList.remove('pair','new'));
-  }
+  function clearClasses(){ Array.from(chart.children).forEach(b => b.classList.remove('pair','new')); }
 
   function ensureBars(){
-    // create missing bars
     for (let i = chart.children.length; i < state.data.length; i++) {
       const bar = document.createElement('div');
       bar.className = 'bar';
-      bar.dataset.index = i;
-
       const value = document.createElement('span');
       value.className = 'value';
       const label = document.createElement('span');
       label.className = 'label';
-      bar.appendChild(value);
-      bar.appendChild(label);
-
+      bar.appendChild(value); bar.appendChild(label);
       chart.appendChild(bar);
     }
-    // update all bars
     const m = maxVal();
-    Array.from(chart.children).forEach((bar, i) => {
-      const val = state.data[i] ?? 0;
-      bar.querySelector('.value').textContent = val || '';
+    Array.from(chart.children).forEach((bar,i)=>{
+      const val = state.data[i]||0;
+      bar.querySelector('.value').textContent = val||'';
       bar.querySelector('.label').textContent = i;
-      const target = Math.round((val/m) * DRAW_HEIGHT);
-      requestAnimationFrame(()=>{ bar.style.height = target+'px'; });
+      requestAnimationFrame(()=>{ bar.style.height = Math.round((val/m)*DRAW_HEIGHT)+'px'; });
     });
   }
 
@@ -194,20 +182,18 @@
     btn.textContent = 'Running…';
     status.textContent = '';
 
-    for (let n = state.data.length; n < state.targetLen; n++) {
+    for (let n=state.data.length; n<state.targetLen; n++) {
       clearClasses();
-      const barA = chart.children[n-2], barB = chart.children[n-1];
-      if (barA) barA.classList.add('pair');
-      if (barB) barB.classList.add('pair');
+      chart.children[n-2]?.classList.add('pair');
+      chart.children[n-1]?.classList.add('pair');
       await sleep(state.delay);
 
-      const next = state.data[n-1] + state.data[n-2];
+      const next = state.data[n-1]+state.data[n-2];
       state.data.push(next);
       ensureBars();
 
       clearClasses();
-      const newBar = chart.children[n];
-      if (newBar) newBar.classList.add('new');
+      chart.children[n]?.classList.add('new');
       await sleep(state.delay);
     }
 
@@ -220,14 +206,13 @@
 
   function reset(){
     state.running = false;
-    state.data = [0,1];
-    btn.textContent = 'Create';
-    chart.innerHTML = '';
+    state.data=[0,1];
+    chart.innerHTML='';
     ensureBars();
-    status.textContent = '';
+    btn.textContent='Create';
+    status.textContent='';
   }
 
-  // init
   spdVal.textContent = `${state.delay} ms`;
   lenVal.textContent = state.targetLen;
   ensureBars();
