@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Array Traversal Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --edge:#556; --edge-pair:#e3b84a; --edge-done:#6fae97;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+
+  /* Layout */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 800px at 70% -10%, #20264a 0%, var(--bg) 40%);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    min-height: 100vh;
+    display: grid;
+    place-items: start center;
+    padding: 32px 16px 64px;
+  }
+
+  .app {
+    width: min(1050px, 100%);
+    display: grid;
+    gap: 16px;
+  }
+
+  .panel {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border: 1px solid #1a2040;
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 18px;
+  }
+
+  .header {
+    display: grid;
+    gap: 8px;
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(22px, 3vw, 28px);
+    letter-spacing: .3px;
+  }
+  .badge {
+    background: #0b1022;
+    border: 1px solid #28305a;
+    color: var(--muted);
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .badge b { color: var(--text); font-weight: 700; }
+
+  .meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .meta .pill {
+    background: #0e1430;
+    border: 1px dashed #2a325e;
+    padding: 6px 10px;
+    border-radius: 10px;
+  }
+  .meta .pill b { color: var(--pair); }
+
+  /* Controls */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 840px) {
+    .controls {
+      grid-template-columns: 1.2fr .8fr;
+    }
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .row .group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  label {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  input[type="number"],
+  input[type="text"] {
+    background: #0d1126;
+    border: 1px solid #242b51;
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+    min-width: 80px;
+  }
+  input[type="text"] { min-width: 240px; }
+
+  input[type="range"] {
+    accent-color: var(--active);
+    width: 180px;
+  }
+
+  button {
+    background: #0e1736;
+    color: var(--text);
+    border: 1px solid #2b3563;
+    border-radius: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button:hover { background: #121c44; }
+  button:active { transform: translateY(1px); }
+  button.primary {
+    background: linear-gradient(180deg, #0f2b3a, #0b1f2b);
+    border-color: #284a60;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* Visualization */
+  .viz {
+    display: grid;
+    gap: 14px;
+  }
+
+  .array {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(58px, 1fr);
+    gap: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    background: #101634;
+    border: 1px solid #222a55;
+    overflow-x: auto;
+  }
+
+  .cell {
+    position: relative;
+    background: #0c1128;
+    border: 1px solid #27305b;
+    border-radius: 10px;
+    min-height: 64px;
+    display: grid;
+    place-items: center;
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: .2px;
+    box-shadow: inset 0 0 0 1px #0b1026, var(--shadow);
+  }
+  .cell .index {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    font: 11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    color: var(--muted);
+    opacity: .85;
+  }
+  .cell.paired { border-color: var(--edge-pair); box-shadow: 0 0 0 1px var(--edge-pair) inset, var(--shadow); }
+  .cell.active { outline: 2px solid var(--active); }
+  .cell.visited { background: #0d1f22; border-color: var(--edge-done); }
+  .cell.visited::after {
+    content: "✓";
+    position: absolute;
+    right: 6px;
+    bottom: 4px;
+    font-size: 12px;
+    color: var(--done);
+  }
+
+  .pointer {
+    position: relative;
+    height: 26px;
+  }
+  .pointer .arrow {
+    --w: 26px;
+    position: absolute;
+    width: var(--w);
+    height: var(--w);
+    transform: translate(-50%, 0) rotate(45deg);
+    background: var(--active);
+    filter: drop-shadow(0 6px 12px rgba(108,243,255,.2));
+    border-radius: 4px 2px 8px 2px;
+    transition: left .25s ease;
+    top: -6px;
+  }
+  .legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
+  .dot.active { background: var(--active); }
+  .dot.done { background: var(--done); }
+  .dot.pair { background: var(--pair); }
+
+  /* Code & notes */
+  pre {
+    margin: 0;
+    background: #0b1026;
+    border: 1px solid #222a55;
+    border-radius: 12px;
+    padding: 14px;
+    overflow: auto;
+    box-shadow: var(--shadow);
+    color: var(--text);
+  }
+  code { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  .note { color: var(--muted); }
+
+  /* Footer */
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <main class="app">
+    <section class="panel header" aria-labelledby="title">
+      <div class="title-row">
+        <h1 id="title">🔹 Traversal — visit each element one by one</h1>
+        <span class="badge" aria-label="Time Complexity"><span>⏱</span> Time: <b>O(n)</b></span>
+        <span class="badge" aria-label="Space Complexity"><span>📦</span> Space: <b>O(1)</b></span>
+      </div>
+      <div class="meta">
+        <span class="pill">Example task: <b>print all elements</b></span>
+        <span>Goal: access / touch every item in the array sequentially.</span>
+      </div>
+    </section>
+
+    <section class="panel controls" aria-label="Controls">
+      <div class="row">
+        <div class="group">
+          <button id="btnPlayPause" class="primary" aria-pressed="false">▶️ Play</button>
+          <button id="btnStep">🔁 Step</button>
+          <button id="btnReset">♻️ Reset</button>
+        </div>
+        <div class="group" role="group" aria-label="Speed">
+          <label for="speed">Speed</label>
+          <input id="speed" type="range" min="0" max="100" value="40" />
+          <span id="speedLabel" aria-live="polite">Medium</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="group">
+          <label for="size">Array size</label>
+          <input id="size" type="number" min="1" max="50" value="8" />
+          <button id="btnResize">Update</button>
+        </div>
+        <div class="group" style="flex:1 1 auto; min-width: 260px;">
+          <label for="contents">Values (comma-separated)</label>
+          <input id="contents" type="text" placeholder="e.g. 4, 8, 15, 16, 23, 42" />
+          <button id="btnApplyValues">Apply</button>
+        </div>
+        <div class="group">
+          <span class="pill">Visited: <b id="visitedCount">0</b></span>
+          <span class="pill">Index: <b id="indexLabel">–</b></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel viz" aria-label="Visualization">
+      <div id="array" class="array" role="list" aria-label="Array"></div>
+      <div class="pointer" aria-hidden="true">
+        <div class="arrow" id="arrow"></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot active"></span>Active (current)</span>
+        <span><span class="dot done"></span>Visited</span>
+        <span><span class="dot pair"></span>Optional pair/highlight</span>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Code">
+      <h2 style="margin-top:0;">Pseudo-code</h2>
+      <pre><code>// Visit each element exactly once
+function traverse(arr):
+    for i ← 0 to arr.length - 1:
+        visit(arr[i])        // e.g., print, sum, etc.</code></pre>
+      <p class="note">Because each element is processed once, the time complexity is <strong>O(n)</strong>. No extra data structures are required ➜ <strong>O(1)</strong> space.</p>
+    </section>
+
+    <section class="foot">
+      <span>Tip: Use <em>Step</em> to move one index at a time and watch how the pointer advances.</span>
+    </section>
+  </main>
+
+<script>
+  // ===== State =====
+  const state = {
+    arr: [],
+    i: -1,
+    timer: null,
+    playing: false,
+    delayMs: 450, // initial
+  };
+
+  // ===== Elements =====
+  const elArray = document.getElementById('array');
+  const elArrow = document.getElementById('arrow');
+  const elVisited = document.getElementById('visitedCount');
+  const elIndex = document.getElementById('indexLabel');
+  const elBtnPlayPause = document.getElementById('btnPlayPause');
+  const elBtnStep = document.getElementById('btnStep');
+  const elBtnReset = document.getElementById('btnReset');
+  const elSpeed = document.getElementById('speed');
+  const elSpeedLabel = document.getElementById('speedLabel');
+  const elSize = document.getElementById('size');
+  const elBtnResize = document.getElementById('btnResize');
+  const elContents = document.getElementById('contents');
+  const elBtnApplyValues = document.getElementById('btnApplyValues');
+
+  // ===== Utilities =====
+  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+  function speedToDelay(value){
+    // 0..100 slider -> 900..80 ms (nonlinear for nicer feel)
+    const t = clamp(value, 0, 100) / 100;
+    const eased = 1 - Math.pow(t, 1.7);
+    return 80 + Math.round(eased * 820);
+  }
+
+  function labelSpeed(value){
+    const v = +value;
+    if (v < 20) return 'Fastest';
+    if (v < 40) return 'Fast';
+    if (v < 60) return 'Medium';
+    if (v < 80) return 'Slow';
+    return 'Slowest';
+  }
+
+  function randomArray(n){
+    return Array.from({length: n}, () => Math.floor(Math.random()*90)+10);
+  }
+
+  function clearTimer(){
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+  }
+
+  function setPlaying(on){
+    state.playing = on;
+    elBtnPlayPause.textContent = on ? '⏸️ Pause' : '▶️ Play';
+    elBtnPlayPause.setAttribute('aria-pressed', String(on));
+    elBtnStep.disabled = on;
+  }
+
+  // ===== Rendering =====
+  function renderArray(){
+    elArray.innerHTML = '';
+    state.arr.forEach((val, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.setAttribute('role', 'listitem');
+      cell.dataset.index = idx;
+
+      const idxTag = document.createElement('div');
+      idxTag.className = 'index';
+      idxTag.textContent = idx;
+
+      const text = document.createElement('div');
+      text.textContent = val;
+
+      cell.appendChild(idxTag);
+      cell.appendChild(text);
+      elArray.appendChild(cell);
+    });
+    updateHighlights();
+    positionArrow();
+  }
+
+  function cellAt(i){ return elArray.querySelector(`.cell[data-index="${i}"]`); }
+
+  function positionArrow(){
+    const i = state.i < 0 ? 0 : state.i;
+    const target = cellAt(i);
+    if (!target) return;
+
+    // compute center x of the target cell within the array container
+    const containerRect = elArray.getBoundingClientRect();
+    const cellRect = target.getBoundingClientRect();
+    const centerX = cellRect.left - containerRect.left + cellRect.width/2;
+
+    elArrow.style.left = `${centerX}px`;
+  }
+
+  function updateHighlights(){
+    const cells = elArray.querySelectorAll('.cell');
+    cells.forEach((c, idx) => {
+      c.classList.toggle('active', idx === state.i);
+      c.classList.toggle('visited', idx < state.i && state.i >= 0);
+    });
+
+    elVisited.textContent = Math.max(0, state.i);
+    elIndex.textContent = state.i >= 0 && state.i < state.arr.length ? state.i : '–';
+  }
+
+  // ===== Traversal logic =====
+  function step(){
+    // Move to next element and "visit" it
+    if (state.i < state.arr.length) {
+      state.i++;
+      updateHighlights();
+      positionArrow();
+    }
+    if (state.i >= state.arr.length) {
+      // done
+      setPlaying(false);
+      clearTimer();
+    }
+  }
+
+  function loop(){
+    clearTimer();
+    if (!state.playing) return;
+    step();
+    if (state.playing) {
+      state.timer = setTimeout(loop, state.delayMs);
+    }
+  }
+
+  // ===== Event handlers =====
+  elBtnPlayPause.addEventListener('click', () => {
+    if (!state.playing) {
+      setPlaying(true);
+      loop();
+    } else {
+      setPlaying(false);
+      clearTimer();
+    }
+  });
+
+  elBtnStep.addEventListener('click', step);
+
+  elBtnReset.addEventListener('click', () => {
+    clearTimer();
+    setPlaying(false);
+    state.i = -1;
+    updateHighlights();
+    positionArrow();
+  });
+
+  elSpeed.addEventListener('input', (e) => {
+    state.delayMs = speedToDelay(e.target.value);
+    elSpeedLabel.textContent = labelSpeed(e.target.value);
+  });
+
+  elBtnResize.addEventListener('click', () => {
+    const n = clamp(parseInt(elSize.value || '0', 10) || 1, +elSize.min, +elSize.max);
+    state.arr = randomArray(n);
+    state.i = -1;
+    elContents.value = '';
+    renderArray();
+    setPlaying(false);
+    clearTimer();
+  });
+
+  elBtnApplyValues.addEventListener('click', () => {
+    const raw = elContents.value.trim();
+    if (!raw) return;
+    const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+    state.arr = parts.map(x => isNaN(+x) ? x : +x);
+    state.i = -1;
+    renderArray();
+    setPlaying(false);
+    clearTimer();
+    elSize.value = state.arr.length;
+  });
+
+  // Resize handling for arrow positioning
+  let resizeObs = new ResizeObserver(() => positionArrow());
+  resizeObs.observe(elArray);
+
+  // ===== Init =====
+  (function init(){
+    state.arr = randomArray(parseInt(elSize.value, 10));
+    state.delayMs = speedToDelay(elSpeed.value);
+    elSpeedLabel.textContent = labelSpeed(elSpeed.value);
+    renderArray();
+    requestAnimationFrame(positionArrow);
+  }());
+</script>
+</body>
+</html>
