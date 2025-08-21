@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Selection Sort 🎯 — Bar Chart</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --fail:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background: radial-gradient(1200px 800px at 70% -10%, #20264a 0%, var(--bg) 40%);
+    color:var(--text);
+    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;
+    min-height:100vh; padding:32px 16px 64px; display:grid; place-items:start center;
+  }
+  .app{ width:min(1100px,100%); display:grid; gap:16px; }
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%);
+    border:1px solid #1a2040; border-radius:14px; box-shadow:var(--shadow); padding:18px;
+  }
+  .title-row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+  h1{ margin:0; font-size:clamp(22px,3vw,28px);}
+  .badge{ background:#0b1022; border:1px solid #28305a; color:var(--muted); padding:6px 10px; border-radius:999px; font-size:12px; display:inline-flex; gap:6px; align-items:center;}
+  .badge b{ color:var(--text); }
+
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  label{ color:var(--muted); font-size:14px;}
+  input[type="number"]{
+    background:#0d1126; border:1px solid #242b51; color:var(--text); border-radius:10px; padding:8px 10px; outline:none;
+  }
+  input[type="range"]{ accent-color: var(--active); }
+  button{
+    background:#0e1736; color:var(--text); border:1px solid #2b3563; border-radius:12px; padding:10px 14px; cursor:pointer;
+    transition:transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button:hover{ background:#121c44; }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:linear-gradient(180deg,#0f2b3a,#0b1f2b); border-color:#284a60; }
+  button:disabled{ opacity:.55; cursor:not-allowed; }
+
+  /* Chart */
+  .chart{ height:340px; display:flex; align-items:flex-end; gap:8px;
+    padding:12px; border-radius:12px; background:#101634; border:1px solid #222a55; overflow-x:auto; }
+  .bar{
+    --w: 26px;
+    width: var(--w);
+    background: linear-gradient(180deg, #0c1128, #0a0f22);
+    border:1px solid #27305b; border-radius:8px 8px 4px 4px;
+    display:flex; align-items:flex-end; justify-content:center;
+    position:relative;
+    transition: height .28s ease, background .2s ease, outline .2s ease;
+    box-shadow: inset 0 0 0 1px #0b1026, var(--shadow);
+  }
+  .bar .label{
+    position:absolute; top:-22px; left:50%; transform:translateX(-50%);
+    font:11px/1 ui-monospace, Menlo, Consolas; color:var(--muted);
+    background:#0b1026; padding:3px 6px; border-radius:6px; border:1px solid #222a55;
+    pointer-events:none;
+  }
+  .bar.curr{ outline:2px solid var(--active); }
+  .bar.scan{ outline:2px solid var(--pair); }
+  .bar.min{ background:#1e1a0c; border-color: var(--pair); }
+  .bar.done{ background:#0d1f22; border-color: var(--done); }
+  .bar.done::after{
+    content:"✓"; position:absolute; bottom:-18px; left:50%; transform:translateX(-50%);
+    font-size:12px; color:var(--done);
+  }
+
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; color:var(--muted); font-size:14px;}
+  .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; vertical-align:middle;}
+  .dot.active{ background:var(--active); }
+  .dot.pair{ background:var(--pair); }
+  .dot.done{ background:var(--done); }
+
+  pre{ margin:0; background:#0b1026; border:1px solid #222a55; border-radius:12px; padding:14px; overflow:auto; box-shadow:var(--shadow); color:var(--text);}
+  code{ font:13px/1.45 ui-monospace, Menlo, Consolas; }
+  .muted{ color:var(--muted); }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="panel">
+    <div class="title-row">
+      <h1>Selection Sort 🎯 — Pick min and place at correct position</h1>
+      <span class="badge">⏱ Time: <b>O(n²)</b></span>
+      <span class="badge">📦 Space: <b>O(1)</b></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <label>Size</label>
+      <input id="size" type="number" min="3" max="80" value="20" style="width:90px" />
+      <button id="random" class="primary">Randomize</button>
+      <span class="badge">i: <b id="iLbl">0</b></span>
+      <span class="badge">j: <b id="jLbl">0</b></span>
+      <span class="badge">Comparisons: <b id="cmp">0</b></span>
+      <span class="badge">Swaps: <b id="swp">0</b></span>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="play" class="primary">▶ Play</button>
+      <button id="step">⏭ Step</button>
+      <button id="reset">♻ Reset</button>
+      <label style="margin-left:8px;">Speed</label>
+      <input id="speed" type="range" min="0" max="100" value="45" />
+      <span id="speedLabel" class="muted">Medium</span>
+    </div>
+  </section>
+
+  <section class="panel chart" id="chart"></section>
+  <div class="legend panel">
+    <span><span class="dot active"></span> Current position (i)</span>
+    <span><span class="dot pair"></span> Scanning (j)</span>
+    <span><span class="dot done"></span> Sorted</span>
+  </div>
+
+  <section class="panel">
+    <h2 style="margin:0 0 10px;">Pseudo-code</h2>
+<pre><code>function selectionSort(arr):
+    for i ← 0 to n-2:
+        minIndex ← i
+        for j ← i+1 to n-1:
+            if arr[j] &lt; arr[minIndex]:
+                minIndex ← j
+        swap(arr[i], arr[minIndex])
+</code></pre>
+    <p class="muted">Each pass selects the minimum element and places it in the correct spot.</p>
+  </section>
+</main>
+
+<script>
+const state = { arr:[], i:0, j:1, minIdx:0, n:0, cmp:0, swp:0, running:false, delay:380 };
+
+const elChart=document.getElementById('chart');
+const elSize=document.getElementById('size');
+const btnRandom=document.getElementById('random');
+const btnPlay=document.getElementById('play');
+const btnStep=document.getElementById('step');
+const btnReset=document.getElementById('reset');
+const elI=document.getElementById('iLbl');
+const elJ=document.getElementById('jLbl');
+const elCmp=document.getElementById('cmp');
+const elSwp=document.getElementById('swp');
+const elSpeed=document.getElementById('speed');
+const elSpeedLabel=document.getElementById('speedLabel');
+
+const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+function speedToDelay(v){ const t=clamp(v,0,100)/100; const eased=1-Math.pow(t,1.6); return 60+Math.round(eased*740); }
+function labelSpeed(v){ v=+v; if(v<20) return 'Fastest'; if(v<40) return 'Fast'; if(v<60) return 'Medium'; if(v<80) return 'Slow'; return 'Slowest'; }
+function randomArray(n){ return Array.from({length:n},()=>Math.floor(Math.random()*95)+5); }
+function maxVal(arr){ return arr.reduce((m,v)=>v>m?v:m, -Infinity); }
+
+function buildChart(){
+  elChart.innerHTML='';
+  const M=maxVal(state.arr)||1;
+  state.arr.forEach((v,idx)=>{
+    const bar=document.createElement('div');
+    bar.className='bar';
+    bar.dataset.index=idx;
+    bar.style.height=`${(v/M)*100}%`;
+    bar.innerHTML=`<div class="label">${v}</div>`;
+    elChart.appendChild(bar);
+  });
+}
+function getBar(i){ return elChart.children[i]; }
+function clearMarks(){
+  [...elChart.children].forEach(b=> b.classList.remove('curr','scan','min','done'));
+}
+function paint(){
+  clearMarks();
+  if(state.i<state.n){
+    getBar(state.i)?.classList.add('curr');
+    for(let k=0;k<state.i;k++) getBar(k)?.classList.add('done');
+    if(state.j<state.n) getBar(state.j)?.classList.add('scan');
+    getBar(state.minIdx)?.classList.add('min');
+  }
+  elI.textContent=state.i;
+  elJ.textContent=state.j;
+  elCmp.textContent=state.cmp;
+  elSwp.textContent=state.swp;
+}
+
+async function stepOnce(){
+  if(state.i>=state.n-1){ state.running=false; btnPlay.textContent='▶ Play'; return; }
+  if(state.j<state.n){
+    state.cmp++;
+    if(state.arr[state.j]<state.arr[state.minIdx]) state.minIdx=state.j;
+    paint();
+    state.j++;
+    return;
+  }
+  // swap after inner loop
+  if(state.minIdx!==state.i){
+    [state.arr[state.i],state.arr[state.minIdx]]=[state.arr[state.minIdx],state.arr[state.i]];
+    state.swp++;
+  }
+  state.i++;
+  state.minIdx=state.i;
+  state.j=state.i+1;
+  buildChart();
+  paint();
+}
+async function run(){
+  if(state.running){ state.running=false; btnPlay.textContent='▶ Play'; return; }
+  state.running=true; btnPlay.textContent='⏸ Pause';
+  while(state.running && state.i<state.n-1){
+    await stepOnce();
+    await wait(state.delay*0.6);
+  }
+  state.running=false; btnPlay.textContent='▶ Play';
+}
+
+function reset(arr){
+  state.arr=arr.slice(); state.n=state.arr.length;
+  state.i=0; state.j=1; state.minIdx=0; state.cmp=0; state.swp=0;
+  state.running=false; btnPlay.textContent='▶ Play';
+  buildChart(); paint();
+}
+
+btnRandom.addEventListener('click',()=>{
+  const n=clamp(parseInt(elSize.value||'0',10),3,80);
+  reset(randomArray(n));
+});
+btnPlay.addEventListener('click',run);
+btnStep.addEventListener('click',stepOnce);
+btnReset.addEventListener('click',()=>reset(state.arr));
+elSpeed.addEventListener('input',e=>{
+  state.delay=speedToDelay(+e.target.value);
+  elSpeedLabel.textContent=labelSpeed(+e.target.value);
+});
+
+(function init(){
+  const n=clamp(parseInt(elSize.value||'0',10),3,80);
+  elSize.value=n;
+  state.delay=speedToDelay(+elSpeed.value);
+  elSpeedLabel.textContent=labelSpeed(+elSpeed.value);
+  reset(randomArray(n));
+})();
+</script>
+</body>
+</html>
