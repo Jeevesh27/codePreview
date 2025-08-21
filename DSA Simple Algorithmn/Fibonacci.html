@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Fibonacci Visualization (Vanilla JS)</title>
+<title>Fibonacci Visualization (Fixed Index Labels)</title>
 <style>
   :root{
     --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
@@ -42,8 +42,11 @@
   .slider input{ accent-color:var(--accent) }
   .status{ min-height:1.25rem; color:var(--ok); font-weight:600; margin-left:auto; }
 
+  /* chart now has extra bottom padding so indices aren’t clipped */
   .chart{
-    height:280px; padding:16px; border-radius:12px; background:var(--slot);
+    height:320px; /* slightly taller */
+    padding:16px 16px 40px; /* extra bottom space */
+    border-radius:12px; background:var(--slot);
     display:flex; align-items:flex-end; gap:10px; overflow:hidden;
   }
   .bar{
@@ -54,25 +57,23 @@
     height:0px;
     transition:height var(--speed) ease, transform var(--speed) ease, box-shadow var(--speed) ease, filter var(--speed) ease;
   }
-  /* highlight the two selected (prev2, prev1) */
   .bar.pair{
     box-shadow:0 0 0 2px rgba(108,243,255,.55) inset, 0 10px 24px rgba(0,0,0,.25);
     transform:translateY(-2px);
     filter:brightness(1.15);
   }
-  /* flash the freshly added one */
   .bar.new{
     box-shadow:0 0 0 2px rgba(138,233,193,.6) inset, 0 14px 28px rgba(0,0,0,.35);
     filter:brightness(1.25);
   }
-
   .bar .value{
     position:absolute; top:-24px; left:50%; transform:translateX(-50%);
     font-size:12px; color:var(--text); opacity:.9;
   }
   .bar .label{
     position:absolute; left:50%; transform:translateX(-50%);
-    bottom:-28px; font-size:12px; color:var(--muted); white-space:nowrap; user-select:none;
+    bottom:-22px; /* was -28px, brought closer */
+    font-size:12px; color:var(--muted); white-space:nowrap; user-select:none;
   }
 
   .legend{
@@ -124,15 +125,13 @@
   const lenVal = document.getElementById('lenVal');
   const status = document.getElementById('status');
 
-  const DRAW_HEIGHT = 240; // px
+  const DRAW_HEIGHT = 240; // bar drawing height inside chart (excludes padding)
 
   const state = {
     running: false,
     delay: +spd.value,
     targetLen: +len.value,
-    data: [0, 1],
-    pair: null,     // [i-2, i-1]
-    fresh: null     // i (newly added)
+    data: [0, 1]
   };
 
   spd.addEventListener('input', () => {
@@ -155,75 +154,38 @@
 
   function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
-  function maxVal(){
-    return Math.max(1, ...state.data);
-  }
+  function maxVal(){ return Math.max(1, ...state.data); }
+  function heightFor(val){ return Math.round((val / maxVal()) * DRAW_HEIGHT); }
 
-  function heightFor(val){
-    return Math.round((val / maxVal()) * DRAW_HEIGHT);
-  }
-
-  function makeBar(val, index){
-    const bar = document.createElement('div');
-    bar.className = 'bar';
-    bar.dataset.index = index;
-
-    const value = document.createElement('span');
-    value.className = 'value';
-    value.textContent = val ? String(val) : ''; // hide 0 label to reduce clutter
-
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = index;
-
-    bar.appendChild(value);
-    bar.appendChild(label);
-    // start collapsed for a smooth first draw
-    bar.style.height = '0px';
-    chart.appendChild(bar);
-
-    // Animate to target height
-    requestAnimationFrame(() => {
-      bar.style.height = heightFor(val) + 'px';
-    });
-    return bar;
+  function clearClasses(){
+    Array.from(chart.children).forEach(b => b.classList.remove('pair','new'));
   }
 
   function ensureBars(){
-    // Add any missing bars for current data length
+    // create missing bars
     for (let i = chart.children.length; i < state.data.length; i++) {
-      makeBar(state.data[i], i);
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.dataset.index = i;
+
+      const value = document.createElement('span');
+      value.className = 'value';
+      const label = document.createElement('span');
+      label.className = 'label';
+      bar.appendChild(value);
+      bar.appendChild(label);
+
+      chart.appendChild(bar);
     }
-    // Update heights for all bars (autoscale)
+    // update all bars
     const m = maxVal();
     Array.from(chart.children).forEach((bar, i) => {
       const val = state.data[i] ?? 0;
-      bar.querySelector('.value').textContent = val ? String(val) : '';
+      bar.querySelector('.value').textContent = val || '';
       bar.querySelector('.label').textContent = i;
-      const target = Math.round((val / m) * DRAW_HEIGHT);
-      // set via rAF to let CSS transitions run
-      requestAnimationFrame(() => {
-        bar.style.height = target + 'px';
-      });
+      const target = Math.round((val/m) * DRAW_HEIGHT);
+      requestAnimationFrame(()=>{ bar.style.height = target+'px'; });
     });
-  }
-
-  function clearClasses(){
-    Array.from(chart.children).forEach(b => b.classList.remove('pair', 'new'));
-  }
-
-  function markPair(iMinus2, iMinus1){
-    clearClasses();
-    const a = chart.children[iMinus2];
-    const b = chart.children[iMinus1];
-    if (a) a.classList.add('pair');
-    if (b) b.classList.add('pair');
-  }
-
-  function markNew(i){
-    // keep pair highlight and add "new" on top
-    const c = chart.children[i];
-    if (c) c.classList.add('new');
   }
 
   async function run(){
@@ -232,32 +194,24 @@
     btn.textContent = 'Running…';
     status.textContent = '';
 
-    // lock in the target length for this run
-    const goal = state.targetLen;
-
-    // initial render
-    ensureBars();
-
-    for (let n = state.data.length; n < goal; n++) {
-      // highlight the two selected elements (prev two)
-      state.pair = [n-2, n-1];
-      markPair(n-2, n-1);
+    for (let n = state.data.length; n < state.targetLen; n++) {
+      clearClasses();
+      const barA = chart.children[n-2], barB = chart.children[n-1];
+      if (barA) barA.classList.add('pair');
+      if (barB) barB.classList.add('pair');
       await sleep(state.delay);
 
-      // compute and append next
       const next = state.data[n-1] + state.data[n-2];
       state.data.push(next);
-
-      // create the new bar & autoscale all bars smoothly
       ensureBars();
-      state.fresh = n;
-      markNew(n);
+
+      clearClasses();
+      const newBar = chart.children[n];
+      if (newBar) newBar.classList.add('new');
       await sleep(state.delay);
     }
 
-    // done
-    state.pair = null;
-    state.fresh = null;
+    clearClasses();
     btn.disabled = false;
     btn.textContent = 'Reset';
     status.textContent = 'Done!';
@@ -266,16 +220,14 @@
 
   function reset(){
     state.running = false;
-    state.data = [0, 1];
-    state.pair = null;
-    state.fresh = null;
-    status.textContent = '';
+    state.data = [0,1];
     btn.textContent = 'Create';
     chart.innerHTML = '';
     ensureBars();
+    status.textContent = '';
   }
 
-  // initial paint
+  // init
   spdVal.textContent = `${state.delay} ms`;
   lenVal.textContent = state.targetLen;
   ensureBars();
