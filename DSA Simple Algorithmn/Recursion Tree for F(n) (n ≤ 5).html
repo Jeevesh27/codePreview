@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>F(n) Recursion Tree — n ≤ 5</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --edge:#556; --edge-pair:#e3b84a; --edge-done:#6fae97;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+    min-height:100dvh; display:grid; grid-template-rows:auto 1fr;
+  }
+  header{
+    padding:14px 18px; background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    box-shadow:var(--shadow);
+  }
+  header h1{font-size:18px;margin:0 0 6px}
+  .controls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; color:var(--muted)}
+  button{appearance:none; border:0; border-radius:10px; padding:8px 12px; background:#2a305a; color:var(--text); cursor:pointer}
+  button.primary{ background:#3b427f; font-weight:700 }
+  button:disabled{opacity:.6; cursor:not-allowed}
+  .slider{display:flex; align-items:center; gap:6px}
+  .slider input{accent-color:#6cf3ff}
+  .status{margin-left:auto; color:var(--done); min-height:1em}
+
+  .stage{display:grid; grid-template-rows:auto 1fr; gap:10px; padding:12px;}
+  .viewport{ overflow:auto; background:#0c0f1d; border-top:1px solid #243; border-bottom:1px solid #243; }
+  svg{ display:block; }
+
+  .node{ transition: transform 250ms ease; }
+  .node rect{
+    width:110px; height:36px; rx:9; ry:9; fill:#23353a; stroke:#3a4569; stroke-width:1.4;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.25));
+  }
+  .node text{ font-size:13px; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
+  .node .label{ fill:#d7def7 }
+  .node .value{ fill:#9ddac2 }
+  .node.active rect{ stroke: var(--active) }
+  .node.pair rect{ stroke: var(--pair); fill:#3a320f }
+  .node.done rect{ stroke: var(--done) }
+
+  .edge{ stroke:var(--edge); stroke-width:1.2; fill:none }
+  .edge.pair{ stroke:var(--edge-pair); stroke-width:1.6 }
+  .edge.done{ stroke:var(--edge-done) }
+
+  .legend{ display:flex; gap:14px; align-items:center; color:var(--muted); font-size:12px }
+  .dot{ width:10px; height:10px; border-radius:50% }
+  .dot.active{ background:var(--active) }
+  .dot.pair{ background:var(--pair) }
+  .dot.done{ background:var(--done) }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Recursion Tree for <code>F(n)</code> (n ≤ 5)</h1>
+    <div class="controls">
+      <button id="btnPlay" class="primary">Play</button>
+      <button id="btnStep">Step</button>
+      <button id="btnReset">Reset</button>
+
+      <div class="slider">
+        <label for="n">n:</label>
+        <!-- max is 5 now -->
+        <input id="n" type="number" min="0" max="5" step="1" value="5" />
+      </div>
+      <div class="slider">
+        <label for="speed">Speed:</label>
+        <input id="speed" type="range" min="50" max="800" step="25" value="250" />
+        <span id="speedVal">250 ms</span>
+      </div>
+      <div class="slider">
+        <label for="zoom">Zoom:</label>
+        <input id="zoom" type="range" min="40" max="140" step="5" value="100" />
+        <span id="zoomVal">100%</span>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="legend" style="margin-top:8px">
+      <span class="dot active"></span> current call
+      <span class="dot pair"></span> selected pair F(n−1), F(n−2)
+      <span class="dot done"></span> returned value
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="viewport" id="vp">
+      <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ----- Limits -----
+  const MAX_N = 5;
+
+  // ----- Geometry -----
+  const NODE_W = 110, NODE_H = 36;
+  const COL_GAP = 26;
+  const COL_W = NODE_W + COL_GAP;
+  const VSP = 64;
+  const MARGIN = {top: 40, left: 40, right: 40, bottom: 40};
+  const NS = "http://www.w3.org/2000/svg";
+
+  // ----- State -----
+  let N = 5;
+  let delay = 250;
+  let playing = false;
+  let zoom = 1.0;
+
+  const svg = document.getElementById('svg');
+  const vp  = document.getElementById('vp');
+  const btnPlay = document.getElementById('btnPlay');
+  const btnStep = document.getElementById('btnStep');
+  const btnReset= document.getElementById('btnReset');
+  const nInput  = document.getElementById('n');
+  const speed   = document.getElementById('speed');
+  const speedVal= document.getElementById('speedVal');
+  const zoomInp = document.getElementById('zoom');
+  const zoomVal = document.getElementById('zoomVal');
+  const status  = document.getElementById('status');
+
+  const gEdges = document.createElementNS(NS,'g');
+  const gNodes = document.createElementNS(NS,'g');
+  svg.appendChild(gEdges);
+  svg.appendChild(gNodes);
+
+  // Registries
+  let idSeq = 0;
+  const nodes = new Map();
+  const edges = new Map();
+  let stack = [];
+
+  // leaf-count
+  const memo = new Map([[0,1],[1,1]]);
+  function leafCount(n){
+    if (memo.has(n)) return memo.get(n);
+    const v = leafCount(n-1) + leafCount(n-2);
+    memo.set(n, v);
+    return v;
+  }
+
+  // Utilities
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const setTransform = (el,x,y) => el.style.transform = `translate(${x}px, ${y}px)`;
+  const clampN = v => Math.max(0, Math.min(MAX_N, v));
+
+  function centerX(colStart, colWidth){
+    return MARGIN.left + (colStart + colWidth/2)*COL_W - NODE_W/2;
+  }
+
+  function newNode(n, depth, parentId=null){
+    const id = ++idSeq;
+    const node = { id, n, parentId, leftId:null, rightId:null, x:0, y: depth*VSP + MARGIN.top, value:null, state:'active' };
+    nodes.set(id, node);
+
+    const g = document.createElementNS(NS,'g');
+    g.classList.add('node','active');
+    g.setAttribute('data-id', id);
+
+    const r = document.createElementNS(NS,'rect');
+    const t1 = document.createElementNS(NS,'text'); t1.setAttribute('class','label'); t1.setAttribute('x', NODE_W/2); t1.setAttribute('y', NODE_H/2 + 1); t1.textContent = `F(${n})`;
+    const t2 = document.createElementNS(NS,'text'); t2.setAttribute('class','value'); t2.setAttribute('x', NODE_W/2); t2.setAttribute('y', NODE_H + 16); t2.textContent = '';
+
+    g.appendChild(r); g.appendChild(t1); g.appendChild(t2);
+    gNodes.appendChild(g);
+    node.el = g;
+
+    if (parentId){
+      const e = document.createElementNS(NS,'line');
+      e.setAttribute('class','edge');
+      gEdges.appendChild(e);
+      edges.set(id, e);
+    }
+    return id;
+  }
+
+  function updateSVGSize(){
+    const cols = Math.max(1, leafCount(N));
+    const width = Math.max(cols*COL_W + MARGIN.left + MARGIN.right, vp.clientWidth);
+    let maxY = 0; nodes.forEach(n => { if (n.y>maxY) maxY = n.y; });
+    const height = Math.max(maxY + NODE_H + 80, vp.clientHeight);
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+    svg.style.transformOrigin = '0 0';
+    svg.style.transform = `scale(${zoom})`;
+  }
+
+  function updatePositions(){
+    nodes.forEach(n => setTransform(n.el, n.x, n.y));
+    edges.forEach((el, childId) => {
+      const child = nodes.get(childId);
+      const parent = nodes.get(child.parentId);
+      const x1 = parent.x + NODE_W/2, y1 = parent.y + NODE_H;
+      const x2 = child.x + NODE_W/2,  y2 = child.y;
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+    });
+    updateSVGSize();
+  }
+
+  function clearClasses(){
+    nodes.forEach(n => {
+      n.el.classList.remove('pair','active');
+      if (n.state === 'active') n.el.classList.add('active');
+    });
+    edges.forEach(e => e.classList.remove('pair'));
+  }
+  function markActive(id){
+    nodes.forEach(n => n.el.classList.remove('active'));
+    nodes.get(id)?.el.classList.add('active');
+  }
+  function markPair(parent){
+    if (parent.leftId){
+      nodes.get(parent.leftId).el.classList.add('pair');
+      edges.get(parent.leftId)?.classList.add('pair');
+    }
+    if (parent.rightId){
+      nodes.get(parent.rightId).el.classList.add('pair');
+      edges.get(parent.rightId)?.classList.add('pair');
+    }
+  }
+  function markDone(node){
+    node.state = 'done';
+    node.el.classList.remove('active','pair');
+    node.el.classList.add('done');
+    node.el.querySelector('.value').textContent = `= ${node.value}`;
+    if (node.leftId) edges.get(node.leftId)?.classList.add('done');
+    if (node.rightId) edges.get(node.rightId)?.classList.add('done');
+  }
+
+  // Build/reset
+  function reset(){
+    // guard: never allow N > MAX_N
+    N = clampN(N);
+    nInput.value = String(N);
+
+    playing = false;
+    btnPlay.textContent = 'Play';
+    status.textContent = '';
+    idSeq = 0;
+    nodes.clear(); edges.clear();
+    gNodes.innerHTML = ''; gEdges.innerHTML = '';
+    stack = [];
+
+    const w = leafCount(N);
+    const rootId = newNode(N, 0, null);
+    const root = nodes.get(rootId);
+    root.x = centerX(0, w);
+    updatePositions();
+
+    stack.push({ id: rootId, n: N, stage: 0, xStart: 0, width: w, pairedShown:false });
+    vp.scrollTo({left:0, top:0, behavior:'instant'});
+  }
+
+  // One micro-step
+  function stepOnce(){
+    if (!stack.length) return false;
+    const f = stack[stack.length-1];
+    const node = nodes.get(f.id);
+
+    clearClasses();
+    markActive(node.id);
+
+    if (f.stage === 0){
+      if (node.n <= 1){
+        node.value = node.n;
+        markDone(node);
+        updatePositions();
+        stack.pop();
+      } else {
+        const wL = leafCount(node.n-1);
+        const wR = leafCount(node.n-2);
+        const xL = f.xStart;
+        const xR = f.xStart + wL;
+
+        const leftId  = newNode(node.n-1, node.y/VSP + 1, node.id);
+        const rightId = newNode(node.n-2, node.y/VSP + 1, node.id);
+        node.leftId = leftId; node.rightId = rightId;
+
+        node.x = centerX(f.xStart, f.width);
+        nodes.get(leftId).x  = centerX(xL, wL);
+        nodes.get(rightId).x = centerX(xR, wR);
+
+        updatePositions();
+
+        f.stage = 1;
+        stack.push({ id:leftId, n: node.n-1, stage:0, xStart:xL, width:wL, pairedShown:false });
+      }
+      return true;
+    }
+
+    if (f.stage === 1){
+      f.stage = 2;
+      const nodeData = nodes.get(f.id);
+      const wL = leafCount(nodeData.n-1);
+      const xR = f.xStart + wL;
+      const wR = leafCount(nodeData.n-2);
+      stack.push({ id: nodeData.rightId, n: nodeData.n-2, stage:0, xStart:xR, width:wR, pairedShown:false });
+      return true;
+    }
+
+    if (f.stage === 2){
+      if (!f.pairedShown){
+        markPair(nodes.get(f.id));
+        f.pairedShown = true;
+        return true;
+      }
+      const nodeData = nodes.get(f.id);
+      const L = nodes.get(nodeData.leftId).value;
+      const R = nodes.get(nodeData.rightId).value;
+      nodeData.value = L + R;
+      markDone(nodeData);
+      updatePositions();
+      stack.pop();
+
+      if (!stack.length){
+        status.textContent = `Result: F(${N}) = ${nodeData.value}`;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Play loop
+  async function playLoop(){
+    if (playing) return;
+    playing = true;
+    btnPlay.textContent = 'Pause';
+    while (playing && stack.length){
+      const ok = stepOnce();
+      if (!ok) break;
+      await sleep(delay);
+    }
+    if (!stack.length){ playing = false; btnPlay.textContent = 'Play'; }
+  }
+
+  // Controls
+  btnPlay.addEventListener('click', () => { if (playing){ playing=false; btnPlay.textContent='Play'; } else playLoop(); });
+  btnStep.addEventListener('click', () => { if (!playing) stepOnce(); });
+  btnReset.addEventListener('click', reset);
+
+  nInput.addEventListener('change', () => {
+    // hard clamp to MAX_N
+    const v = clampN(parseInt(nInput.value||0,10));
+    N = v; nInput.value = String(N);
+    reset();
+  });
+  speed.addEventListener('input', () => { delay = +speed.value; speedVal.textContent = `${delay} ms`; });
+  zoomInp.addEventListener('input', () => { zoom = (+zoomInp.value)/100; zoomVal.textContent = `${zoomInp.value}%`; updateSVGSize(); });
+
+  // Init
+  speedVal.textContent = `${delay} ms`;
+  zoomVal.textContent = `${Math.round(zoom*100)}%`;
+  reset();
+})();
+</script>
+</body>
+</html>
