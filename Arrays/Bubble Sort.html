@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bubble Sort 🫧 — Bar Chart</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --edge:#556; --edge-pair:#e3b84a; --edge-done:#6fae97;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background: radial-gradient(1200px 800px at 70% -10%, #20264a 0%, var(--bg) 40%);
+    color:var(--text);
+    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;
+    min-height:100vh; padding:32px 16px 64px; display:grid; place-items:start center;
+  }
+  .app{ width:min(1100px,100%); display:grid; gap:16px; }
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%);
+    border:1px solid #1a2040; border-radius:14px; box-shadow:var(--shadow); padding:18px;
+  }
+  .title-row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+  h1{ margin:0; font-size:clamp(22px,3vw,28px);}
+  .badge{ background:#0b1022; border:1px solid #28305a; color:var(--muted); padding:6px 10px; border-radius:999px; font-size:12px; display:inline-flex; gap:6px; align-items:center;}
+  .badge b{ color:var(--text); }
+
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  label{ color:var(--muted); font-size:14px;}
+  input[type="number"], input[type="text"]{
+    background:#0d1126; border:1px solid #242b51; color:var(--text); border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input[type="range"]{ accent-color: var(--active); }
+  button{
+    background:#0e1736; color:var(--text); border:1px solid #2b3563; border-radius:12px; padding:10px 14px; cursor:pointer;
+    transition:transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button:hover{ background:#121c44; }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:linear-gradient(180deg,#0f2b3a,#0b1f2b); border-color:#284a60; }
+  button:disabled{ opacity:.55; cursor:not-allowed; }
+
+  /* Chart */
+  .chart-wrap{
+    display:grid; gap:10px;
+  }
+  .chart{
+    height:340px; display:flex; align-items:flex-end; gap:8px;
+    padding:12px; border-radius:12px; background:#101634; border:1px solid #222a55;
+    overflow-x:auto;
+  }
+  .bar{
+    --w: 26px;
+    width: var(--w);
+    background: linear-gradient(180deg, #0c1128, #0a0f22);
+    border:1px solid #27305b; border-radius:8px 8px 4px 4px;
+    display:flex; align-items:flex-end; justify-content:center;
+    position:relative;
+    transition: height .28s ease, transform .18s ease, background .2s ease, border-color .2s ease, outline .2s ease;
+    box-shadow: inset 0 0 0 1px #0b1026, var(--shadow);
+  }
+  .bar .label{
+    position:absolute; top:-22px; left:50%; transform:translateX(-50%);
+    font:11px/1 ui-monospace, Menlo, Consolas; color:var(--muted);
+    background:#0b1026; padding:3px 6px; border-radius:6px; border:1px solid #222a55;
+    pointer-events:none;
+  }
+  .bar.compare{ outline:2px solid var(--active); }
+  .bar.swap{ outline:2px solid var(--pair); }
+  .bar.done{ background:#0d1f22; border-color: var(--edge-done); }
+  .bar.done::after{
+    content:"✓"; position:absolute; bottom:-18px; left:50%; transform:translateX(-50%);
+    font-size:12px; color:var(--done);
+  }
+
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; color:var(--muted); font-size:14px;}
+  .dot{ width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; vertical-align:middle;}
+  .dot.active{ background:var(--active); }
+  .dot.pair{ background:var(--pair); }
+  .dot.done{ background:var(--done); }
+
+  pre{ margin:0; background:#0b1026; border:1px solid #222a55; border-radius:12px; padding:14px; overflow:auto; box-shadow:var(--shadow); color:var(--text);}
+  code{ font:13px/1.45 ui-monospace, Menlo, Consolas; }
+  .muted{ color:var(--muted); }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="panel">
+    <div class="title-row">
+      <h1>Bubble Sort 🫧 — Compare & swap neighbors repeatedly</h1>
+      <span class="badge">⏱ Time: <b>O(n²)</b></span>
+      <span class="badge">📦 Space: <b>O(1)</b></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <label>Size</label>
+      <input id="size" type="number" min="3" max="80" value="20" style="width:90px" />
+      <button id="random" class="primary">Randomize</button>
+      <button id="nearly">Nearly-sorted</button>
+      <span class="badge">Pass: <b id="pass">0</b></span>
+      <span class="badge">i: <b id="iLbl">0</b></span>
+      <span class="badge">j: <b id="jLbl">0</b></span>
+      <span class="badge">Comparisons: <b id="cmp">0</b></span>
+      <span class="badge">Swaps: <b id="swp">0</b></span>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="play" class="primary">▶ Play</button>
+      <button id="step">⏭ Step</button>
+      <button id="reset">♻ Reset</button>
+      <label style="margin-left:8px;">Speed</label>
+      <input id="speed" type="range" min="0" max="100" value="45" />
+      <span id="speedLabel" class="muted">Medium</span>
+    </div>
+  </section>
+
+  <section class="panel chart-wrap" aria-label="Bar chart">
+    <div id="chart" class="chart" aria-live="polite"></div>
+    <div class="legend">
+      <span><span class="dot active"></span> Comparing pair</span>
+      <span><span class="dot pair"></span> Swapping</span>
+      <span><span class="dot done"></span> Sorted tail</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin:0 0 10px;">Pseudo-code</h2>
+<pre><code>function bubbleSort(arr):
+    for i ← 0 to n-2:
+        swapped ← false
+        for j ← 0 to n-2-i:
+            if arr[j] &gt; arr[j+1]:
+                swap(arr[j], arr[j+1])
+                swapped ← true
+        if !swapped: break       // early exit when already sorted
+</code></pre>
+    <p class="muted">Largest element “bubbles” to the end each pass and is locked as sorted.</p>
+  </section>
+</main>
+
+<script>
+  // ---------- State ----------
+  const state = {
+    arr: [],
+    i: 0,            // outer pass index
+    j: 0,            // inner index
+    n: 0,
+    pass: 0,
+    comparisons: 0,
+    swaps: 0,
+    passSwapped: false,
+    running: false,
+    delay: 380
+  };
+
+  // ---------- DOM ----------
+  const elChart = document.getElementById('chart');
+  const elSize = document.getElementById('size');
+  const btnRandom = document.getElementById('random');
+  const btnNearly = document.getElementById('nearly');
+  const btnPlay = document.getElementById('play');
+  const btnStep = document.getElementById('step');
+  const btnReset = document.getElementById('reset');
+  const elPass = document.getElementById('pass');
+  const elI  = document.getElementById('iLbl');
+  const elJ  = document.getElementById('jLbl');
+  const elCmp = document.getElementById('cmp');
+  const elSwp = document.getElementById('swp');
+  const elSpeed = document.getElementById('speed');
+  const elSpeedLabel = document.getElementById('speedLabel');
+
+  // ---------- Utils ----------
+  const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+  const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
+  function speedToDelay(v){ const t=clamp(v,0,100)/100; const eased = 1-Math.pow(t,1.6); return 60+Math.round(eased*740); }
+  function labelSpeed(v){ v=+v; if(v<20) return 'Fastest'; if(v<40) return 'Fast'; if(v<60) return 'Medium'; if(v<80) return 'Slow'; return 'Slowest'; }
+  function randomArray(n){
+    return Array.from({length:n},()=>Math.floor(Math.random()*95)+5);
+  }
+  function nearlySortedArray(n){
+    const base = Array.from({length:n},(_,i)=>Math.round((i+1)*100/n));
+    // introduce a few small swaps
+    for (let k=0;k<Math.max(1, Math.floor(n*0.08));k++){
+      const a=Math.floor(Math.random()*n), b=clamp(a+(Math.random()<0.5?-1:1),0,n-1);
+      [base[a], base[b]] = [base[b], base[a]];
+    }
+    return base;
+  }
+  function maxVal(arr){ return arr.reduce((m,v)=>v>m?v:m, -Infinity); }
+
+  // ---------- Chart Build ----------
+  function buildChart(){
+    elChart.innerHTML = '';
+    const M = maxVal(state.arr) || 1;
+    state.arr.forEach((v, idx)=>{
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.dataset.index = idx;
+      bar.style.height = `${(v/M)*100}%`;
+      bar.innerHTML = `<div class="label">${v}</div>`;
+      elChart.appendChild(bar);
+    });
+    paintDone(); // lock tail if some passes already finished
+  }
+
+  function getBar(i){ return elChart.children[i]; }
+
+  function setCompare(i, on=true){
+    getBar(i)?.classList.toggle('compare', on);
+    getBar(i+1)?.classList.toggle('compare', on);
+  }
+  function setSwap(i, on=true){
+    getBar(i)?.classList.toggle('swap', on);
+    getBar(i+1)?.classList.toggle('swap', on);
+  }
+  function paintDone(){
+    // Mark the last i elements as done (positions n-1, n-2, ... n-i)
+    for (let k=0; k<state.i; k++){
+      const idx = state.n-1-k;
+      getBar(idx)?.classList.add('done');
+    }
+  }
+  function clearRunningMarks(){
+    [...elChart.children].forEach(b=>{
+      b.classList.remove('compare','swap');
+    });
+  }
+  function updateStats(){
+    elPass.textContent = state.pass;
+    elI.textContent = state.i;
+    elJ.textContent = state.j;
+    elCmp.textContent = state.comparisons;
+    elSwp.textContent = state.swaps;
+  }
+
+  // ---------- Sorting Steps ----------
+  async function stepOnce(){
+    if (state.i >= state.n-1){ // finished
+      state.running = false;
+      btnPlay.textContent = '▶ Play';
+      return;
+    }
+
+    // end of inner pass?
+    if (state.j > state.n-2-state.i){
+      // lock the bubbled max at position n-1-i
+      getBar(state.n-1-state.i)?.classList.add('done');
+      state.i += 1;
+      state.pass += 1;
+      state.j = 0;
+
+      // early exit if no swaps in previous pass
+      if (!state.passSwapped){
+        // mark all remaining as done
+        for (let k=0; k<state.n-state.i; k++){
+          getBar(k)?.classList.add('done');
+        }
+        state.i = state.n-1;
+        updateStats();
+        state.running = false;
+        btnPlay.textContent = '▶ Play';
+        return;
+      }
+      state.passSwapped = false;
+      updateStats();
+      return;
+    }
+
+    // compare j and j+1
+    setCompare(state.j, true);
+    state.comparisons++;
+    updateStats();
+    await wait(state.delay);
+
+    if (state.arr[state.j] > state.arr[state.j+1]){
+      // swap values (heights) – bars stay in place
+      setSwap(state.j, true);
+      const a = state.arr[state.j], b = state.arr[state.j+1];
+      state.arr[state.j] = b; state.arr[state.j+1] = a;
+
+      // animate by updating heights/labels
+      const M = maxVal(state.arr);
+      const barA = getBar(state.j), barB = getBar(state.j+1);
+      if (barA && barB){
+        barA.style.height = `${(state.arr[state.j]/M)*100}%`;
+        barB.style.height = `${(state.arr[state.j+1]/M)*100}%`;
+        barA.querySelector('.label').textContent = state.arr[state.j];
+        barB.querySelector('.label').textContent = state.arr[state.j+1];
+      }
+
+      state.swaps++;
+      state.passSwapped = true;
+      updateStats();
+      await wait(state.delay * 0.6);
+      setSwap(state.j, false);
+    }
+    setCompare(state.j, false);
+
+    state.j += 1;
+    updateStats();
+  }
+
+  async function run(){
+    if (state.running){
+      state.running = false;
+      btnPlay.textContent = '▶ Play';
+      return;
+    }
+    state.running = true;
+    btnPlay.textContent = '⏸ Pause';
+    while (state.running && state.i < state.n-1){
+      await stepOnce();
+      await wait(state.delay * 0.4);
+    }
+    state.running = false;
+    btnPlay.textContent = '▶ Play';
+  }
+
+  // ---------- Controls ----------
+  function reset(arr){
+    state.arr = arr.slice();
+    state.n = state.arr.length;
+    state.i = 0; state.j = 0; state.pass = 0;
+    state.comparisons = 0; state.swaps = 0;
+    state.passSwapped = false;
+    state.running = false;
+    btnPlay.textContent = '▶ Play';
+    buildChart();
+    clearRunningMarks();
+    updateStats();
+  }
+
+  btnRandom.addEventListener('click', ()=>{
+    const n = clamp(parseInt(elSize.value||'0',10), 3, 80);
+    elSize.value = n;
+    reset(randomArray(n));
+  });
+
+  btnNearly.addEventListener('click', ()=>{
+    const n = clamp(parseInt(elSize.value||'0',10), 3, 80);
+    elSize.value = n;
+    reset(nearlySortedArray(n));
+  });
+
+  btnPlay.addEventListener('click', run);
+  btnStep.addEventListener('click', stepOnce);
+  btnReset.addEventListener('click', ()=> reset(state.arr));
+
+  elSpeed.addEventListener('input', (e)=>{
+    state.delay = speedToDelay(+e.target.value);
+    elSpeedLabel.textContent = labelSpeed(+e.target.value);
+  });
+
+  // ---------- Init ----------
+  (function init(){
+    const n = clamp(parseInt(elSize.value||'0',10), 3, 80);
+    elSize.value = n;
+    state.delay = speedToDelay(+elSpeed.value);
+    elSpeedLabel.textContent = labelSpeed(+elSpeed.value);
+    reset(randomArray(n));
+  })();
+</script>
+</body>
+</html>
