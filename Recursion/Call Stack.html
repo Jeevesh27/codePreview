@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Recursion & the Call Stack — Visualized</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for selected terms */
+    --new:#8ae9c1;  /* green for newly added term */
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    color: var(--text);
+    background:
+      radial-gradient(1200px 800px at 85% -10%, #26305b 0%, transparent 60%),
+      radial-gradient(800px 600px at -10% 110%, #1a2145 0%, transparent 60%),
+      var(--bg);
+  }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 32px auto;
+    padding: 0 16px 48px;
+  }
+
+  header {
+    margin-bottom: 16px;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: .3px;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .controls {
+    background: linear-gradient(180deg, var(--panel), #12162a);
+    border: 1px solid #20264a;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1.4fr auto;
+    gap: var(--gap);
+    align-items: end;
+    position: sticky;
+    top: 10px;
+    z-index: 5;
+  }
+
+  .controls label {
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .controls input[type="number"],
+  .controls select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #2a315e;
+    background: var(--panel-2);
+    color: var(--text);
+    outline: none;
+    transition: border-color var(--speed);
+  }
+  .controls input[type="number"]:focus,
+  .controls select:focus { border-color: var(--accent); }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--panel-2);
+    border: 1px solid #2a315e;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .toggle input { transform: translateY(1px); }
+
+  .btns {
+    display: grid;
+    grid-auto-flow: column;
+    gap: 10px;
+  }
+  button {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #2a315e;
+    background: linear-gradient(180deg, #232a4d, #1b2244);
+    color: var(--text);
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform var(--speed), box-shadow var(--speed), border-color var(--speed);
+  }
+  button:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-color: #3b4587; }
+  button.primary { background: linear-gradient(180deg, #2b386b, #222a58); border-color:#3b4aa3; }
+  button.ghost { background: #171c38; }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: var(--gap);
+    margin-top: var(--gap);
+  }
+
+  .panel {
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--panel), #12162a);
+    border: 1px solid #20264a;
+    box-shadow: var(--shadow);
+    padding: 14px;
+    min-height: 380px;
+    position: relative;
+  }
+  .panel h2 {
+    margin: 2px 0 12px;
+    font-size: 16px;
+    letter-spacing: .3px;
+    color: var(--accent);
+  }
+
+  .stack {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .frame {
+    position: relative;
+    background: linear-gradient(180deg, #1a1f3a, #171d39);
+    border: 1px solid #2b3568;
+    border-left: 6px solid #3f4fbb;
+    border-radius: 12px;
+    padding: 10px 12px;
+    transition: transform var(--speed), background var(--speed), border-color var(--speed), box-shadow var(--speed), opacity var(--speed);
+  }
+  .frame.new {
+    outline: 2px dashed var(--new);
+    animation: pulse .9s ease-out 1;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(138,233,193,.45); }
+    100% { box-shadow: 0 0 0 12px rgba(138,233,193,0); }
+  }
+
+  .frame.top {
+    border-left-color: var(--accent);
+    background: linear-gradient(180deg, #1d2548, #182046);
+    box-shadow: 0 8px 16px rgba(108,243,255,.08);
+  }
+  .frame .title {
+    display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+  }
+  .frame .title b { font-weight: 800; letter-spacing: .35px; }
+  .frame .title .tag {
+    font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #2c376c; background: #101539; color: var(--muted);
+  }
+  .kv {
+    margin-top: 6px;
+    display: grid; grid-template-columns: auto 1fr; gap: 6px 10px;
+    font-size: 13px; color: var(--muted);
+  }
+  .kv code { color: var(--text); background: #11173a; padding: 1px 6px; border-radius: 6px; border: 1px solid #2a315e; }
+
+  .stack-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; font-size: 13px; color: var(--muted);
+  }
+  .stack-meter {
+    height: 8px; background: #0e1331; border: 1px solid #242c5e; border-radius: 99px; overflow: hidden; width: 55%;
+  }
+  .stack-meter > i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width var(--speed) ease;
+  }
+
+  .code {
+    background: #0e1331;
+    border: 1px solid #232b5f;
+    border-radius: 12px;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    color: #e4eaff;
+    font-size: 13px;
+    overflow: auto;
+    margin-bottom: 12px;
+  }
+
+  .log {
+    display: grid; gap: 8px; max-height: 240px; overflow: auto;
+    padding-right: 4px;
+  }
+  .log .row {
+    background: #11163a; border: 1px solid #2a315e; border-left: 4px solid #334195;
+    border-radius: 10px; padding: 8px 10px; font-size: 13px; color: #dbe2ff;
+  }
+  .log .row .em { color: var(--pair); font-weight: 700; }
+  .log .row.ok { border-left-color: var(--ok); }
+  .log .row.warn { border-left-color: #ff7675; }
+
+  .result {
+    margin-top: 12px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .pill {
+    border-radius: 999px; padding: 6px 10px; font-weight: 700;
+    border: 1px solid #2a315e; background: #0e1331; color: var(--accent-2);
+  }
+
+  .notes {
+    margin-top: 18px;
+    background: linear-gradient(180deg, #151a34, #10152e);
+    border: 1px solid #20264a;
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .notes h3 { margin: 4px 0 8px; font-size: 15px; color: var(--accent); }
+  .notes ul { margin: 0; padding-left: 18px; color: var(--muted); }
+  .notes li { margin: 8px 0; }
+
+  .overflow-banner {
+    position: absolute; inset: 0; display: none;
+    place-items: center; text-align: center;
+    backdrop-filter: blur(2px);
+    background: rgba(255, 74, 74, .04);
+    border-radius: inherit;
+  }
+  .overflow-banner.show { display: grid; }
+  .overflow-banner .card {
+    background: #1e1320; border: 1px solid #533; color: #ffdcdc;
+    padding: 14px; border-radius: 12px; box-shadow: var(--shadow);
+  }
+  .overflow-banner h4 { margin: 0 0 8px; color: #ffa3a3; }
+  .overflow-banner p { margin: 0; color: #ffdcdc; }
+
+  @media (max-width: 980px){
+    .panels { grid-template-columns: 1fr; }
+    .controls { grid-template-columns: 1fr 1fr 1fr; }
+    .btns { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>Recursion &amp; the Call Stack — Visualized</h1>
+      <p>Step through <b>factorial(n)</b> and watch frames <span style="color:var(--accent)">push</span>/<span style="color:var(--accent-2)">pop</span> on the stack.</p>
+    </header>
+
+    <section class="controls" aria-label="controls">
+      <label>
+        Start value <small>(n)</small>
+        <input id="nInput" type="number" min="0" max="20" value="5" />
+      </label>
+
+      <label>
+        Max stack frames
+        <input id="maxInput" type="number" min="6" max="64" value="24" />
+      </label>
+
+      <div class="toggle" title="Simulate a bug by removing the base case so recursion never stops">
+        <input id="bugToggle" type="checkbox" />
+        <span>Disable base case (simulate bug)</span>
+      </div>
+
+      <div class="btns">
+        <button id="stepBtn" class="primary" title="Execute the next step">Step</button>
+        <button id="autoBtn" title="Play/Pause">Auto ▶</button>
+        <button id="runBtn" class="ghost" title="Run quickly to completion">Run to end</button>
+        <button id="resetBtn" class="ghost" title="Reset everything">Reset</button>
+      </div>
+    </section>
+
+    <section class="panels">
+      <div class="panel" id="stackPanel">
+        <h2>Call Stack</h2>
+        <div id="stack" class="stack" aria-live="polite"></div>
+        <div class="stack-meta">
+          <div>Depth: <b id="depth">0</b></div>
+          <div class="stack-meter" aria-hidden="true"><i id="meter"></i></div>
+          <div>Limit: <b id="limit">24</b></div>
+        </div>
+
+        <div class="overflow-banner" id="overflowBanner" role="alert">
+          <div class="card">
+            <h4>Stack Overflow (simulated) 😵</h4>
+            <p>The recursion never hit a base case, so frames kept piling up until the stack limit.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Trace &amp; Output</h2>
+<pre class="code" aria-label="reference code">
+<span style="color:#8ae9c1">function</span> fact(n) {
+  <span style="color:#a6b0cf">// base case:</span>
+  <span style="color:#8ae9c1">if</span> (n &lt;= 1) <span style="color:#8ae9c1">return</span> 1;
+  <span style="color:#a6b0cf">// recursive step (pushes a new frame)</span>
+  <span style="color:#8ae9c1">return</span> n * fact(n - 1);
+}
+</pre>
+        <div id="log" class="log" aria-live="polite"></div>
+
+        <div class="result">
+          <span class="pill">Result:</span>
+          <span id="result" style="font-weight:800; font-size:18px">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="notes">
+      <h3>What’s happening?</h3>
+      <ul>
+        <li>Each function call is stored in the <b>call stack</b>.</li>
+        <li>When a recursive function is called:
+          <ol>
+            <li>A new frame is <b style="color:var(--new)">pushed</b> onto the stack.</li>
+            <li>Execution continues until the <span style="color:var(--pair)">base case</span> is reached.</li>
+            <li>Once the base case returns, stack frames are <b style="color:var(--accent-2)">popped</b> off one by one.</li>
+          </ol>
+        </li>
+        <li><span style="color:#ffb0b0">Why stack overflow?</span> If the base case is missing (try the toggle!) or recursion is too deep, frames pile up until the stack limit is hit.</li>
+      </ul>
+    </section>
+  </main>
+
+<script>
+(() => {
+  // ----- State -----
+  let stack = [];            // Array of frames (top of stack = last element)
+  let startN = 5;            // initial n
+  let maxFrames = 24;        // stack capacity (simulated)
+  let autoTimer = null;      // autoplay timer
+  let blocked = false;       // stop all actions when overflow or finished
+  let finished = false;      // whether we reached the final result
+  let resultVal = null;      // final result
+  let idSeq = 0;
+
+  // ----- Elements -----
+  const $stack = document.getElementById('stack');
+  const $depth = document.getElementById('depth');
+  const $meter = document.getElementById('meter');
+  const $limit = document.getElementById('limit');
+  const $log   = document.getElementById('log');
+  const $res   = document.getElementById('result');
+  const $overflow = document.getElementById('overflowBanner');
+
+  const $nInput = document.getElementById('nInput');
+  const $maxInput = document.getElementById('maxInput');
+  const $bug = document.getElementById('bugToggle');
+
+  const $step = document.getElementById('stepBtn');
+  const $auto = document.getElementById('autoBtn');
+  const $run  = document.getElementById('runBtn');
+  const $reset= document.getElementById('resetBtn');
+
+  // ----- Frame helpers -----
+  const makeFrame = (n) => ({
+    id: ++idSeq,
+    fn: 'fact',
+    n,
+    stage: 'call',       // 'call' -> evaluating / waiting for child; 'return' -> ready to pop
+    returnVal: null,
+    isNew: true
+  });
+
+  const pushFrame = (frame) => {
+    stack.push(frame);
+    render();
+    // remove "new" highlight after a tick
+    setTimeout(() => { frame.isNew = false; render(); }, 700);
+  };
+
+  const top = () => stack[stack.length - 1];
+
+  // ----- Logging -----
+  const log = (html, cls='') => {
+    const row = document.createElement('div');
+    row.className = `row ${cls}`;
+    row.innerHTML = html;
+    $log.prepend(row); // newest on top
+  };
+
+  // ----- Rendering -----
+  const render = () => {
+    // stack frames
+    $stack.innerHTML = '';
+    const rev = [...stack].reverse(); // show TOP at the top visually
+    rev.forEach((f, idx) => {
+      const el = document.createElement('div');
+      el.className = 'frame' + (idx === 0 ? ' top' : '') + (f.isNew ? ' new' : '');
+      el.setAttribute('aria-label', `frame ${f.fn}(${f.n}) ${idx===0?'top of stack':''}`);
+      el.innerHTML = `
+        <div class="title">
+          <b>${f.fn}(<span class="em">${f.n}</span>)</b>
+          <span class="tag">${f.stage === 'call' ? 'running' : 'returning'}</span>
+        </div>
+        <div class="kv">
+          <span>n</span><code>${f.n}</code>
+          <span>return</span><code>${f.returnVal === null ? '—' : f.returnVal}</code>
+        </div>
+      `;
+      $stack.appendChild(el);
+    });
+
+    // meter
+    $depth.textContent = String(stack.length);
+    $limit.textContent = String(maxFrames);
+    const pct = Math.min(100, Math.round((stack.length / maxFrames) * 100));
+    $meter.style.width = pct + '%';
+
+    // result
+    $res.textContent = finished ? String(resultVal) : '—';
+  };
+
+  // ----- Core step logic (non-recursive; we simulate the runtime) -----
+  function step() {
+    if (blocked) return;
+
+    // initialize root
+    if (stack.length === 0) {
+      pushFrame(makeFrame(startN));
+      log(`Call <b>fact(<span class="em">${startN}</span>)</b> — push first frame`);
+      checkOverflow();
+      return;
+    }
+
+    const f = top();
+
+    // Stage: call (we're about to either hit base case or push child)
+    if (f.stage === 'call') {
+      const disableBase = $bug.checked;
+      const isBase = f.n <= 1;
+
+      if (isBase && !disableBase) {
+        // base case: return 1
+        f.returnVal = 1;
+        f.stage = 'return';
+        render();
+        log(`Base case hit in <b>fact(<span class="em">${f.n}</span>)</b> ⇒ return <b>1</b>`, 'ok');
+        return;
+      } else {
+        // recursive step: push child frame fact(n-1)
+        const nextN = f.n - 1;
+        const child = makeFrame(nextN);
+        pushFrame(child);
+        log(`Call <b>fact(<span class="em">${nextN}</span>)</b> — push new frame`);
+        checkOverflow();
+        return;
+      }
+    }
+
+    // Stage: return (this frame is ready to pop and propagate its value upward)
+    if (f.stage === 'return') {
+      // pop this frame, propagate to parent
+      const returningVal = f.returnVal;
+      stack.pop();
+      render();
+
+      if (stack.length > 0) {
+        const parent = top();
+        // parent is still in 'call' stage; compute its return and flip it to 'return' (so it will pop on next step)
+        parent.returnVal = parent.n * returningVal;
+        parent.stage = 'return';
+        render();
+        log(
+          `Return to <b>fact(<span class="em">${parent.n}</span>)</b>: ` +
+          `<span class="em">${parent.n}</span> × <span class="em">${returningVal}</span> = <b>${parent.returnVal}</b>`,
+          'ok'
+        );
+      } else {
+        // no parent: we finished
+        finished = true;
+        resultVal = returningVal;
+        log(`Final result: <b>fact(<span class="em">${startN}</span>) = ${returningVal}</b>`, 'ok');
+        stopAuto();
+      }
+      return;
+    }
+  }
+
+  // ----- Overflow handling -----
+  function checkOverflow() {
+    if (stack.length >= maxFrames) {
+      blocked = true;
+      stopAuto();
+      $overflow.classList.add('show');
+      log(`<b>Stack overflow:</b> too many frames without a base case.`, 'warn');
+    }
+  }
+
+  // ----- Controls -----
+  function reset(all = false) {
+    stopAuto();
+    blocked = false;
+    finished = false;
+    resultVal = null;
+    stack = [];
+    idSeq = 0;
+    $overflow.classList.remove('show');
+
+    if (all) {
+      startN = clampInt(parseInt($nInput.value, 10), 0, 999);
+      maxFrames = clampInt(parseInt($maxInput.value, 10), 4, 999);
+    }
+
+    render();
+    $log.innerHTML = '';
+    // Seed a helpful hint
+    log(`Tip: Press <b>Step</b> to push the first frame for <b>fact(${startN})</b>.`);
+  }
+
+  function runToEnd() {
+    if (blocked) return;
+    // Safety loop limit to avoid freezing the UI in "bug" mode
+    let ticks = 0, maxTicks = 2000;
+    while (!blocked && !finished && ticks < maxTicks) {
+      step();
+      ticks++;
+    }
+  }
+
+  function toggleAuto() {
+    if (autoTimer) { stopAuto(); return; }
+    if (blocked) return;
+    $auto.textContent = 'Auto ❚❚';
+    autoTimer = setInterval(() => {
+      if (blocked || finished) { stopAuto(); return; }
+      step();
+    }, 400);
+  }
+
+  function stopAuto() {
+    if (autoTimer) clearInterval(autoTimer);
+    autoTimer = null;
+    $auto.textContent = 'Auto ▶';
+  }
+
+  function clampInt(n, min, max) {
+    n = Number.isFinite(n) ? Math.round(n) : min;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  // ----- Wire up -----
+  $step.addEventListener('click', step);
+  $auto.addEventListener('click', toggleAuto);
+  $run.addEventListener('click', runToEnd);
+  $reset.addEventListener('click', () => reset(true));
+
+  $nInput.addEventListener('change', () => { startN = clampInt(parseInt($nInput.value, 10), 0, 999); reset(true); });
+  $maxInput.addEventListener('change', () => { maxFrames = clampInt(parseInt($maxInput.value, 10), 4, 999); reset(true); });
+  $bug.addEventListener('change', () => reset(false));
+
+  // Keyboard shortcuts: Space = step, A = auto, R = reset
+  window.addEventListener('keydown', (e) => {
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+    if (e.key === ' ') { e.preventDefault(); step(); }
+    if (e.key.toLowerCase() === 'a') { toggleAuto(); }
+    if (e.key.toLowerCase() === 'r') { reset(true); }
+  });
+
+  // Initial render
+  reset(true);
+})();
+</script>
+</body>
+</html>
