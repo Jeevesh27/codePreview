@@ -86,16 +86,22 @@
   }
   .card .body { padding:12px; overflow:auto; min-height:0 }
 
-  /* Board */
-  .board-wrap { display:flex; gap:16px; align-items:flex-start; }
+  /* ===== Board (fixed for half-cut) ===== */
+  .board-wrap {
+    display:flex; gap:16px; align-items:flex-start;
+    flex-wrap: wrap; /* allow info to drop below board on small screens */
+  }
   .board {
     --size: 8;
-    --cell: 42px;
+    /* Auto cell size tied to viewport, but we also override via JS for perfect fit */
+    --cell: clamp(28px, calc(80vmin / var(--size)), 64px);
     display:grid;
     grid-template-columns: repeat(var(--size), var(--cell));
     grid-template-rows: repeat(var(--size), var(--cell));
     border-radius:12px; overflow:hidden; border:1px solid #2b356c;
     box-shadow:var(--shadow);
+    width: max-content;     /* avoid shrinking that clips cells */
+    max-width: 100%;        /* never overflow container */
   }
   .cell {
     display:flex; align-items:center; justify-content:center; font-size:22px;
@@ -108,7 +114,7 @@
   .cell.place { box-shadow:inset 0 0 0 3px rgba(138,233,193,.55) }
   .queen { filter: drop-shadow(0 4px 8px rgba(0,0,0,.35)); }
 
-  .board-info { font-size:14px; color:var(--muted) }
+  .board-info { font-size:14px; color:var(--muted); min-width: 200px }
   .board-info .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:var(--chip); color:#cfe1ff; border:1px solid #303869; margin-right:8px }
 
   /* Tree */
@@ -156,6 +162,8 @@
   @media (max-width: 980px) {
     .controls { grid-template-columns: 1fr 1fr 1fr 1fr auto auto; }
     .grid { grid-template-columns: 1fr; grid-template-rows:auto auto auto auto; grid-template-areas: "board" "stack" "tree" "log" }
+    .board-wrap { gap:12px; }
+    .board { --cell: clamp(24px, calc(92vmin / var(--size)), 56px); }
   }
 </style>
 </head>
@@ -332,7 +340,6 @@
     const total = N*N;
     for (let i=0;i<total;i++){
       const cell = make('div','cell');
-      // alternating color
       const r = Math.floor(i/N), c = i%N;
       if ((r+c)%2===1) cell.classList.add('dark');
       cell.dataset.r=r; cell.dataset.c=c;
@@ -340,12 +347,10 @@
     }
   }
   function drawBoard(queens){
-    // clear
     els.board.querySelectorAll('.cell').forEach(cell=>{
       cell.classList.remove('try','conflict','place');
       cell.innerHTML='';
     });
-    // draw queens
     for (let r=0;r<N;r++){
       const c = queens[r];
       if (c>=0){
@@ -362,9 +367,7 @@
     nodesById.clear(); containerById.clear();
     els.tree.innerHTML='';
     for (const s of steps){
-      if (s.type==='call'){
-        ensureTreeNode(s);
-      }
+      if (s.type==='call'){ ensureTreeNode(s); }
     }
   }
   function ensureTreeNode(step){
@@ -380,7 +383,6 @@
     const kids = make('div','children');
     const wrap = make('div'); wrap.append(node, kids);
     node.append(sig, ret);
-
     if (step.parentId==null) els.tree.append(wrap);
     else {
       const parentKids = containerById.get(step.parentId) || (()=>{ const pNode=ensureTreeNode(steps.find(x=>x.id===step.parentId && x.type==='call')); return containerById.get(step.parentId); })();
@@ -477,7 +479,6 @@
       logRow('try', `place row=${s.row} col=${s.col}`);
     }
     else if (s.type==='backtrack'){
-      // remove queen if still there
       if (boardState[s.row]===s.col) boardState[s.row] = -1;
       drawBoard(boardState);
       els.status.textContent = `Backtrack from row ${s.row}, col ${s.col}.`;
@@ -508,7 +509,7 @@
     buildBoard(); drawBoard(boardState); els.status.textContent='Built fresh board.';
     steps = traceNQueens(N, els.mode.value==='first');
     buildTree();
-    // initial log
+    fitCells(); // ensure no clipping on initial build
     logRow('call', `Search built: N=${N}, steps=${steps.length}, stop=${els.mode.value}`);
   }
   function resetAll(){
@@ -517,10 +518,27 @@
     nodesById.forEach(n=>n.classList.remove('active','returning'));
     renderStack(); els.status.textContent='Reset.';
     solutions = 0; els.sols.textContent='0';
+    fitCells();
   }
   function stepOnce(){
     if (idx >= steps.length) return;
     applyStep(steps[idx++]);
+  }
+
+  // ---------- Responsive: perfect-fit cells ----------
+  // Fits the board’s cells to the available width of the board container.
+  function fitCells(){
+    const wrap = document.querySelector('.card[style*="grid-area:board"] .body');
+    if (!wrap || !els.board) return;
+    const style = getComputedStyle(els.board);
+    const size = parseInt(style.getPropertyValue('--size')) || N || 8;
+
+    // Available width for just the board element (when info wraps below, we can use full width)
+    // We measure the .board parent (.board-wrap) and subtract a small buffer for borders/padding.
+    const bw = wrap.clientWidth;
+    // Aim for max cell size that fits the full row
+    const cell = Math.max(22, Math.min(64, Math.floor((bw - 24) / size)));
+    els.board.style.setProperty('--cell', `${cell}px`);
   }
 
   // ---------- Wire up ----------
@@ -534,8 +552,14 @@
   els.reset.addEventListener('click', resetAll);
   els.n.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); rebuild(); } });
 
+  // Observe size changes to keep board perfectly fitted
+  const ro = new ResizeObserver(fitCells);
+  ro.observe(document.querySelector('.card[style*="grid-area:board"] .body'));
+
   // Initial
   rebuild();
+  window.addEventListener('load', fitCells);
+  window.addEventListener('resize', fitCells);
 })();
 </script>
 </body>
