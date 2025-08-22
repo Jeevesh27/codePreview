@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Tail vs Non-Tail Recursion</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--text);
+    font: clamp(14px, 1.1vw, 16px)/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial,"Apple Color Emoji","Segoe UI Emoji";
+    background:
+      radial-gradient(1200px 800px at 85% -10%, #26305b 0%, transparent 60%),
+      radial-gradient(800px 600px at -10% 110%, #1a2145 0%, transparent 60%),
+      var(--bg);
+  }
+
+  .wrap{max-width:min(1200px, 100% - 24px); margin: clamp(16px, 3vw, 32px) auto; padding-bottom: env(safe-area-inset-bottom, 0)}
+  header h1{margin:0 0 6px; font-size: clamp(20px, 2.2vw, 28px); font-weight:800; letter-spacing:.3px}
+  header p{margin:0; color:var(--muted); font-size: clamp(13px, 1.2vw, 16px)}
+
+  /* Controls */
+  .controls{
+    background:linear-gradient(180deg,var(--panel),#12162a);
+    border:1px solid #20264a; border-radius:var(--radius); box-shadow:var(--shadow);
+    padding: clamp(10px, 2vw, 14px);
+    display:grid; gap: var(--gap); align-items:end;
+    grid-template-columns: repeat(12, 1fr);
+    position: sticky; top: 8px; z-index: 5;
+    backdrop-filter: saturate(120%) blur(4px);
+  }
+  .controls label{display:grid; gap:6px; font-size:.9em; color:var(--muted)}
+  .controls input[type=number]{
+    padding: 12px; border-radius: 12px; border:1px solid #2a315e;
+    background:var(--panel-2); color:var(--text); outline:0; width:100%;
+  }
+  .toggle{
+    display:flex; align-items:center; gap:10px; padding: 12px;
+    border-radius:12px; background:var(--panel-2); border:1px solid #2a315e; color:var(--text);
+    min-height: 44px;
+  }
+  .btns{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end}
+  button{
+    padding: 12px 14px; min-height:44px;
+    border-radius:12px; border:1px solid #2a315e; background:linear-gradient(180deg,#232a4d,#1b2244);
+    color:var(--text); cursor:pointer; font-weight:600;
+    transition: transform var(--speed), box-shadow var(--speed), border-color var(--speed);
+  }
+  button:hover{transform:translateY(-1px); box-shadow:var(--shadow); border-color:#3b4587}
+  button.primary{background:linear-gradient(180deg,#2b386b,#222a58); border-color:#3b4aa3}
+  button.ghost{background:#171c38}
+
+  /* Control layout breakpoints */
+  .c-n { grid-column: span 6 }
+  .c-max{ grid-column: span 6 }
+  .c-tco{ grid-column: span 8 }
+  .c-btn{ grid-column: span 4; display:flex; justify-content:flex-end }
+  @media (min-width: 720px){
+    .c-n { grid-column: span 3 }
+    .c-max{ grid-column: span 3 }
+    .c-tco{ grid-column: span 3 }
+    .c-btn{ grid-column: span 3 }
+  }
+  @media (min-width: 980px){
+    .controls{grid-template-columns: 1fr 1fr 1fr auto}
+    .c-n,.c-max,.c-tco,.c-btn{grid-column: auto}
+  }
+
+  /* Two equal columns that collapse to one; rows match tallest panel for perfect outer symmetry */
+  .cols{
+    display:grid; grid-template-columns: 1fr; gap: var(--gap); margin-top: var(--gap);
+    align-items: stretch;
+  }
+  @media (min-width: 900px){ .cols{ grid-template-columns: 1fr 1fr } }
+
+  /* Inner panel uses the same grid in both columns for inner symmetry */
+  .panel{
+    border-radius:var(--radius);
+    background:linear-gradient(180deg,var(--panel),#12162a);
+    border:1px solid #20264a; box-shadow:var(--shadow);
+    padding: clamp(10px, 2vw, 14px);
+    display:grid;
+    grid-template-rows:
+      auto                                  /* title */
+      minmax(120px, clamp(140px, 18vw, 180px)) /* code (equalized) */
+      auto                                  /* meter + depth */
+      minmax(160px, 1fr)                    /* stack (flex/scroll) */
+      minmax(120px, 28vh);                  /* log (equalized) */
+    gap: var(--gap);
+    min-height: clamp(520px, 60vh, 700px);
+  }
+  .panel h2{margin:2px 0 0; font-size: clamp(15px, 1.8vw, 18px); color:var(--accent)}
+
+  .code{
+    background:#0e1331; border:1px solid #232b5f; border-radius:12px; padding:12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    color:#e4eaff; font-size: clamp(12px, 1.2vw, 13.5px); overflow:auto
+  }
+
+  .stats{display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--muted)}
+  .meter{flex:1; height:10px; background:#0e1331; border:1px solid #242c5e; border-radius:99px; overflow:hidden; min-width:160px}
+  .meter i{display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width var(--speed) ease}
+
+  .stack{display:grid; gap:10px; align-content:start; overflow:auto; padding-right:2px}
+  .frame{
+    position:relative; background:linear-gradient(180deg,#1a1f3a,#171d39);
+    border:1px solid #2b3568; border-left:6px solid #3f4fbb; border-radius:12px;
+    padding:10px 12px; transition: transform var(--speed), background var(--speed), border-color var(--speed), box-shadow var(--speed)
+  }
+  .frame.top{border-left-color:var(--accent); background:linear-gradient(180deg,#1d2548,#182046); box-shadow:0 8px 16px rgba(108,243,255,.08)}
+  .frame .title{display:flex; justify-content:space-between; gap:8px; align-items:baseline; flex-wrap:wrap}
+  .frame .title b{font-weight:800; letter-spacing:.35px}
+  .frame .title .tag{font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #2c376c; background:#101539; color:var(--muted)}
+  .kv{margin-top:6px; display:grid; grid-template-columns:auto 1fr; gap:6px 10px; font-size:.9em; color:var(--muted)}
+  .kv code{color:var(--text); background:#11173a; padding:1px 6px; border-radius:6px; border:1px solid #2a315e; word-break: break-word}
+  .todo{margin-top:6px; font-size:.85em; color:var(--pair)}
+
+  .log{display:grid; gap:8px; overflow:auto; padding-right:2px}
+  .row{background:#11163a; border:1px solid #2a315e; border-left:4px solid #334195; border-radius:10px; padding:8px 10px; font-size:.92em; color:#dbe2ff}
+  .row.ok{border-left-color:var(--ok)}
+  .row.warn{border-left-color:#ff7675}
+  .row .em{color:var(--pair); font-weight:700}
+
+  .notes{margin-top:18px; background:linear-gradient(180deg,#151a34,#10152e); border:1px solid #20264a; border-radius:var(--radius); padding: clamp(10px, 2vw, 14px)}
+  .notes h3{margin:4px 0 8px; font-size: clamp(14px, 1.6vw, 16px); color:var(--accent)}
+  .notes ul{margin:0; padding-left:18px; color:var(--muted)}
+  .notes li{margin:8px 0}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation: none !important; transition: none !important}
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>🐍 Tail vs Non-Tail Recursion — Visualized</h1>
+    </header>
+
+    <!-- Controls -->
+    <section class="controls" aria-label="controls">
+      <label class="c-n">
+        Start value <small>(n)</small>
+        <input id="nInput" type="number" inputmode="numeric" min="0" max="20" value="6" />
+      </label>
+      <label class="c-max">
+        Max stack frames <small>(visual cap)</small>
+        <input id="maxInput" type="number" inputmode="numeric" min="6" max="64" value="24" />
+      </label>
+      <div class="toggle c-tco" title="Simulate Tail-Call Optimization: reuse the current frame for a tail call">
+        <input id="tcoToggle" type="checkbox" aria-label="Simulate Tail-Call Optimization" />
+        <span>Simulate Tail-Call Optimization (TCO)</span>
+      </div>
+      <div class="btns c-btn" role="group" aria-label="Playback">
+        <button id="stepBtn" class="primary">Step</button>
+        <button id="autoBtn">Auto ▶</button>
+        <button id="runBtn" class="ghost">Run to end</button>
+        <button id="resetBtn" class="ghost">Reset</button>
+      </div>
+    </section>
+
+    <!-- SYMMETRIC PANELS -->
+    <section class="cols">
+      <!-- Non-tail -->
+      <article class="panel" id="nonPanel">
+        <h2>Non-Tail Recursion (classic)</h2>
+<pre class="code" tabindex="0">
+<span style="color:#8ae9c1">function</span> factNonTail(n) {
+  <span style="color:#8ae9c1">if</span> (n &lt;= 1) <span style="color:#8ae9c1">return</span> 1;
+  <span style="color:#a6b0cf">// pending work after the call</span>
+  <span style="color:#8ae9c1">return</span> n * factNonTail(n - 1);
+}
+</pre>
+        <div class="stats">
+          <div class="meter" aria-hidden="true"><i id="m1"></i></div>
+          <div>Depth: <b id="d1">0</b></div>
+        </div>
+        <div id="stack1" class="stack" aria-live="polite"></div>
+        <div class="log" id="log1" aria-live="polite"></div>
+      </article>
+
+      <!-- Tail -->
+      <article class="panel" id="tailPanel">
+        <h2>Tail Recursion (with accumulator)</h2>
+<pre class="code" tabindex="0">
+<span style="color:#8ae9c1">function</span> factTail(n, acc = 1) {
+  <span style="color:#8ae9c1">if</span> (n &lt;= 1) <span style="color:#8ae9c1">return</span> acc;
+  <span style="color:#a6b0cf">// tail call: nothing left to do here</span>
+  <span style="color:#8ae9c1">return</span> factTail(n - 1, n * acc);
+}
+</pre>
+        <div class="stats">
+          <div class="meter" aria-hidden="true"><i id="m2"></i></div>
+          <div>Depth: <b id="d2">0</b> <span id="tcoHint" style="color:var(--accent-2);display:none">· TCO keeps this ~constant</span></div>
+        </div>
+        <div id="stack2" class="stack" aria-live="polite"></div>
+        <div class="log" id="log2" aria-live="polite"></div>
+      </article>
+    </section>
+  </main>
+
+<script>
+(() => {
+  // Controls
+  const $n = document.getElementById('nInput');
+  const $max = document.getElementById('maxInput');
+  const $tco = document.getElementById('tcoToggle');
+  const $step = document.getElementById('stepBtn');
+  const $auto = document.getElementById('autoBtn');
+  const $run  = document.getElementById('runBtn');
+  const $reset= document.getElementById('resetBtn');
+  const $tcoHint = document.getElementById('tcoHint');
+
+  // Non-tail DOM
+  const S1 = { stack: document.getElementById('stack1'), log: document.getElementById('log1'), meter: document.getElementById('m1'), depth: document.getElementById('d1') };
+  // Tail DOM
+  const S2 = { stack: document.getElementById('stack2'), log: document.getElementById('log2'), meter: document.getElementById('m2'), depth: document.getElementById('d2') };
+
+  // State
+  let maxFrames = 24;
+  let startN = 6;
+  let autoTimer = null;
+
+  let nonFrames = []; let nonDone = false;
+  let tailFrames = []; let tailDone = false;
+
+  // Utilities
+  const clamp = (n,min,max)=>Math.max(min,Math.min(max,Number.isFinite(n)?Math.round(n):min));
+  const log = (dom, html, cls='') => {
+    const row = document.createElement('div');
+    row.className = `row ${cls}`;
+    row.innerHTML = html;
+    dom.prepend(row);
+  };
+
+  const renderStack = (dom, frames, isTail=false) => {
+    dom.innerHTML = '';
+    [...frames].reverse().forEach((f, idx) => {
+      const el = document.createElement('div');
+      el.className = 'frame' + (idx===0 ? ' top' : '');
+      const tag = f.stage === 'call' ? 'running' : 'returning';
+      el.innerHTML = `
+        <div class="title">
+          <b>${isTail ? `factTail(<span class="em">${f.n}</span>, acc=${f.acc})` : `factNonTail(<span class="em">${f.n}</span>)`}</b>
+          <span class="tag">${tag}</span>
+        </div>
+        <div class="kv">
+          <span>${isTail ? 'acc' : 'n'}</span><code>${isTail ? f.acc : f.n}</code>
+          <span>return</span><code>${f.ret ?? '—'}</code>
+        </div>
+        ${isTail
+          ? `<div class="todo">tail call → <code>factTail(n-1, n*acc)</code></div>`
+          : `<div class="todo">pending work → <code>n * (result of factNonTail(n-1))</code></div>`}
+      `;
+      dom.appendChild(el);
+    });
+  };
+
+  const renderMeters = () => {
+    const pct1 = Math.min(100, Math.round((nonFrames.length / maxFrames) * 100));
+    const pct2 = Math.min(100, Math.round((tailFrames.length / maxFrames) * 100));
+    S1.meter.style.width = pct1 + '%';
+    S2.meter.style.width = pct2 + '%';
+    S1.depth.textContent = String(nonFrames.length);
+    S2.depth.textContent = String(tailFrames.length);
+  };
+
+  const renderAll = () => {
+    renderStack(S1.stack, nonFrames, false);
+    renderStack(S2.stack, tailFrames, true);
+    renderMeters();
+    $tcoHint.style.display = $tco.checked ? '' : 'none';
+  };
+
+  // Non-tail step
+  function stepNonTail() {
+    if (nonDone) return;
+    if (nonFrames.length === 0) {
+      nonFrames.push({ n: startN, stage: 'call', ret: null });
+      log(S1.log, `Call <b>factNonTail(${startN})</b> — push frame`);
+      return renderAll();
+    }
+    let f = nonFrames[nonFrames.length - 1];
+    if (f.stage === 'call') {
+      if (f.n <= 1) {
+        f.ret = 1; f.stage = 'return';
+        log(S1.log, `Base case in <b>factNonTail(${f.n})</b> ⇒ return <b>1</b>`, 'ok');
+      } else {
+        const childN = f.n - 1;
+        nonFrames.push({ n: childN, stage: 'call', ret: null });
+        log(S1.log, `Call <b>factNonTail(${childN})</b> — push frame`);
+        if (nonFrames.length >= maxFrames) { log(S1.log, `<b>Stack overflow (simulated)</b> in non-tail path`, 'warn'); nonDone = true; }
+      }
+      return renderAll();
+    }
+    if (f.stage === 'return') {
+      const val = f.ret;
+      nonFrames.pop();
+      if (nonFrames.length) {
+        const p = nonFrames[nonFrames.length - 1];
+        p.ret = p.n * val; p.stage = 'return';
+        log(S1.log, `Return to n=${p.n}: <span class="em">${p.n}</span> × <span class="em">${val}</span> = <b>${p.ret}</b>`, 'ok');
+      } else {
+        nonDone = true;
+        log(S1.log, `Final: <b>factNonTail(${startN})</b> complete`, 'ok');
+      }
+      renderAll();
+    }
+  }
+
+  // Tail step
+  function stepTail() {
+    if (tailDone) return;
+    if (tailFrames.length === 0) {
+      tailFrames.push({ n: startN, acc: 1, stage: 'call', ret: null });
+      log(S2.log, `Call <b>factTail(${startN}, acc=1)</b> — push frame`);
+      return renderAll();
+    }
+    let f = tailFrames[tailFrames.length - 1];
+    if (f.stage === 'call') {
+      if (f.n <= 1) {
+        f.ret = f.acc; f.stage = 'return';
+        log(S2.log, `Base case in <b>factTail(${f.n}, ${f.acc})</b> ⇒ return <b>${f.acc}</b>`, 'ok');
+      } else {
+        const nextN = f.n - 1, nextAcc = f.n * f.acc;
+        if ($tco.checked) {
+          const beforeN = f.n, beforeAcc = f.acc;
+          f.n = nextN; f.acc = nextAcc; // frame reuse
+          log(S2.log, `TCO: reuse frame — <code>n:${beforeN}→${f.n}</code>, <code>acc:${beforeAcc}→${f.acc}</code>`, 'ok');
+        } else {
+          tailFrames.push({ n: nextN, acc: nextAcc, stage: 'call', ret: null });
+          log(S2.log, `Tail-call <b>factTail(${nextN}, ${nextAcc})</b> — push frame`);
+          if (tailFrames.length >= maxFrames) { log(S2.log, `<b>Stack overflow (simulated)</b> in tail path (no TCO)`, 'warn'); tailDone = true; }
+        }
+      }
+      return renderAll();
+    }
+    if (f.stage === 'return') {
+      const val = f.ret;
+      tailFrames.pop();
+      if (tailFrames.length) {
+        const p = tailFrames[tailFrames.length - 1];
+        p.ret = val; p.stage = 'return';
+        log(S2.log, `Return (no pending work): propagate <b>${val}</b>`, 'ok');
+      } else {
+        tailDone = true;
+        log(S2.log, `Final: <b>factTail(${startN})</b> complete`, 'ok');
+      }
+      renderAll();
+    }
+  }
+
+  function stepBoth(){ stepNonTail(); stepTail(); }
+
+  // Controls
+  function reset(all=false){
+    stopAuto();
+    if(all){
+      startN = clamp(parseInt($n.value,10), 0, 999);
+      maxFrames = clamp(parseInt($max.value,10), 4, 999);
+    }
+    nonFrames=[]; nonDone=false; S1.log.innerHTML='';
+    tailFrames=[]; tailDone=false; S2.log.innerHTML='';
+    renderAll();
+    log(S1.log, `Tip: Non-tail keeps <i>pending multiply</i> on each frame.`);
+    log(S2.log, `Tip: Tail recursion carries work in <i>accumulator</i> (try TCO).`);
+  }
+
+  function runToEnd(){
+    let ticks=0, limit=3000;
+    while(!(nonDone && tailDone) && ticks<limit){ stepBoth(); ticks++; }
+  }
+
+  function toggleAuto(){
+    if(autoTimer){ stopAuto(); return; }
+    $auto.textContent='Auto ❚❚';
+    autoTimer = setInterval(()=>{
+      if(nonDone && tailDone){ stopAuto(); return; }
+      stepBoth();
+    }, 380);
+  }
+
+  function stopAuto(){ clearInterval(autoTimer); autoTimer=null; $auto.textContent='Auto ▶'; }
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+    if(e.key===' '){ e.preventDefault(); stepBoth(); }
+    if(e.key.toLowerCase()==='a'){ toggleAuto(); }
+    if(e.key.toLowerCase()==='r'){ reset(true); }
+  });
+
+  // Wire up
+  $step.addEventListener('click', stepBoth);
+  $auto.addEventListener('click', toggleAuto);
+  $run.addEventListener('click', runToEnd);
+  $reset.addEventListener('click', () => reset(true));
+  $n.addEventListener('change', () => reset(true));
+  $max.addEventListener('change', () => reset(true));
+  $tco.addEventListener('change', () => renderAll());
+
+  // Init
+  reset(true);
+})();
+</script>
+</body>
+</html>
