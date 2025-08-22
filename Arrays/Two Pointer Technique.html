@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Two Pointer Technique — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166;
+    --new:#8ae9c1;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:radial-gradient(1200px 760px at 10% -10%, #192046 0%, transparent 60%) , var(--bg);
+    color:var(--text); font:16px/1.45 system-ui, sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+
+  .app{ width:min(1050px,96vw); background:linear-gradient(180deg,var(--panel),var(--panel-2)); border-radius:var(--radius); box-shadow:var(--shadow); padding:24px; }
+
+  header{ margin-bottom:16px; }
+  h1{margin:0; font-size:clamp(20px,3.5vw,28px); display:flex; gap:10px; align-items:center;}
+  h1 .dot{font-size:26px}
+  .sub{color:var(--muted); font-size:.95rem}
+
+  .panel{ background:color-mix(in oklab, var(--panel-2) 70%, black 0%); border:1px solid #232a52; border-radius:var(--radius); padding:18px; }
+
+  /* controls */
+  .controls{ display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; margin-bottom:16px; }
+  .grid{ display:grid; grid-template-columns:repeat(3,minmax(160px,1fr)); gap:10px; }
+  .control{ background:var(--slot); border:1px solid #2d3568; padding:10px 12px; border-radius:12px; }
+  .control label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:6px}
+  .nums input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2d3568; background:#212754; color:var(--text); font-weight:600; }
+  .nums input[type=range]{width:100%}
+  .btns{display:flex; gap:10px; flex-wrap:wrap;}
+  button{cursor:pointer; border:1px solid #2d3568; background:#212754; color:var(--text); padding:12px 14px; border-radius:12px; font-weight:700;}
+  button.primary{background:linear-gradient(180deg,#2a3a7a,#1f2a5e); border-color:#4351a3;}
+  button:active{transform:translateY(1px)}
+  button[disabled]{opacity:.6;cursor:not-allowed}
+
+  /* array strip */
+  .strip{ position:relative; display:grid; grid-auto-flow:column; grid-auto-columns:minmax(56px,1fr); gap:10px; margin:10px 0 18px;}
+  .chip{ position:relative; background:var(--chip); border:1px solid #2a2f5a; border-radius:12px; text-align:center; padding:18px 0; font-weight:800; transition:.3s;}
+  .chip small{ position:absolute; bottom:6px; left:6px; color:var(--muted); font-size:10px;}
+  .chip.focus{ background:var(--pair); color:#1e1a11; }
+  .chip.win{ outline:2px solid var(--ok);}
+  .chip.dim{ filter:saturate(.7) opacity(.65); }
+
+  .pointer{ position:absolute; top:-28px; padding:4px 8px; border-radius:10px; background:#212754; border:1px solid #2d3568; font-size:.85rem; transform:translateX(-50%);}
+  .ptrL{background:#25406f;}
+  .ptrR{background:#3b2a6f;}
+
+  .readout{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;}
+  .stat{background:var(--slot);border:1px solid #2d3568;border-radius:12px;padding:10px 12px;}
+  .stat b{display:block;font-size:1.05rem}
+  .stat span{color:var(--muted);font-size:.9rem}
+
+  .legend{margin-top:10px;color:var(--muted);font-size:.9rem;display:flex;gap:12px;flex-wrap:wrap;}
+  .swatch{width:12px;height:12px;border-radius:4px;display:inline-block;margin-right:6px;}
+  .swatch.pair{background:var(--pair)}
+  .swatch.ok{background:var(--ok)}
+  .swatch.dim{background:#8088b8}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1><span class="dot">🔹</span>Two Pointer Technique</h1>
+    <div class="sub">Controls are now placed <b>above</b> the array strip.</div>
+  </header>
+  <div class="panel">
+    <!-- controls on top -->
+    <div class="controls">
+      <div class="grid">
+        <div class="control">
+          <label>Array</label>
+          <div class="nums"><input id="arrInput" type="text" value="-2,-1,0,1,2,3,4,6,8,11,15"></div>
+        </div>
+        <div class="control">
+          <label>Target <b id="tLabel">9</b></label>
+          <input id="target" type="range" min="-10" max="30" value="9">
+        </div>
+        <div class="control">
+          <label>Speed <b id="speedLabel">1x</b></label>
+          <input id="speed" type="range" min="0" max="3" value="1">
+        </div>
+      </div>
+      <div class="btns">
+        <button class="primary" id="play">▶ Play</button>
+        <button id="step">⏭ Step</button>
+        <button id="back">⏮ Back</button>
+        <button id="reset">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- array strip -->
+    <div class="strip" id="strip"></div>
+
+    <!-- readout -->
+    <div class="readout">
+      <div class="stat"><b>Pointers</b><span id="idx">L=0,R=n-1</span></div>
+      <div class="stat"><b>Pair</b><span id="pair">—</span></div>
+      <div class="stat"><b>Sum</b><span id="sum">—</span></div>
+      <div class="stat"><b>Action</b><span id="act">—</span></div>
+      <div class="stat"><b>Status</b><span id="status">Ready</span></div>
+    </div>
+
+    <div class="legend">
+      <span><i class="swatch pair"></i>focused pair</span>
+      <span><i class="swatch ok"></i>match found</span>
+      <span><i class="swatch dim"></i>not in focus</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const strip=document.getElementById('strip'),
+        arrInput=document.getElementById('arrInput'),
+        target=document.getElementById('target'),
+        tLabel=document.getElementById('tLabel'),
+        speed=document.getElementById('speed'),
+        speedLabel=document.getElementById('speedLabel'),
+        playBtn=document.getElementById('play'),
+        stepBtn=document.getElementById('step'),
+        backBtn=document.getElementById('back'),
+        resetBtn=document.getElementById('reset'),
+        idxOut=document.getElementById('idx'),
+        pairOut=document.getElementById('pair'),
+        sumOut=document.getElementById('sum'),
+        actOut=document.getElementById('act'),
+        statusOut=document.getElementById('status');
+  let data=[],L=0,R=0,tar=9,timer=null,history=[];
+  const parseArray=txt=>txt.split(',').map(s=>+s.trim()).filter(Number.isFinite);
+
+  function render(){ strip.innerHTML=''; data.forEach((v,i)=>{ const d=document.createElement('div'); d.className='chip dim'; d.innerHTML=`<small>${i}</small>${v}`; strip.appendChild(d);}); paint();}
+  function paint(found=false){const chips=[...strip.children];chips.forEach(c=>c.className='chip dim');if(chips[L])chips[L].classList.add('focus');if(chips[R])chips[R].classList.add('focus');if(found){chips[L]?.classList.add('win');chips[R]?.classList.add('win');}idxOut.textContent=`L=${L},R=${R}`;}
+  function reset(){L=0;R=data.length-1;history=[{L,R}];pairOut.textContent=sumOut.textContent=actOut.textContent='—';statusOut.textContent='Ready';paint();}
+  function step(){ if(L>=R)return; const a=data[L],b=data[R],s=a+b; pairOut.textContent=`${a}+${b}`; sumOut.textContent=s; if(s===tar){actOut.textContent='Match';statusOut.textContent=`Found [${L},${R}]`;paint(true);stop();}else if(s<tar){actOut.textContent='sum<target → L++';L++;}else{actOut.textContent='sum>target → R--';R--;} history.push({L,R}); paint();}
+  function back(){ if(history.length>1){history.pop();({L,R}=history[history.length-1]);paint();}}
+  function play(){ if(timer){stop();return;} playBtn.textContent='⏸'; const delays=[900,600,350,200]; timer=setInterval(step,delays[+speed.value]);}
+  function stop(){clearInterval(timer);timer=null;playBtn.textContent='▶ Play';}
+
+  arrInput.addEventListener('change',()=>{data=parseArray(arrInput.value).sort((a,b)=>a-b);arrInput.value=data.join(',');render();reset();});
+  target.addEventListener('input',()=>{tar=+target.value;tLabel.textContent=tar;});
+  speed.addEventListener('input',()=>{speedLabel.textContent=['0.5x','1x','1.5x','2x'][+speed.value];if(timer){stop();play();}});
+  playBtn.onclick=play; stepBtn.onclick=()=>{stop();step();}; backBtn.onclick=()=>{stop();back();}; resetBtn.onclick=()=>{stop();reset();};
+
+  data=parseArray(arrInput.value).sort((a,b)=>a-b); arrInput.value=data.join(','); tar=+target.value; render(); reset();
+})();
+</script>
+</body>
+</html>
