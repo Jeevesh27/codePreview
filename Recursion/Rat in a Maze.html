@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>🐀 Rat in a Maze — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:260ms;
+    --pair:#ffd166; --new:#8ae9c1;
+    --wall:#243067;
+    --visit:#28306a;
+    --current:#ffd166;
+    --path:#8ae9c1;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+    background: radial-gradient(1200px 800px at 80% -10%, #1c2245 0%, var(--bg) 55%);
+    color:var(--text);
+  }
+
+  .wrap{
+    max-width:1100px; margin:0 auto; min-height:100dvh;
+    padding:calc(var(--gap)*1.2);
+    display:grid; gap:calc(var(--gap)*1.2);
+    grid-template-rows:auto auto 1fr auto;
+  }
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:var(--gap)}
+  header h1{margin:0;font-size:clamp(18px,2.6vw,28px)}
+  .panel{background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+         border-radius:var(--radius); box-shadow:var(--shadow);
+         border:1px solid rgba(255,255,255,.06)}
+
+  .controls{display:grid;gap:var(--gap);padding:var(--gap)}
+  @media(min-width:760px){.controls{grid-template-columns:2fr 2fr 2fr;align-items:center}}
+
+  .control-group{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+  label{color:var(--muted)}
+  output{color:var(--accent-2);font-variant-numeric:tabular-nums}
+  input[type="range"]{accent-color:var(--accent)}
+  .buttons{display:flex;gap:.6rem;flex-wrap:wrap}
+  button{
+    border:0;border-radius:12px;padding:.7rem 1rem;color:var(--text);
+    background:linear-gradient(180deg,#1e2548 0%,#1a2144 100%);
+    box-shadow:0 6px 16px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.06);
+    font-weight:600; cursor:pointer;
+    transition:transform .06s ease,opacity .2s ease;
+  }
+  button:active{transform:translateY(1px) scale(.99)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ok{background:linear-gradient(180deg,#1b3f33 0%,#15372c 100%)}
+  button.warn{background:linear-gradient(180deg,#473217 0%,#3b2a13 100%)}
+
+  .board.panel{padding:clamp(10px,2vw,20px)}
+  .grid{
+    display:grid;
+    gap:4px;
+    width:100%;
+    height:min(70vh,660px);
+    aspect-ratio: 1 / 1;
+    background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0) 70%);
+    border-radius:12px; padding:8px;
+  }
+
+  .cell{
+    border-radius:8px;
+    background: #20264c;
+    border:1px solid rgba(255,255,255,.05);
+    position:relative; overflow:hidden;
+    transition:transform var(--speed) ease, background var(--speed) ease, border-color var(--speed) ease;
+    user-select:none;
+  }
+  .cell.wall{ background: var(--wall); }
+  .cell.visit{ background: var(--visit); }
+  .cell.path{ background: linear-gradient(180deg, rgba(138,233,193,.25), rgba(138,233,193,.08)); border-color: rgba(138,233,193,.4); }
+  .cell.current{ outline: 2px solid var(--current); }
+  .cell.start::after,
+  .cell.end::after{
+    position:absolute; inset:auto 0 0 0; height:6px; content:"";
+    background: var(--accent-2); opacity:.9;
+  }
+  .cell.start{ box-shadow: inset 0 0 0 2px rgba(106,243,255,.45); }
+  .cell.end{ box-shadow: inset 0 0 0 2px rgba(255,209,102,.45); }
+  .legend{display:flex;gap:1rem;flex-wrap:wrap;color:var(--muted);padding:0 var(--gap) var(--gap)}
+  .badge{display:inline-flex;gap:.4rem;align-items:center}
+  .dot{width:.85rem;height:.85rem;border-radius:50%}
+  .dot.wall{background:var(--wall)}
+  .dot.visit{background:var(--visit)}
+  .dot.path{background:var(--path)}
+  .dot.current{background:var(--pair)}
+  .muted{color:var(--muted)}
+  .stats{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
+  .counter{font-variant-numeric:tabular-nums}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🐀 Rat in a Maze <span class="muted">backtracking visualizer</span></h1>
+      <div class="stats">
+        <div class="counter">Steps: <strong id="steps">0</strong></div>
+        <div class="counter">Visited: <strong id="visitedCt">0</strong></div>
+      </div>
+    </header>
+
+    <section class="panel controls" aria-label="Controls">
+      <div class="control-group">
+        <label for="sizeRange">Grid</label>
+        <input id="sizeRange" type="range" min="6" max="18" value="10" />
+        <output id="sizeOut">10×10</output>
+        <button id="resetBtn" class="warn">Reset</button>
+      </div>
+
+      <div class="control-group">
+        <div class="buttons">
+          <button id="stepBtn" title="One step">Step</button>
+          <button id="solveBtn" class="ok" title="Auto-solve">Auto Solve</button>
+          <button id="pauseBtn" title="Pause" disabled>Pause</button>
+          <button id="clearBtn" title="Clear walls">Clear Walls</button>
+          <button id="randBtn" title="Random walls">Randomize</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label for="speedRange">Speed</label>
+        <input id="speedRange" type="range" min="80" max="1200" step="20" value="300" />
+        <output id="speedOut">300ms</output>
+      </div>
+    </section>
+
+    <main class="panel board" aria-label="Maze board">
+      <div id="grid" class="grid" role="grid" aria-label="maze"></div>
+      <p class="sr-only" id="live" aria-live="polite"></p>
+    </main>
+
+    <footer class="panel">
+      <div class="legend">
+        <span class="badge"><span class="dot wall"></span> wall (click to toggle)</span>
+        <span class="badge"><span class="dot visit"></span> visited</span>
+        <span class="badge"><span class="dot path"></span> path</span>
+        <span class="badge"><span class="dot current"></span> current</span>
+        <span class="muted">Drag the start (teal) or end (yellow) tile to move them.</span>
+      </div>
+    </footer>
+  </div>
+
+<script>
+(() => {
+  // ---------- State ----------
+  const state = {
+    n: 10,
+    grid: [],             // 0 empty, 1 wall
+    start: [0,0],
+    end: [9,9],
+    visited: new Set(),   // "r,c"
+    pathStack: [],        // nodes in current path
+    exploring: [],        // DFS neighbor order stack (for stepping)
+    timer: null,
+    speed: 300,
+    running: false,
+    steps: 0,
+    found: false,
+    dragging: null        // "start" or "end"
+  };
+
+  const $ = (s, r=document)=>r.querySelector(s);
+  const gridEl = $("#grid");
+  const key = (r,c)=>`${r},${c}`;
+
+  // ---------- Grid helpers ----------
+  function makeGrid(n){
+    state.grid = Array.from({length:n}, ()=>Array(n).fill(0));
+  }
+
+  function inBounds(r,c){ return r>=0 && c>=0 && r<state.n && c<state.n; }
+  function isOpen(r,c){ return inBounds(r,c) && state.grid[r][c]===0; }
+
+  // direction priority: D, R, U, L (classic variant; change as you like)
+  const DIRS = [[1,0],[0,1],[-1,0],[0,-1]];
+
+  // ---------- Rendering ----------
+  function renderGrid(){
+    gridEl.style.setProperty("grid-template-columns", `repeat(${state.n}, 1fr)`);
+    gridEl.style.setProperty("grid-template-rows", `repeat(${state.n}, 1fr)`);
+    gridEl.innerHTML = "";
+
+    for(let r=0;r<state.n;r++){
+      for(let c=0;c<state.n;c++){
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.r=r; cell.dataset.c=c;
+
+        if (state.grid[r][c]===1) cell.classList.add("wall");
+        if (state.visited.has(key(r,c))) cell.classList.add("visit");
+
+        // path highlight
+        if (state.pathStack.some(n=>n[0]===r && n[1]===c)) cell.classList.add("path");
+        // start / end
+        if (r===state.start[0] && c===state.start[1]) cell.classList.add("start");
+        if (r===state.end[0] && c===state.end[1]) cell.classList.add("end");
+
+        cell.addEventListener("pointerdown", onPointerDown);
+        cell.addEventListener("pointerenter", onPointerEnter);
+        cell.addEventListener("pointerup", onPointerUp);
+
+        gridEl.appendChild(cell);
+      }
+    }
+
+    // mark current (tip of stack)
+    if (state.pathStack.length){
+      const [cr,cc] = state.pathStack[state.pathStack.length-1];
+      const cur = gridEl.querySelector(`.cell[data-r="${cr}"][data-c="${cc}"]`);
+      if (cur) cur.classList.add("current");
+    }
+
+    // stats
+    $("#steps").textContent = state.steps;
+    $("#visitedCt").textContent = state.visited.size;
+  }
+
+  // ---------- Interaction (walls + drag markers) ----------
+  let painting = null; // null/0/1
+  function onPointerDown(e){
+    const r=+e.currentTarget.dataset.r, c=+e.currentTarget.dataset.c;
+
+    // start or end drag?
+    if (r===state.start[0] && c===state.start[1]) { state.dragging="start"; return; }
+    if (r===state.end[0] && c===state.end[1]) { state.dragging="end"; return; }
+
+    if (state.running) return;
+
+    painting = state.grid[r][c]===1 ? 0 : 1;
+    if ( (r===state.start[0] && c===state.start[1]) || (r===state.end[0] && c===state.end[1]) ) return;
+    state.grid[r][c] = painting;
+    renderGrid();
+  }
+  function onPointerEnter(e){
+    const r=+e.currentTarget.dataset.r, c=+e.currentTarget.dataset.c;
+    if (state.dragging){
+      if (state.running) return;
+      if (state.grid[r][c]===1) return; // cannot drop on wall
+      if (state.dragging==="start"){ state.start=[r,c]; }
+      else { state.end=[r,c]; }
+      renderGrid();
+      return;
+    }
+    if (painting!==null){
+      if ( (r===state.start[0] && c===state.start[1]) || (r===state.end[0] && c===state.end[1]) ) return;
+      state.grid[r][c]=painting;
+      renderGrid();
+    }
+  }
+  function onPointerUp(){
+    painting=null; state.dragging=null;
+  }
+  document.addEventListener("pointerup", onPointerUp);
+
+  // ---------- DFS Backtracking (steppable) ----------
+  function resetSearch(){
+    state.visited.clear();
+    state.pathStack = [];
+    state.exploring = [];
+    state.steps = 0;
+    state.found = false;
+  }
+
+  function prepareDFS(){
+    resetSearch();
+    if (!isOpen(...state.start) || !isOpen(...state.end)) return false;
+    state.pathStack.push([...state.start]);
+    state.exploring.push(0); // next direction index from this cell
+    state.visited.add(key(...state.start));
+    return true;
+  }
+
+  function stepDFS(){
+    if (state.found) return false;
+    if (!state.pathStack.length) return false;
+
+    const iTop = state.pathStack.length-1;
+    const [r,c] = state.pathStack[iTop];
+    let dirIndex = state.exploring[iTop];
+
+    // reached end?
+    if (r===state.end[0] && c===state.end[1]){
+      state.found = true; return false;
+    }
+
+    // try next directions
+    while (dirIndex < DIRS.length){
+      const [dr,dc] = DIRS[dirIndex];
+      const nr=r+dr, nc=c+dc;
+      state.exploring[iTop] = dirIndex+1; // mark that we've tried this direction
+      if (isOpen(nr,nc) && !state.visited.has(key(nr,nc))){
+        // go deeper
+        state.pathStack.push([nr,nc]);
+        state.exploring.push(0);
+        state.visited.add(key(nr,nc));
+        state.steps++;
+        return true;
+      }
+      dirIndex++;
+    }
+
+    // backtrack
+    state.pathStack.pop();
+    state.exploring.pop();
+    state.steps++;
+    return true;
+  }
+
+  function autoplay(){
+    if (state.running) return;
+    if (!state.pathStack.length){
+      if (!prepareDFS()){ announce("❌ Start/End blocked."); return; }
+    }
+    state.running = true; syncButtons();
+    state.timer = setInterval(()=>{
+      const progressed = stepDFS();
+      renderGrid();
+      if (!progressed){ // either found or exhausted
+        stopTimer();
+        if (state.found) announce("🎉 Path found!");
+        else announce("😕 No path exists.");
+      }
+    }, state.speed);
+  }
+
+  function pause(){
+    stopTimer();
+  }
+
+  function stopTimer(){
+    clearInterval(state.timer); state.timer=null; state.running=false; syncButtons();
+  }
+
+  function stepOnce(){
+    if (state.running) return;
+    if (!state.pathStack.length){
+      if (!prepareDFS()){ announce("❌ Start/End blocked."); renderGrid(); return; }
+    }
+    const progressed = stepDFS();
+    renderGrid();
+    if (!progressed){
+      if (state.found) announce("🎉 Path found!");
+      else announce("😕 No path exists.");
+    }
+  }
+
+  // ---------- Utilities ----------
+  function announce(msg){ const el = $("#live"); el.textContent = msg; }
+
+  function syncButtons(){
+    $("#solveBtn").disabled = state.running;
+    $("#pauseBtn").disabled = !state.running;
+    $("#stepBtn").disabled  = state.running;
+    $("#resetBtn").disabled = state.running;
+    $("#clearBtn").disabled = state.running;
+    $("#randBtn").disabled  = state.running;
+    $("#sizeRange").disabled = state.running;
+  }
+
+  function clearWalls(){
+    for (let r=0;r<state.n;r++) for (let c=0;c<state.n;c++) state.grid[r][c]=0;
+  }
+  function randomizeWalls(p=0.28){
+    for (let r=0;r<state.n;r++){
+      for (let c=0;c<state.n;c++){
+        state.grid[r][c] = (Math.random()<p?1:0);
+      }
+    }
+    // keep start/end open
+    state.grid[state.start[0]][state.start[1]] = 0;
+    state.grid[state.end[0]][state.end[1]] = 0;
+  }
+
+  function resetAll(){
+    stopTimer();
+    makeGrid(state.n);
+    state.start=[0,0];
+    state.end=[state.n-1,state.n-1];
+    resetSearch();
+    renderGrid(); syncButtons();
+  }
+
+  // ---------- Wire UI ----------
+  $("#sizeRange").addEventListener("input", (e)=>{
+    state.n = +e.target.value;
+    $("#sizeOut").value = `${state.n}×${state.n}`;
+  });
+  $("#sizeRange").addEventListener("change", ()=>{
+    resetAll();
+  });
+
+  $("#resetBtn").addEventListener("click", resetAll);
+  $("#clearBtn").addEventListener("click", ()=>{
+    clearWalls(); resetSearch(); renderGrid();
+  });
+  $("#randBtn").addEventListener("click", ()=>{
+    randomizeWalls(); resetSearch(); renderGrid();
+  });
+
+  $("#solveBtn").addEventListener("click", autoplay);
+  $("#pauseBtn").addEventListener("click", pause);
+  $("#stepBtn").addEventListener("click", stepOnce);
+
+  $("#speedRange").addEventListener("input",(e)=>{
+    state.speed = +e.target.value;
+    document.documentElement.style.setProperty("--speed", state.speed + "ms");
+    $("#speedOut").value = state.speed + "ms";
+    if (state.running){ stopTimer(); autoplay(); }
+  });
+
+  // ---------- Boot ----------
+  (function boot(){
+    $("#sizeOut").value = `${state.n}×${state.n}`;
+    $("#speedOut").value = state.speed + "ms";
+    makeGrid(state.n);
+    renderGrid();
+    syncButtons();
+  })();
+})();
+</script>
+</body>
+</html>
