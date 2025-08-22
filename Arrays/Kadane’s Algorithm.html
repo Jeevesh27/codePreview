@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kadane’s Algorithm — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* use for current subarray */
+    --new:#8ae9c1;  /* pulse on reset points */
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 760px at 10% -10%, #192046 0%, transparent 60%), var(--bg);
+    color:var(--text);
+    font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+
+  .app{
+    width:min(1050px,96vw);
+    background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:24px;
+  }
+
+  header{ margin-bottom:16px; }
+  h1{ margin:0; font-size:clamp(20px,3.5vw,28px); display:flex; gap:10px; align-items:center; }
+  h1 .dot{ font-size:26px }
+  .sub{ color:var(--muted); font-size:.95rem }
+
+  .panel{
+    background:color-mix(in oklab, var(--panel-2) 70%, black 0%);
+    border:1px solid #232a52; border-radius:var(--radius); padding:18px;
+  }
+
+  /* Controls on top */
+  .controls{
+    display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; margin-bottom:16px;
+  }
+  .grid{ display:grid; grid-template-columns:repeat(3, minmax(170px, 1fr)); gap:10px; }
+  .control{ background:var(--slot); border:1px solid #2d3568; padding:10px 12px; border-radius:12px; }
+  .control label{ display:block; font-size:.85rem; color:var(--muted); margin-bottom:6px; }
+  .nums input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2d3568; background:#212754; color:var(--text); font-weight:600; }
+  .nums input[type="range"]{ width:100% }
+
+  .btns{ display:flex; gap:10px; flex-wrap:wrap; }
+  button{
+    cursor:pointer; border:1px solid #2d3568; background:#212754; color:var(--text);
+    padding:12px 14px; border-radius:12px; font-weight:800;
+    transition:transform .08s ease, background var(--speed), color var(--speed), border-color var(--speed);
+  }
+  button.primary{ background:linear-gradient(180deg,#2a3a7a,#1f2a5e); border-color:#4351a3; }
+  button:active{ transform:translateY(1px) }
+  button[disabled]{ opacity:.6; cursor:not-allowed }
+
+  /* Array strip */
+  .strip{
+    position:relative;
+    display:grid;
+    grid-auto-flow:column;
+    grid-auto-columns:minmax(56px,1fr);
+    gap:10px;
+    margin:8px 0 16px;
+  }
+  .chip{
+    position:relative; isolation:isolate;
+    background:var(--chip);
+    border:1px solid #2a2f5a;
+    color:var(--text);
+    border-radius:12px;
+    text-align:center;
+    padding:18px 0;
+    font-weight:800;
+    box-shadow:0 2px 0 rgba(0,0,0,.25) inset, 0 10px 18px rgba(0,0,0,.15);
+    transition:transform var(--speed), filter var(--speed), background var(--speed), border-color var(--speed), outline var(--speed);
+  }
+  .chip small{ position:absolute; inset:auto auto 6px 6px; color:var(--muted); font-weight:600; font-size:10px; opacity:.9; }
+
+  /* Highlights */
+  .chip.cur{ /* current subarray */
+    background:linear-gradient(180deg, color-mix(in oklab, var(--pair) 75%, white 0%), color-mix(in oklab, var(--pair) 35%, var(--chip) 65%));
+    color:#1e1a11; border-color:color-mix(in oklab, var(--pair) 60%, #2a2f5a 40%);
+    transform:translateY(-2px);
+  }
+  .chip.best{ outline:2px solid var(--ok); box-shadow:0 0 0 6px color-mix(in oklab, var(--ok) 20%, transparent); }
+  .chip.dim{ filter:saturate(.75) opacity(.7); }
+  .chip.resetMark{ box-shadow:0 0 0 6px color-mix(in oklab, var(--new) 18%, transparent); }
+
+  /* Readout */
+  .readout{ display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; margin-top:6px; }
+  .stat{ background:var(--slot); border:1px solid #2d3568; border-radius:12px; padding:10px 12px; }
+  .stat b{ display:block; font-size:1.05rem }
+  .stat span{ color:var(--muted); font-size:.9rem }
+
+  .legend{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; color:var(--muted); font-size:.9rem; margin-top:10px; }
+  .swatch{ width:12px; height:12px; border-radius:4px; display:inline-block; translate:0 1px; margin-right:6px; }
+  .swatch.cur{ background:var(--pair) }
+  .swatch.best{ background:var(--ok) }
+  .swatch.reset{ background:var(--new) }
+
+  .hint{ margin-top:12px; color:var(--muted); font-size:.92rem; }
+  .hint code{ background:#1c2146; border:1px solid #2d3568; padding:2px 6px; border-radius:8px; color:var(--accent-2); }
+</style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Kadane Visualizer">
+    <header>
+      <h1><span class="dot">🔹</span>Kadane’s Algorithm</h1>
+      <div class="sub">Find the <b>maximum subarray sum</b> in <em>O(n)</em> by extending or restarting the current run.</div>
+    </header>
+
+    <div class="panel">
+      <!-- Controls on top -->
+      <div class="controls">
+        <div class="grid">
+          <div class="control">
+            <label for="arrInput">Array (comma-separated)</label>
+            <div class="nums">
+              <input id="arrInput" type="text" value="-2,1,-3,4,-1,2,1,-5,4" />
+            </div>
+          </div>
+          <div class="control">
+            <label for="startAt">Start index <b id="startLabel">0</b></label>
+            <input id="startAt" type="range" min="0" max="8" value="0" />
+          </div>
+          <div class="control">
+            <label for="speed">Speed <b id="speedLabel">1x</b></label>
+            <input id="speed" type="range" min="0" max="3" value="1" />
+          </div>
+        </div>
+        <div class="btns">
+          <button class="primary" id="play">▶ Play</button>
+          <button id="step">⏭ Step</button>
+          <button id="back">⏮ Back</button>
+          <button id="reset">↺ Reset</button>
+        </div>
+      </div>
+
+      <!-- Array strip -->
+      <div class="strip" id="strip" aria-live="polite"></div>
+
+      <!-- Readout -->
+      <div class="readout">
+        <div class="stat"><b>i</b><span id="iOut">—</span></div>
+        <div class="stat"><b>a[i]</b><span id="valOut">—</span></div>
+        <div class="stat"><b>Current Sum</b><span id="curOut">—</span></div>
+        <div class="stat"><b>Best Sum</b><span id="bestOut">—</span></div>
+        <div class="stat"><b>Current Range</b><span id="curRange">—</span></div>
+        <div class="stat"><b>Best Range</b><span id="bestRange">—</span></div>
+      </div>
+
+      <div class="legend">
+        <span><i class="swatch cur"></i>current subarray</span>
+        <span><i class="swatch best"></i>best so far</span>
+        <span><i class="swatch reset"></i>restart point</span>
+      </div>
+
+      <p class="hint">
+        Rule: <code>cur = max(a[i], cur + a[i])</code>. If <code>a[i] &gt; cur + a[i]</code>, restart at <em>i</em>.
+        Track <code>best = max(best, cur)</code> and its range.
+      </p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Elements
+  const strip = document.getElementById('strip');
+  const arrInput = document.getElementById('arrInput');
+  const startAt = document.getElementById('startAt');
+  const startLabel = document.getElementById('startLabel');
+  const speed = document.getElementById('speed');
+  const speedLabel = document.getElementById('speedLabel');
+
+  const playBtn = document.getElementById('play');
+  const stepBtn = document.getElementById('step');
+  const backBtn = document.getElementById('back');
+  const resetBtn = document.getElementById('reset');
+
+  const iOut = document.getElementById('iOut');
+  const valOut = document.getElementById('valOut');
+  const curOut = document.getElementById('curOut');
+  const bestOut = document.getElementById('bestOut');
+  const curRange = document.getElementById('curRange');
+  const bestRange = document.getElementById('bestRange');
+
+  // State
+  let A = [];
+  let i = 0;
+  let curSum = 0, curL = 0, curR = -1;
+  let bestSum = -Infinity, bestL = 0, bestR = -1;
+  let timer = null;
+  let history = []; // stack of states for Back
+
+  // Helpers
+  const parseArray = txt =>
+    txt.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(n => Number.isFinite(n));
+
+  function renderStrip(){
+    strip.innerHTML = '';
+    A.forEach((v, idx) => {
+      const d = document.createElement('div');
+      d.className = 'chip';
+      d.dataset.idx = idx;
+      d.innerHTML = `<small>${idx}</small>${v}`;
+      strip.appendChild(d);
+    });
+    paint();
+  }
+
+  function markRange(L, R, cls){
+    if (L > R) return;
+    for(let k=L; k<=R; k++){
+      const el = strip.children[k];
+      if (el) el.classList.add(cls);
+    }
+  }
+
+  function paint(resetPulseIndex=null){
+    // Clear
+    [...strip.children].forEach(el => el.className = 'chip');
+    // Dim all first
+    [...strip.children].forEach(el => el.classList.add('dim'));
+    // Current range
+    if (curR >= curL) markRange(curL, curR, 'cur');
+    // Best range
+    if (bestR >= bestL) markRange(bestL, bestR, 'best');
+    // Remove dim from any highlighted
+    for (let idx = 0; idx < strip.children.length; idx++){
+      const el = strip.children[idx];
+      if (el.classList.contains('cur') || el.classList.contains('best')) {
+        el.classList.remove('dim');
+      }
+    }
+    // Pulse marker for restart
+    if (Number.isInteger(resetPulseIndex) && strip.children[resetPulseIndex]) {
+      strip.children[resetPulseIndex].classList.add('resetMark');
+      setTimeout(()=>{ strip.children[resetPulseIndex]?.classList.remove('resetMark'); }, 450);
+    }
+
+    // Readout
+    iOut.textContent = (i < A.length) ? i : 'done';
+    valOut.textContent = (i < A.length) ? A[i] : '—';
+    curOut.textContent = (curR >= curL) ? curSum : '—';
+    bestOut.textContent = (bestR >= bestL) ? bestSum : '—';
+    curRange.textContent = (curR >= curL) ? `[${curL}, ${curR}]` : '—';
+    bestRange.textContent = (bestR >= bestL) ? `[${bestL}, ${bestR}]` : '—';
+  }
+
+  function snapshot(){
+    return { i, curSum, curL, curR, bestSum, bestL, bestR };
+  }
+  function restore(s){
+    i = s.i; curSum = s.curSum; curL = s.curL; curR = s.curR; bestSum = s.bestSum; bestL = s.bestL; bestR = s.bestR;
+    paint();
+  }
+
+  function stepForward(){
+    if (i >= A.length){ stop(); return; }
+
+    history.push(snapshot());
+
+    const x = A[i];
+
+    // Decide whether to extend or restart
+    if (curR < curL) {
+      // starting fresh
+      curL = curR = i;
+      curSum = x;
+      paint(i);
+    } else if (x > curSum + x) {
+      // restart at i
+      curL = curR = i;
+      curSum = x;
+      paint(i); // pulse
+    } else {
+      // extend
+      curR = i;
+      curSum = curSum + x;
+      paint();
+    }
+
+    // Update best
+    if (curSum > bestSum) {
+      bestSum = curSum; bestL = curL; bestR = curR;
+      paint();
+    }
+
+    i += 1;
+
+    // If finished, stop auto
+    if (i >= A.length) stop();
+  }
+
+  function stepBack(){
+    if (history.length === 0) return;
+    const prev = history.pop();
+    restore(prev);
+  }
+
+  function play(){
+    if (timer){ stop(); return; }
+    playBtn.textContent = '⏸ Pause';
+    const speeds = [900, 600, 350, 200];
+    timer = setInterval(stepForward, speeds[+speed.value || 1]);
+  }
+
+  function stop(){
+    if (timer) clearInterval(timer);
+    timer = null;
+    playBtn.textContent = '▶ Play';
+  }
+
+  function resetAll(){
+    stop();
+    i = +startAt.value || 0;
+    curL = i; curR = i-1; // empty current range to force start
+    curSum = 0;
+    bestSum = -Infinity; bestL = 0; bestR = -1;
+    history = [];
+    paint();
+  }
+
+  // Wire up
+  arrInput.addEventListener('change', () => {
+    A = parseArray(arrInput.value);
+    startAt.max = Math.max(0, A.length - 1);
+    startLabel.textContent = startAt.value;
+    renderStrip();
+    resetAll();
+  });
+
+  startAt.addEventListener('input', () => {
+    startLabel.textContent = startAt.value;
+  });
+  startAt.addEventListener('change', resetAll);
+
+  speed.addEventListener('input', () => {
+    const labels = ['0.5x','1x','1.5x','2x'];
+    speedLabel.textContent = labels[+speed.value] || '1x';
+    if (timer){ stop(); play(); }
+  });
+
+  playBtn.addEventListener('click', play);
+  stepBtn.addEventListener('click', () => { stop(); stepForward(); });
+  backBtn.addEventListener('click', () => { stop(); stepBack(); });
+  resetBtn.addEventListener('click', resetAll);
+
+  // Init
+  A = parseArray(arrInput.value);
+  startAt.max = Math.max(0, A.length - 1);
+  startLabel.textContent = startAt.value;
+  renderStrip();
+  resetAll();
+})();
+</script>
+</body>
+</html>
