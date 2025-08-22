@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sliding Window Technique — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for selected terms */
+    --new:#8ae9c1;  /* green for newly added term */
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:radial-gradient(1250px 800px at 10% -10%, #192046 0%, transparent 60%) , var(--bg);
+    color:var(--text); font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+
+  .app{
+    width:min(1050px, 96vw);
+    background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:24px;
+  }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    margin-bottom:16px;
+  }
+  h1{
+    margin:0; font-size:clamp(20px, 3.5vw, 28px);
+    letter-spacing:.3px; display:flex; gap:10px; align-items:center;
+  }
+  h1 .dot{font-size:26px}
+  .sub{color:var(--muted); font-size:.95rem}
+
+  .panel{
+    background:color-mix(in oklab, var(--panel-2) 70%, black 0%);
+    border:1px solid #232a52; border-radius:var(--radius);
+    padding:18px;
+  }
+
+  /* Array strip */
+  .strip{
+    position:relative;
+    display:grid;
+    grid-auto-flow:column;
+    grid-auto-columns:minmax(52px, 1fr);
+    gap:10px;
+    margin:6px 0 14px;
+  }
+  .chip{
+    position:relative; isolation:isolate;
+    background:var(--chip);
+    border:1px solid #2a2f5a;
+    color:var(--text);
+    border-radius:12px;
+    text-align:center;
+    padding:16px 0;
+    font-weight:700;
+    box-shadow:0 2px 0 rgba(0,0,0,.25) inset, 0 10px 18px rgba(0,0,0,.15);
+    transition:transform var(--speed), filter var(--speed), background var(--speed), box-shadow var(--speed), border-color var(--speed);
+  }
+  .chip small{
+    position:absolute; inset:auto auto 6px 6px; color:var(--muted); font-weight:600; font-size:10px;
+    letter-spacing:.2px;
+    opacity:.9;
+  }
+
+  /* Window highlighting */
+  .chip.in-window{
+    background:linear-gradient(180deg, color-mix(in oklab, var(--pair) 75%, white 0%), color-mix(in oklab, var(--pair) 35%, var(--chip) 65%));
+    color:#1e1a11;
+    border-color:color-mix(in oklab, var(--pair) 60%, #2a2f5a 40%);
+    transform:translateY(-2px);
+  }
+  .chip.enter{
+    outline:2px solid var(--new);
+    box-shadow:0 0 0 6px color-mix(in oklab, var(--new) 15%, transparent), 0 14px 30px rgba(0,0,0,.25);
+    animation:pop .45s ease;
+  }
+  .chip.leave{
+    filter:saturate(.7) opacity(.65);
+  }
+  @keyframes pop{
+    0%{transform:scale(.92) translateY(-2px)}
+    60%{transform:scale(1.04) translateY(-2px)}
+    100%{transform:scale(1) translateY(-2px)}
+  }
+
+  /* Controls */
+  .controls{
+    display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; margin-top:10px;
+  }
+  .grid{
+    display:grid; grid-template-columns:repeat(3, minmax(160px, 1fr)); gap:10px;
+  }
+  .control{
+    background:var(--slot);
+    border:1px solid #2d3568;
+    padding:10px 12px; border-radius:12px;
+  }
+  .control label{display:block; font-size:.85rem; color:var(--muted); margin-bottom:6px}
+  .control input[type="range"]{width:100%}
+  .nums input{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2d3568; background:#212754; color:var(--text); font-weight:600;
+  }
+  .btns{
+    display:flex; gap:10px; flex-wrap:wrap;
+  }
+  button{
+    -webkit-tap-highlight-color:transparent;
+    cursor:pointer; border:1px solid #2d3568; background:#212754; color:var(--text);
+    padding:12px 14px; border-radius:12px; font-weight:700;
+    transition:transform .08s ease, background var(--speed), color var(--speed), border-color var(--speed);
+  }
+  button.primary{
+    background:linear-gradient(180deg, #2a3a7a, #1f2a5e); border-color:#4351a3;
+  }
+  button:active{transform:translateY(1px)}
+  button[disabled]{opacity:.6; cursor:not-allowed}
+
+  /* Readout */
+  .readout{
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:14px;
+  }
+  .stat{
+    background:var(--slot); border:1px solid #2d3568; border-radius:12px; padding:10px 12px;
+  }
+  .stat b{display:block; font-size:1.05rem}
+  .stat span{color:var(--muted); font-size:.9rem}
+
+  .legend{
+    display:flex; gap:12px; align-items:center; flex-wrap:wrap; color:var(--muted); font-size:.9rem; margin-top:10px;
+  }
+  .swatch{width:12px; height:12px; border-radius:4px; display:inline-block; translate:0 1px; margin-right:6px;}
+  .swatch.win{background:var(--pair)}
+  .swatch.new{background:var(--new)}
+  .swatch.leave{background:#8088b8}
+
+  /* Footer hint */
+  .hint{
+    margin-top:14px; color:var(--muted); font-size:.92rem;
+  }
+  .hint code{
+    background:#1c2146; border:1px solid #2d3568; padding:2px 6px; border-radius:8px; color:var(--accent-2);
+  }
+</style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Sliding Window Visualizer">
+    <header>
+      <h1><span class="dot">🔹</span>Sliding Window Technique</h1>
+      <div class="sub">Move a fixed-size “window” across an array; update totals in <em>O(1)</em> per step.</div>
+    </header>
+
+    <div class="panel">
+      <!-- ARRAY STRIP -->
+      <div class="strip" id="strip" aria-live="polite"></div>
+
+      <!-- CONTROLS -->
+      <div class="controls">
+        <div class="grid">
+          <div class="control">
+            <label for="arrInput">Array (comma-separated)</label>
+            <div class="nums">
+              <input id="arrInput" type="text" value="2,1,5,1,3,2,6,7,1,4" />
+            </div>
+          </div>
+          <div class="control">
+            <label for="kInput">Window size <b id="kLabel">3</b></label>
+            <input id="kInput" type="range" min="1" max="10" value="3" />
+          </div>
+          <div class="control">
+            <label for="speed">Speed <b id="speedLabel">1x</b></label>
+            <input id="speed" type="range" min="0" max="3" value="1" />
+          </div>
+        </div>
+        <div class="btns">
+          <button class="primary" id="play">▶ Play</button>
+          <button id="step">⏭ Step</button>
+          <button id="back">⏮ Back</button>
+          <button id="reset">↺ Reset</button>
+        </div>
+      </div>
+
+      <!-- READOUT -->
+      <div class="readout">
+        <div class="stat"><b>Indices</b><span id="idx">L=0, R=2</span></div>
+        <div class="stat"><b>Entering</b><span id="enter">—</span></div>
+        <div class="stat"><b>Leaving</b><span id="leave">—</span></div>
+        <div class="stat"><b>Window Sum</b><span id="sum">—</span></div>
+      </div>
+
+      <div class="legend">
+        <span><i class="swatch win"></i>in window</span>
+        <span><i class="swatch new"></i>newly added</span>
+        <span><i class="swatch leave"></i>leaving</span>
+      </div>
+
+      <p class="hint">
+        Tip: This demo shows the classic “fixed-size window sum.” Each step does
+        <code>sum += enter - leave</code> instead of recomputing from scratch.
+      </p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const strip = document.getElementById('strip');
+  const arrInput = document.getElementById('arrInput');
+  const kInput = document.getElementById('kInput');
+  const kLabel = document.getElementById('kLabel');
+  const speed = document.getElementById('speed');
+  const speedLabel = document.getElementById('speedLabel');
+
+  const playBtn = document.getElementById('play');
+  const stepBtn = document.getElementById('step');
+  const backBtn = document.getElementById('back');
+  const resetBtn = document.getElementById('reset');
+
+  const idxOut = document.getElementById('idx');
+  const enterOut = document.getElementById('enter');
+  const leaveOut = document.getElementById('leave');
+  const sumOut = document.getElementById('sum');
+
+  let data = [];
+  let k = 3;
+  let L = 0, R = 0;
+  let sum = 0;
+  let timer = null;
+  let history = []; // keep steps for Back
+
+  // --- helpers ---
+  const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
+  const parseArray = (txt) =>
+    txt.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(n => Number.isFinite(n));
+
+  function renderStrip() {
+    strip.innerHTML = '';
+    data.forEach((v, i) => {
+      const d = document.createElement('div');
+      d.className = 'chip';
+      d.dataset.index = i;
+      d.innerHTML = `<small>${i}</small>${v}`;
+      strip.appendChild(d);
+    });
+    paintWindow();
+  }
+
+  function paintWindow(enterIdx = null, leaveIdx = null) {
+    const chips = [...strip.children];
+    chips.forEach(c => c.classList.remove('in-window','enter','leave'));
+
+    for(let i=L; i<=R; i++){
+      if(chips[i]) chips[i].classList.add('in-window');
+    }
+    if(enterIdx !== null && chips[enterIdx]) chips[enterIdx].classList.add('enter');
+    if(leaveIdx !== null && chips[leaveIdx]) chips[leaveIdx].classList.add('leave');
+
+    idxOut.textContent = `L=${L}, R=${R}`;
+    sumOut.textContent = Number.isFinite(sum) ? sum : '—';
+  }
+
+  function recalcInitial() {
+    // reset pointers and sum
+    L = 0;
+    R = clamp(k - 1, 0, data.length - 1);
+    sum = 0;
+    for (let i = L; i <= R; i++) sum += (data[i] ?? 0);
+    history = [{L, R, sum}];
+    paintWindow();
+    enterOut.textContent = '—';
+    leaveOut.textContent = '—';
+    playBtn.textContent = '▶ Play';
+  }
+
+  function stepForward() {
+    if (data.length === 0 || k <= 0) return;
+
+    // stop if window can't slide further
+    if (R >= data.length - 1) {
+      stop();
+      return;
+    }
+
+    const oldL = L;
+    const oldR = R;
+
+    // Slide by 1
+    L += 1;
+    R += 1;
+
+    const leaving = data[oldL];
+    const entering = data[R];
+
+    sum += (entering ?? 0) - (leaving ?? 0);
+
+    enterOut.textContent = `${entering} (idx ${R})`;
+    leaveOut.textContent = `${leaving} (idx ${oldL})`;
+
+    history.push({L, R, sum});
+    paintWindow(R, oldL);
+  }
+
+  function stepBack() {
+    if (history.length <= 1) return; // can't go back past initial
+    history.pop();
+    const prev = history[history.length - 1];
+    L = prev.L; R = prev.R; sum = prev.sum;
+
+    // Derive entering/leaving for UI hint (optional)
+    const entering = data[R];
+    const leaving = data[L];
+    enterOut.textContent = `—`;
+    leaveOut.textContent = `—`;
+    paintWindow();
+  }
+
+  function play() {
+    if (timer) { stop(); return; }
+    playBtn.textContent = '⏸ Pause';
+    const speeds = [900, 600, 350, 200]; // 0..3
+    const delay = speeds[+speed.value || 1];
+
+    timer = setInterval(() => {
+      const atEnd = R >= data.length - 1;
+      if (atEnd) { stop(); return; }
+      stepForward();
+    }, delay);
+  }
+
+  function stop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    playBtn.textContent = '▶ Play';
+  }
+
+  function resetAll() {
+    stop();
+    k = clamp(+kInput.value || 1, 1, Math.max(1, data.length));
+    kInput.max = Math.max(1, data.length);
+    kLabel.textContent = k;
+    recalcInitial();
+  }
+
+  // --- wire up ---
+  arrInput.addEventListener('change', () => {
+    const arr = parseArray(arrInput.value);
+    data = arr;
+    resetAll();
+    renderStrip();
+  });
+
+  kInput.addEventListener('input', () => {
+    k = clamp(+kInput.value || 1, 1, Math.max(1, data.length));
+    kLabel.textContent = k;
+  });
+  kInput.addEventListener('change', resetAll);
+
+  speed.addEventListener('input', () => {
+    const labels = ['0.5x','1x','1.5x','2x'];
+    speedLabel.textContent = labels[+speed.value] || '1x';
+    if (timer) { stop(); play(); } // apply new speed
+  });
+
+  playBtn.addEventListener('click', play);
+  stepBtn.addEventListener('click', () => { stop(); stepForward(); });
+  backBtn.addEventListener('click', () => { stop(); stepBack(); });
+  resetBtn.addEventListener('click', () => { stop(); resetAll(); paintWindow(); });
+
+  // --- init ---
+  data = parseArray(arrInput.value);
+  kInput.max = Math.max(1, data.length);
+  k = clamp(+kInput.value || 3, 1, data.length);
+  kLabel.textContent = k;
+  renderStrip();
+  recalcInitial();
+})();
+</script>
+</body>
+</html>
