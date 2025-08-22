@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Recursion Visualizer — Calls, Returns, and the Stack</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166;
+  }
+
+  * { box-sizing:border-box }
+  html, body { height:100% }
+  body {
+    margin:0; background:radial-gradient(1200px 800px at 10% -10%, #1b2042 0%, var(--bg) 50%, #0b0e1b 100%);
+    color:var(--text); font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+  }
+
+  .wrap {
+    max-width:1200px; margin:auto; padding:28px;
+    display:grid; gap:var(--gap);
+    grid-template-rows:auto auto 1fr;
+  }
+
+  header {
+    background:linear-gradient(180deg, #1c2143, var(--panel));
+    border:1px solid #262c54; border-radius:var(--radius);
+    padding:20px; box-shadow:var(--shadow);
+  }
+  header h1 { margin:0 0 8px; font-size:22px; letter-spacing:.3px }
+  header p { margin:0; color:var(--muted) }
+  .badge {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:6px 10px; border-radius:999px; background:var(--chip);
+    color:#cfe1ff; font-weight:600; font-size:12px;
+    border:1px solid #303869; margin-bottom:10px;
+  }
+  .badge svg { width:14px; height:14px }
+
+  .controls {
+    display:grid; gap:var(--gap);
+    grid-template-columns:1fr 1fr 1.2fr minmax(140px, .8fr) auto auto auto;
+    align-items:end;
+    background:var(--panel); border:1px solid #262c54;
+    border-radius:var(--radius); padding:14px; box-shadow:var(--shadow);
+  }
+  .field { display:grid; gap:6px }
+  .field label { color:var(--muted); font-size:12px }
+  select, input[type="number"] {
+    background:var(--panel-2); border:1px solid #2a315f; color:var(--text);
+    border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input[type="range"] { accent-color: var(--accent); }
+  .btn {
+    background:linear-gradient(180deg, #1f2a5a, #1a224b);
+    color:var(--text); border:1px solid #2d3a77; border-radius:12px;
+    padding:10px 14px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04), var(--shadow);
+    transition:transform .08s ease, filter .08s ease;
+  }
+  .btn:hover { filter:brightness(1.08) }
+  .btn:active { transform:translateY(1px) }
+  .btn.secondary { background:#243064; border-color:#33408a; font-weight:600 }
+  .btn.ghost { background:transparent; border-color:#33408a }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; filter:grayscale(25%) }
+
+  .grid {
+    display:grid; gap:var(--gap);
+    grid-template-columns: 1.2fr .85fr;
+    grid-template-rows: minmax(300px, 1fr) minmax(160px, .6fr);
+    grid-template-areas:
+      "tree stack"
+      "log  stack";
+  }
+
+  .card {
+    background:var(--panel); border:1px solid #262c54; border-radius:var(--radius);
+    box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column;
+  }
+  .card h2 {
+    margin:0; padding:12px 14px; font-size:14px; letter-spacing:.3px; text-transform:uppercase;
+    color:#bcd0ff; background:linear-gradient(180deg, #1a2043, #171c36);
+    border-bottom:1px solid #262c54;
+  }
+  .card .body { padding:12px; overflow:auto; min-height:0 }
+
+  /* Call Tree */
+  .tree { position:relative; }
+  .node {
+    background:linear-gradient(180deg, #1d2244, #12162b);
+    border:1px solid #283061; border-radius:12px; padding:8px 10px;
+    margin:6px 0 6px calc(var(--depth, 0) * 26px);
+    position:relative; display:inline-block; min-width:150px;
+  }
+  .node .sig { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px }
+  .node .sig .args { color:var(--pair) }
+  .node .ret { color:var(--ok); font-size:12px; margin-top:4px; opacity:.92 }
+  .node.base { border-color:#3a7f6e; background:linear-gradient(180deg, #163535, #101b1b) }
+  .children { margin-left:20px; border-left:2px dashed #2a346b; padding-left:16px }
+  .node::before {
+    content:""; position:absolute; left:-12px; top:16px; width:12px; height:2px; background:#2a346b;
+  }
+  .node.root::before { display:none }
+
+  .node.active { outline:2px solid var(--accent); box-shadow:0 0 0 4px rgba(108,243,255,.12) }
+  .node.returning { outline:2px solid var(--accent-2); box-shadow:0 0 0 4px rgba(138,233,193,.12) }
+
+  /* Call Stack */
+  .stack { display:flex; flex-direction:column; gap:10px; }
+  .frame {
+    background:linear-gradient(180deg, #1f2549, #131734);
+    border:1px solid #2b356c; border-radius:12px; padding:10px 12px;
+    box-shadow: var(--shadow);
+  }
+  .frame .title { font-weight:800; letter-spacing:.3px }
+  .frame .vars { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px; color:#d9e3ff }
+  .frame.top { outline:2px solid var(--accent) }
+  .stack .empty {
+    color:var(--muted); text-align:center; padding:18px; border:1px dashed #33408a; border-radius:12px; background:rgba(0,0,0,.15)
+  }
+
+  /* Log */
+  .log { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px }
+  .log .row { padding:6px 8px; border-bottom:1px dashed #2b356c }
+  .log .row:last-child { border-bottom:0 }
+  .log .call { color:#aee9ff }
+  .log .ret  { color:#baf3d6 }
+  .log .err  { color:#ff9e9e }
+
+  .footer {
+    color:var(--muted); font-size:12px; text-align:center; padding:10px 0 0;
+  }
+
+  @media (max-width: 980px) {
+    .controls { grid-template-columns: 1fr 1fr 1fr 1fr auto auto; }
+    .grid { grid-template-columns: 1fr; grid-template-rows:auto auto auto; grid-template-areas: "tree" "stack" "log" }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="badge" title="Educational Demo">
+        <!-- tiny spark icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l2.09 6.26L20 9l-5 3.64L16.18 20 12 16.9 7.82 20 9 12.64 4 9l5.91-.74L12 2z" stroke-width="1.5"/></svg>
+        Recursion Visualizer
+      </div>
+      <h1>See recursion in action: calls, base cases, returns, and the call stack</h1>
+      <p>Choose a function and input, then step through how the program expands and unwinds. Base cases glow, active frames are outlined.</p>
+    </header>
+
+    <section class="controls" aria-label="controls">
+      <div class="field">
+        <label for="fnSelect">Function</label>
+        <select id="fnSelect">
+          <option value="fact">factorial(n)</option>
+          <option value="fib">fibonacci(n)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="nInput">n</label>
+        <input id="nInput" type="number" inputmode="numeric" min="0" max="12" value="5"/>
+      </div>
+
+      <div class="field">
+        <label for="speed">Step speed (ms)</label>
+        <input id="speed" type="range" min="60" max="1200" step="20" value="320"/>
+      </div>
+
+      <button id="build" class="btn">Build Trace</button>
+      <button id="play" class="btn">▶ Play</button>
+      <button id="step" class="btn secondary">Step</button>
+      <button id="reset" class="btn ghost">Reset</button>
+    </section>
+
+    <section class="grid">
+      <div class="card tree" style="grid-area:tree;">
+        <h2>Call Tree</h2>
+        <div class="body" id="tree"></div>
+      </div>
+
+      <div class="card" style="grid-area:stack;">
+        <h2>Call Stack (Top at the top)</h2>
+        <div class="body">
+          <div id="stack" class="stack">
+            <div class="empty">Nothing on the stack yet. Press <strong>Build Trace</strong> → <strong>Play</strong>.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card log" style="grid-area:log;">
+        <h2>Events</h2>
+        <div class="body" id="log" aria-live="polite" aria-atomic="false"></div>
+      </div>
+    </section>
+
+    <div class="footer">Tip: factorial grows linearly in depth; fibonacci branches like a tree. Keep n small for Fibonacci to see all branches clearly.</div>
+  </div>
+
+<script>
+(() => {
+  // ---------- Utilities ----------
+  const $ = (sel, el=document) => el.querySelector(sel);
+  const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+  const make = (tag, cls, txt) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (txt != null) el.textContent = txt;
+    return el;
+  };
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // ---------- Elements ----------
+  const els = {
+    fnSelect: $('#fnSelect'),
+    nInput: $('#nInput'),
+    speed: $('#speed'),
+    build: $('#build'),
+    play: $('#play'),
+    step: $('#step'),
+    reset: $('#reset'),
+    tree: $('#tree'),
+    stack: $('#stack'),
+    log: $('#log')
+  };
+
+  // ---------- State ----------
+  let steps = [];          // sequence of {type:'call'|'return', id, parentId, func, args, depth, result?}
+  let idx = 0;             // current step index
+  let playing = false;     // is auto-playing
+  let timer = null;
+  let nodesById = new Map();// id -> DOM node
+  let stack = [];          // stack frames for UI
+  let idCounter = 0;
+
+  // ---------- Tracers ----------
+  function traceFactorial(n) {
+    idCounter = 0;
+    const outSteps = [];
+    function helper(n, depth, parentId) {
+      const id = idCounter++;
+      outSteps.push({ type:'call', func:'fact', args:{ n }, depth, id, parentId, isBase: n<=1 });
+      let result;
+      if (n <= 1) {
+        result = 1;
+      } else {
+        const child = helper(n-1, depth+1, id);
+        result = n * child.value;
+      }
+      outSteps.push({ type:'return', func:'fact', args:{ n }, depth, id, parentId, result, isBase: n<=1 });
+      return { value: result, id };
+    }
+    const res = helper(n, 0, null).value;
+    return { steps: outSteps, result: res };
+  }
+
+  function traceFibonacci(n) {
+    idCounter = 0;
+    const outSteps = [];
+    function helper(n, depth, parentId) {
+      const id = idCounter++;
+      outSteps.push({ type:'call', func:'fib', args:{ n }, depth, id, parentId, isBase: n<=1 });
+      let result;
+      if (n <= 1) result = n;
+      else {
+        const left = helper(n-1, depth+1, id);
+        const right = helper(n-2, depth+1, id);
+        result = left.value + right.value;
+      }
+      outSteps.push({ type:'return', func:'fib', args:{ n }, depth, id, parentId, result, isBase: n<=1 });
+      return { value: result, id };
+    }
+    const res = helper(n, 0, null).value;
+    return { steps: outSteps, result: res };
+  }
+
+  // Rough guard to keep Fibonacci from exploding in size
+  function fibNodeCount(n) {
+    // nodes(n) = 1 + nodes(n-1) + nodes(n-2), nodes(0)=1, nodes(1)=1
+    const memo = new Map([[0,1],[1,1]]);
+    const f = (k) => {
+      if (memo.has(k)) return memo.get(k);
+      const v = 1 + f(k-1) + f(k-2);
+      memo.set(k, v); return v;
+    };
+    return f(n);
+  }
+
+  // ---------- UI Builders ----------
+  function buildTree(steps) {
+    nodesById.clear();
+    els.tree.innerHTML = "";
+    const rootCalls = steps.filter(s => s.type === 'call');
+    // We will create nodes on first 'call' encounter; attach to parent container
+    // Create a hidden root container
+    const containerById = new Map(); // id -> children container element
+    function ensureNodeForStep(step) {
+      if (nodesById.has(step.id)) return nodesById.get(step.id);
+      const node = make('div','node' + (step.isBase ? ' base' : ''));
+      node.dataset.id = step.id;
+      if (step.parentId == null) node.classList.add('root');
+      node.style.setProperty('--depth', step.depth);
+      const sig = make('div','sig');
+      sig.innerHTML = `<strong>${step.func}</strong>(<span class="args">n=${step.args.n}</span>)`;
+      const ret = make('div','ret'); ret.textContent = '';
+      node.append(sig, ret);
+      const children = make('div','children');
+      const wrapper = make('div');
+      wrapper.append(node, children);
+
+      // attach to parent or root
+      if (step.parentId == null) {
+        els.tree.append(wrapper);
+      } else {
+        let parentContainer = containerById.get(step.parentId);
+        if (!parentContainer) {
+          // parent not yet created — create parent first
+          const parentStep = steps.find(s => s.id === step.parentId && s.type === 'call');
+          const parentNode = ensureNodeForStep(parentStep);
+          parentContainer = containerById.get(step.parentId);
+        }
+        parentContainer.append(wrapper);
+      }
+
+      nodesById.set(step.id, node);
+      containerById.set(step.id, children);
+      return node;
+    }
+
+    for (const s of steps) {
+      if (s.type === 'call') ensureNodeForStep(s);
+    }
+  }
+
+  function renderStack() {
+    els.stack.innerHTML = "";
+    if (!stack.length) {
+      const empty = make('div','empty');
+      empty.innerHTML = 'Nothing on the stack.';
+      els.stack.append(empty);
+      return;
+    }
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const fr = stack[i];
+      const el = make('div','frame' + (i === stack.length - 1 ? ' top' : ''));
+      const title = make('div','title', `${fr.func}(n=${fr.args.n})`);
+      const vars = make('div','vars');
+      vars.textContent = fr.result == null ? `→ waiting to return` : `→ returns ${fr.result}`;
+      el.append(title, vars);
+      els.stack.append(el);
+    }
+  }
+
+  function logRow(type, text) {
+    const row = make('div', 'row ' + type);
+    row.textContent = text;
+    els.log.append(row);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+
+  function clearLog() { els.log.innerHTML = ""; }
+
+  // ---------- Stepper ----------
+  function applyStep(s) {
+    // clear node highlights
+    nodesById.forEach(n => n.classList.remove('active','returning'));
+
+    if (s.type === 'call') {
+      // push frame
+      stack.push({ func: s.func, args: s.args, id: s.id, result: null });
+      renderStack();
+
+      const node = nodesById.get(s.id);
+      if (node) node.classList.add('active');
+
+      logRow('call', `call ${s.func}(n=${s.args.n})`);
+    } else if (s.type === 'return') {
+      // mark node return value & highlight
+      const node = nodesById.get(s.id);
+      if (node) {
+        node.classList.add('returning');
+        const ret = node.querySelector('.ret');
+        ret.textContent = `return ${s.result}`;
+      }
+
+      // pop stack (top should match id)
+      let top = stack[stack.length - 1];
+      if (top && top.id === s.id) {
+        top.result = s.result;
+      }
+      renderStack();
+      // After rendering the result in the top frame, actually pop to model unwinding
+      stack.pop();
+      renderStack();
+
+      logRow('ret', `return from ${s.func}(n=${s.args.n}) = ${s.result}`);
+    }
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    els.play.textContent = on ? '⏸ Pause' : '▶ Play';
+  }
+
+  function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+
+  function playLoop() {
+    stopTimer();
+    setPlaying(true);
+    const delay = clamp(parseInt(els.speed.value, 10) || 320, 40, 2000);
+    timer = setInterval(() => {
+      if (idx >= steps.length) {
+        setPlaying(false);
+        stopTimer();
+        return;
+      }
+      applyStep(steps[idx++]);
+    }, delay);
+  }
+
+  // ---------- Actions ----------
+  function rebuild() {
+    stopTimer();
+    setPlaying(false);
+    idx = 0;
+    stack = [];
+    clearLog();
+
+    const fn = els.fnSelect.value;
+    let n = parseInt(els.nInput.value, 10);
+    if (isNaN(n) || n < 0) n = 0;
+
+    // Guard rails for Fibonacci explosion
+    if (fn === 'fib') {
+      const nodes = fibNodeCount(n);
+      if (nodes > 350) {
+        // reduce n to keep it readable
+        const suggested = Math.max(0, n - 1);
+        logRow('err', `That fibonacci(${n}) would create ${nodes} calls. Try n ≤ ${suggested}. Lowering to ${suggested} for you.`);
+        n = suggested;
+        els.nInput.value = n;
+      }
+    }
+
+    const traced = fn === 'fact' ? traceFactorial(n) : traceFibonacci(n);
+    steps = traced.steps;
+
+    buildTree(steps);
+    renderStack();
+    logRow('call', `Trace built for ${fn === 'fact' ? 'factorial' : 'fibonacci'}(${n}). Steps: ${steps.length}.`);
+  }
+
+  function stepOnce() {
+    if (idx >= steps.length) return;
+    applyStep(steps[idx++]);
+  }
+
+  function resetAll() {
+    stopTimer(); setPlaying(false); idx = 0; stack = [];
+    // Clear highlights & stack renders
+    nodesById.forEach(n => n.classList.remove('active','returning'));
+    renderStack();
+    clearLog();
+  }
+
+  // ---------- Wire up ----------
+  els.build.addEventListener('click', rebuild);
+  els.play.addEventListener('click', () => {
+    if (!steps.length) rebuild();
+    if (playing) { setPlaying(false); stopTimer(); }
+    else playLoop();
+  });
+  els.step.addEventListener('click', () => {
+    if (!steps.length) rebuild();
+    stopTimer(); setPlaying(false);
+    stepOnce();
+  });
+  els.reset.addEventListener('click', resetAll);
+
+  // Quality of life: enter key in number field builds
+  els.nInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); rebuild(); }
+  });
+
+  // Initial build
+  rebuild();
+})();
+</script>
+</body>
+</html>
