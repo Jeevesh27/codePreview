@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>🏯 Tower of Hanoi — Auto Solve + Step</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+    background: radial-gradient(1200px 800px at 80% -10%, #1c2245 0%, var(--bg) 55%);
+    color:var(--text)
+  }
+  .wrap{max-width:1100px;margin:0 auto;min-height:100dvh;padding:calc(var(--gap)*1.2);display:grid;gap:calc(var(--gap)*1.2);grid-template-rows:auto auto 1fr auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:var(--gap)}
+  header h1{margin:0;font-size:clamp(18px,2.6vw,28px)}
+  .panel{background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.06)}
+  .controls{display:grid;gap:var(--gap);padding:var(--gap)}
+  @media(min-width:680px){.controls{grid-template-columns:1fr 1fr 1fr;align-items:center}}
+  .control-group{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+  label{color:var(--muted)}
+  output{color:var(--accent-2)}
+  input[type="range"]{accent-color:var(--accent)}
+  .buttons{display:flex;gap:.6rem;flex-wrap:wrap}
+  button{border:0;border-radius:12px;padding:.7rem 1rem;color:var(--text);background:linear-gradient(180deg,#1e2548 0%,#1a2144 100%);box-shadow:0 6px 16px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.06);font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ok{background:linear-gradient(180deg,#1b3f33 0%,#15372c 100%)}
+  .board.panel{padding:clamp(10px,2vw,22px)}
+  .pegs{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(10px,2vw,24px);height:min(64vh,540px)}
+  .peg{display:grid;grid-template-rows:1fr auto;padding:clamp(8px,1.5vw,12px);border-radius:12px;border:1px dashed rgba(255,255,255,.06);background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0) 70%)}
+  .tower{position:relative;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
+  .rod{position:absolute;bottom:36px;width:10px;height:78%;border-radius:8px;background:linear-gradient(180deg,#2e3566 0%,#262d5c 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  .base{position:absolute;left:10%;right:10%;bottom:24px;height:12px;border-radius:10px;background:linear-gradient(180deg,#2a305a 0%,#1f254b 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  .stack{position:absolute;left:0;right:0;bottom:36px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;padding:0 6px;min-height:40px}
+  .slot{width:100%;height:6px;border-radius:4px;background:var(--slot);opacity:.28}
+  .disk{--w:60%;width:var(--w);height:clamp(18px,3.5vh,26px);border-radius:12px;background:
+      linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,0) 34%),
+      linear-gradient(180deg,#515aa3 0%,#39407a 100%);
+    box-shadow:0 6px 12px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.08);
+    display:grid;place-items:center;color:#dfe6ff;font-weight:700;font-size:.9rem;user-select:none;
+    transition:transform var(--speed) ease, box-shadow var(--speed) ease
+  }
+  .disk.top{box-shadow:0 12px 24px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.12)}
+  .peg-footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem .2rem .2rem;color:var(--muted);font-size:.9rem}
+  .footer.panel{display:grid;gap:var(--gap);padding:var(--gap)}
+  .muted{color:var(--muted)}
+  .stats{display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center}
+  .counter{font-variant-numeric:tabular-nums}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🏯 Tower of Hanoi <span class="muted">auto-solve + step</span></h1>
+      <div class="stats">
+        <div class="counter">Moves: <strong id="moves">0</strong></div>
+        <div class="counter">Optimal: <strong id="optimal">0</strong></div>
+      </div>
+    </header>
+
+    <section class="panel controls" aria-label="Controls">
+      <div class="control-group" role="group" aria-label="Disk settings">
+        <label for="diskRange">Disks</label>
+        <input id="diskRange" type="range" min="3" max="10" value="5" />
+        <output id="diskCount">5</output>
+        <button id="resetBtn" title="Reset with current disk count">Reset</button>
+      </div>
+
+      <div class="control-group" role="group" aria-label="Playback">
+        <div class="buttons">
+          <button id="stepBtn" title="Make next optimal move">Step</button>
+          <button id="solveBtn" class="ok" title="Auto-solve">Auto Solve</button>
+          <button id="pauseBtn" title="Pause" disabled>Pause</button>
+        </div>
+      </div>
+
+      <div class="control-group" role="group" aria-label="Speed">
+        <label for="speedRange">Speed</label>
+        <input id="speedRange" type="range" min="120" max="1200" step="20" value="420" />
+        <output id="speedOut">420ms</output>
+      </div>
+    </section>
+
+    <main class="panel board" aria-label="Board">
+      <div class="pegs" id="pegs"></div>
+      <p class="sr-only" id="live" aria-live="polite"></p>
+    </main>
+
+    <footer class="panel footer">
+      <span class="muted">Manual moves are disabled — use Step to go one move at a time or Auto Solve to play the full optimal sequence.</span>
+    </footer>
+  </div>
+
+<script>
+(() => {
+  // ---------------- State ----------------
+  const state = {
+    n: 5,
+    pegs: [[], [], []], // arrays of sizes, 1 is smallest
+    moves: 0,
+    timer: null,
+    speed: 420,
+    solving: false
+  };
+
+  const $ = (s, r=document)=>r.querySelector(s);
+  const $$ = (s, r=document)=>[...r.querySelectorAll(s)];
+  const live = (m)=>{$("#live").textContent=m};
+  const optimal = (n)=>Math.pow(2, n) - 1;
+  const isSolved = ()=> state.pegs[2].length === state.n;
+
+  // --------------- Init / Render ---------------
+  function initPegs(){
+    state.pegs = [[], [], []];
+    for(let s=state.n; s>=1; s--) state.pegs[0].push(s);
+    state.moves = 0;
+    clearInterval(state.timer); state.timer=null; state.solving=false;
+    render(); updateCounters(); syncButtons();
+  }
+
+  function updateCounters(){
+    $("#moves").textContent = state.moves;
+    $("#optimal").textContent = optimal(state.n);
+  }
+
+  function render(){
+    const pegsEl = $("#pegs");
+    pegsEl.innerHTML = "";
+    state.pegs.forEach((stackArr,i)=>{
+      const peg = document.createElement("div");
+      peg.className="peg";
+      const tower=document.createElement("div"); tower.className="tower";
+      const rod=document.createElement("div"); rod.className="rod";
+      const base=document.createElement("div"); base.className="base";
+      const stack=document.createElement("div"); stack.className="stack"; stack.dataset.peg=i;
+
+      const maxSlots = Math.max(state.n, 5);
+      for(let s=0; s<maxSlots - stackArr.length; s++){
+        const slot = document.createElement("div"); slot.className="slot"; stack.appendChild(slot);
+      }
+
+      stackArr.forEach((size, idx)=>{
+        const disk=document.createElement("div");
+        disk.className="disk" + (idx===stackArr.length-1?" top":"");
+        const w = 22 + (size/state.n)*72;
+        disk.style.setProperty("--w", w+"%");
+        disk.textContent=size;
+        stack.appendChild(disk);
+      });
+
+      tower.appendChild(stack); tower.appendChild(rod); tower.appendChild(base);
+      const foot=document.createElement("div");
+      foot.className="peg-footer";
+      foot.innerHTML=`<span>Peg ${i+1}</span><span>${stackArr.length} disk${stackArr.length!==1?'s':''}</span>`;
+      peg.appendChild(tower); peg.appendChild(foot);
+      pegsEl.appendChild(peg);
+    });
+  }
+
+  // --------------- Rules / Moves ---------------
+  function canMove(from,to){
+    const src=state.pegs[from], dst=state.pegs[to];
+    if(!src.length) return false;
+    const d = src[src.length-1];
+    if(!dst.length) return true;
+    return d < dst[dst.length-1];
+  }
+  function move(from,to){
+    if(!canMove(from,to)) return false;
+    const disk = state.pegs[from].pop();
+    state.pegs[to].push(disk);
+    state.moves++; updateCounters(); render();
+    if (isSolved()) finish();
+    return true;
+  }
+
+  function finish(){
+    clearInterval(state.timer); state.timer=null; state.solving=false; syncButtons();
+    live("🎉 Solved!");
+    const board = $(".board");
+    board.animate(
+      [{boxShadow:"0 0 0 0 rgba(138,233,193,0)"},{boxShadow:"0 0 0 6px rgba(138,233,193,.25)"},{boxShadow:"0 0 0 0 rgba(138,233,193,0)"}],
+      {duration:900,easing:"ease-out"}
+    );
+  }
+
+  // --------------- Correct Auto-Solver ---------------
+  // Smallest disk moves every other turn.
+  // If n is ODD, smallest moves +2 mod 3 (source -> target first).
+  // If n is EVEN, smallest moves +1 mod 3 (source -> auxiliary first).
+  function nextAutoMove(){
+    if (isSolved()) return null;
+
+    const pos1 = state.pegs.findIndex(p => p[p.length-1] === 1); // smallest is always on top in legal states
+
+    if (state.moves % 2 === 0){
+      const to = (state.n % 2 === 1) ? (pos1 + 2) % 3 : (pos1 + 1) % 3;
+      if (canMove(pos1,to)) return [pos1,to];
+      // Fallbacks shouldn't be needed but keep them safe:
+      for (let k of [ (to+1)%3, (to+2)%3 ]) if (canMove(pos1,k)) return [pos1,k];
+      return null;
+    } else {
+      const pairs = [[0,1],[0,2],[1,2]];
+      for (const [a,b] of pairs){
+        const topA = state.pegs[a][state.pegs[a].length-1];
+        const topB = state.pegs[b][state.pegs[b].length-1];
+        if (topA === 1 || topB === 1) continue; // not the smallest
+        if (canMove(a,b)) return [a,b];
+        if (canMove(b,a)) return [b,a];
+      }
+      return null;
+    }
+  }
+
+  function autoplay(){
+    if(state.solving || isSolved()) return;
+    state.solving = true; syncButtons();
+    state.timer = setInterval(()=>{
+      const mv = nextAutoMove();
+      if(!mv){ clearInterval(state.timer); state.timer=null; state.solving=false; syncButtons(); return; }
+      move(mv[0], mv[1]);
+    }, state.speed);
+  }
+
+  function pause(){
+    clearInterval(state.timer); state.timer=null; state.solving=false; syncButtons();
+  }
+
+  function stepOnce(){
+    if (state.solving || isSolved()) return;
+    const mv = nextAutoMove();
+    if (!mv) { if (isSolved()) finish(); return; }
+    move(mv[0], mv[1]);
+    syncButtons();
+  }
+
+  function syncButtons(){
+    $("#solveBtn").disabled = state.solving || isSolved();
+    $("#pauseBtn").disabled = !state.solving;
+    $("#resetBtn").disabled = state.solving;
+    $("#diskRange").disabled = state.solving;
+    $("#stepBtn").disabled = state.solving || isSolved();
+  }
+
+  // --------------- UI wiring ---------------
+  $("#diskRange").addEventListener("input",(e)=>{ state.n=+e.target.value; $("#diskCount").value=state.n; $("#optimal").textContent=optimal(state.n); });
+  $("#diskRange").addEventListener("change",()=>initPegs());
+  $("#resetBtn").addEventListener("click",()=>initPegs());
+  $("#solveBtn").addEventListener("click",()=>autoplay());
+  $("#pauseBtn").addEventListener("click",()=>pause());
+  $("#stepBtn").addEventListener("click",()=>stepOnce());
+  $("#speedRange").addEventListener("input",(e)=>{
+    state.speed=+e.target.value;
+    document.documentElement.style.setProperty("--speed", state.speed + "ms");
+    $("#speedOut").value = state.speed + "ms";
+    if(state.solving){ clearInterval(state.timer); state.timer=null; autoplay(); }
+  });
+
+  // --------------- Boot ---------------
+  (function boot(){
+    $("#diskCount").value=state.n;
+    $("#optimal").textContent=optimal(state.n);
+    $("#speedOut").value=state.speed + "ms";
+    initPegs();
+  })();
+})();
+</script>
+</body>
+</html>
