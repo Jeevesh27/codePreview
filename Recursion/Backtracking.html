@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Backtracking Visualizer — N-Queens</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166;
+  }
+
+  * { box-sizing:border-box }
+  html, body { height:100% }
+  body {
+    margin:0; background:radial-gradient(1200px 800px at 10% -10%, #1b2042 0%, var(--bg) 50%, #0b0e1b 100%);
+    color:var(--text); font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+  }
+  .wrap { max-width:1200px; margin:auto; padding:28px; display:grid; gap:var(--gap) }
+
+  header {
+    background:linear-gradient(180deg, #1c2143, var(--panel));
+    border:1px solid #262c54; border-radius:var(--radius);
+    padding:20px; box-shadow:var(--shadow);
+  }
+  header h1 { margin:0 0 8px; font-size:22px; letter-spacing:.3px }
+  header p { margin:0; color:var(--muted) }
+  .badge {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:6px 10px; border-radius:999px; background:var(--chip);
+    color:#cfe1ff; font-weight:600; font-size:12px;
+    border:1px solid #303869; margin-bottom:10px;
+  }
+  .badge svg { width:14px; height:14px }
+
+  .controls {
+    display:grid; gap:var(--gap);
+    grid-template-columns: repeat(5, minmax(120px,1fr)) auto auto auto;
+    align-items:end;
+    background:var(--panel); border:1px solid #262c54;
+    border-radius:var(--radius); padding:14px; box-shadow:var(--shadow);
+  }
+  .field { display:grid; gap:6px }
+  .field label { color:var(--muted); font-size:12px }
+  select, input[type="number"] {
+    background:var(--panel-2); border:1px solid #2a315f; color:var(--text);
+    border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input[type="range"] { accent-color: var(--accent); }
+  .btn {
+    background:linear-gradient(180deg, #1f2a5a, #1a224b);
+    color:var(--text); border:1px solid #2d3a77; border-radius:12px;
+    padding:10px 14px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04), var(--shadow);
+    transition:transform .08s ease, filter .08s ease;
+  }
+  .btn:hover { filter:brightness(1.08) }
+  .btn:active { transform:translateY(1px) }
+  .btn.secondary { background:#243064; border-color:#33408a; font-weight:600 }
+  .btn.ghost { background:transparent; border-color:#33408a }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; filter:grayscale(25%) }
+
+  .grid {
+    display:grid; gap:var(--gap);
+    grid-template-columns: 1.1fr .9fr;
+    grid-template-rows: minmax(340px, 1fr) minmax(160px, .6fr);
+    grid-template-areas:
+      "board stack"
+      "tree  log";
+  }
+
+  .card {
+    background:var(--panel); border:1px solid #262c54; border-radius:var(--radius);
+    box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column;
+    min-height:0;
+  }
+  .card h2 {
+    margin:0; padding:12px 14px; font-size:14px; letter-spacing:.3px; text-transform:uppercase;
+    color:#bcd0ff; background:linear-gradient(180deg, #1a2043, #171c36);
+    border-bottom:1px solid #262c54;
+  }
+  .card .body { padding:12px; overflow:auto; min-height:0 }
+
+  /* Board */
+  .board-wrap { display:flex; gap:16px; align-items:flex-start; }
+  .board {
+    --size: 8;
+    --cell: 42px;
+    display:grid;
+    grid-template-columns: repeat(var(--size), var(--cell));
+    grid-template-rows: repeat(var(--size), var(--cell));
+    border-radius:12px; overflow:hidden; border:1px solid #2b356c;
+    box-shadow:var(--shadow);
+  }
+  .cell {
+    display:flex; align-items:center; justify-content:center; font-size:22px;
+    background:#1a1f3b;
+  }
+  .cell:nth-child(odd){ background:#141939 }
+  .cell.dark { background:#0f1330 }
+  .cell.try { outline:2px dashed var(--pair); outline-offset:-4px }
+  .cell.conflict { box-shadow:inset 0 0 0 3px rgba(255,109,109,.55) }
+  .cell.place { box-shadow:inset 0 0 0 3px rgba(138,233,193,.55) }
+  .queen { filter: drop-shadow(0 4px 8px rgba(0,0,0,.35)); }
+
+  .board-info { font-size:14px; color:var(--muted) }
+  .board-info .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:var(--chip); color:#cfe1ff; border:1px solid #303869; margin-right:8px }
+
+  /* Tree */
+  .tree { position:relative; }
+  .node {
+    background:linear-gradient(180deg, #1d2244, #12162b);
+    border:1px solid #283061; border-radius:12px; padding:8px 10px;
+    margin:6px 0 6px calc(var(--depth, 0) * 24px);
+    position:relative; display:inline-block; min-width:140px;
+  }
+  .node .sig { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px }
+  .node .sig .args { color:var(--pair) }
+  .node .ret { color:var(--ok); font-size:12px; margin-top:4px; opacity:.92 }
+  .children { margin-left:20px; border-left:2px dashed #2a346b; padding-left:16px }
+  .node::before { content:""; position:absolute; left:-12px; top:16px; width:12px; height:2px; background:#2a346b; }
+  .node.root::before { display:none }
+  .node.active { outline:2px solid var(--accent); box-shadow:0 0 0 4px rgba(108,243,255,.12) }
+  .node.returning { outline:2px solid var(--accent-2); box-shadow:0 0 0 4px rgba(138,233,193,.12) }
+
+  /* Stack */
+  .stack { display:flex; flex-direction:column; gap:10px; }
+  .frame {
+    background:linear-gradient(180deg, #1f2549, #131734);
+    border:1px solid #2b356c; border-radius:12px; padding:10px 12px; box-shadow: var(--shadow);
+  }
+  .frame .title { font-weight:800; letter-spacing:.3px }
+  .frame .vars  { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px; color:#d9e3ff }
+  .frame.top { outline:2px solid var(--accent) }
+  .stack .empty {
+    color:var(--muted); text-align:center; padding:18px; border:1px dashed #33408a; border-radius:12px; background:rgba(0,0,0,.15)
+  }
+
+  /* Log */
+  .log { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px }
+  .log .row { padding:6px 8px; border-bottom:1px dashed #2b356c }
+  .log .row:last-child { border-bottom:0 }
+  .log .call { color:#aee9ff }
+  .log .ret  { color:#baf3d6 }
+  .log .try  { color:var(--pair) }
+  .log .bad  { color:#ff9e9e }
+  .log .bk   { color:#ffc7a2 }
+
+  .footer { color:var(--muted); font-size:12px; text-align:center; padding:8px 0 0; }
+
+  @media (max-width: 980px) {
+    .controls { grid-template-columns: 1fr 1fr 1fr 1fr auto auto; }
+    .grid { grid-template-columns: 1fr; grid-template-rows:auto auto auto auto; grid-template-areas: "board" "stack" "tree" "log" }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="badge" title="Educational Demo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l2.09 6.26L20 9l-5 3.64L16.18 20 12 16.9 7.82 20 9 12.64 4 9l5.91-.74L12 2z" stroke-width="1.5"/></svg>
+        Backtracking Visualizer — N-Queens
+      </div>
+      <h1>Watch a backtracking search place queens, hit conflicts, and backtrack</h1>
+      <p>At each row, we try columns left→right. A safe position leads deeper; conflicts cause backtracking. Solutions are highlighted.</p>
+    </header>
+
+    <section class="controls" aria-label="controls">
+      <div class="field">
+        <label for="nInput">Board size N (queens)</label>
+        <input id="nInput" type="number" inputmode="numeric" min="4" max="12" value="6"/>
+      </div>
+
+      <div class="field">
+        <label for="speed">Step speed (ms)</label>
+        <input id="speed" type="range" min="60" max="1200" step="20" value="300"/>
+      </div>
+
+      <div class="field">
+        <label for="mode">Stop at</label>
+        <select id="mode">
+          <option value="first">first solution</option>
+          <option value="all">every solution</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="showThreats">Show threats on try</label>
+        <select id="showThreats">
+          <option value="on">on</option>
+          <option value="off">off</option>
+        </select>
+      </div>
+
+      <button id="build" class="btn">Build Search</button>
+      <button id="play" class="btn">▶ Play</button>
+      <button id="step" class="btn secondary">Step</button>
+      <button id="reset" class="btn ghost">Reset</button>
+    </section>
+
+    <section class="grid">
+      <div class="card" style="grid-area:board;">
+        <h2>Board</h2>
+        <div class="body">
+          <div class="board-wrap">
+            <div id="board" class="board" role="grid" aria-label="chessboard"></div>
+            <div class="board-info">
+              <div class="pill">Row = search depth</div>
+              <div class="pill">Try → Place → Recurse → Backtrack</div>
+              <p id="status">Ready.</p>
+              <p id="solutions">Solutions: <strong>0</strong></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="grid-area:stack;">
+        <h2>Call Stack (Top at the top)</h2>
+        <div class="body">
+          <div id="stack" class="stack">
+            <div class="empty">Nothing on the stack yet. Press <strong>Build Search</strong> → <strong>Play</strong>.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card tree" style="grid-area:tree;">
+        <h2>Search Tree</h2>
+        <div class="body" id="tree"></div>
+      </div>
+
+      <div class="card log" style="grid-area:log;">
+        <h2>Events</h2>
+        <div class="body" id="log" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <div class="footer">Tip: Backtracking = <em>try</em> → <em>check</em> → <em>recurse</em> → if dead end, <em>backtrack</em>. Increase N slowly to see branching clearly.</div>
+  </div>
+
+<script>
+(() => {
+  // ---------- Helpers ----------
+  const $ = (s, el=document) => el.querySelector(s);
+  const make = (t, c, text) => { const e=document.createElement(t); if(c) e.className=c; if(text!=null) e.textContent=text; return e; };
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // ---------- Elements ----------
+  const els = {
+    n: $('#nInput'), speed: $('#speed'), mode: $('#mode'), showThreats: $('#showThreats'),
+    build: $('#build'), play: $('#play'), step: $('#step'), reset: $('#reset'),
+    board: $('#board'), tree: $('#tree'), stack: $('#stack'), log: $('#log'),
+    status: $('#status'), sols: $('#solutions').querySelector('strong')
+  };
+
+  // ---------- State ----------
+  let N = 6;
+  let steps = [];     // sequence of semantic steps (see below)
+  let idx = 0;
+  let playing = false;
+  let timer = null;
+  let nodesById = new Map(); // id -> tree node DOM
+  let containerById = new Map(); // id -> children container
+  let nextNodeId = 0;
+  let frameStack = []; // for UI
+  let boardState = []; // queen positions by row: col or -1
+  let solutions = 0;
+
+  // Step types:
+  // {type:'call', id, depth, row}
+  // {type:'try', id, depth, row, col, conflicts:[{r,c}]}
+  // {type:'place', id, depth, row, col}
+  // {type:'backtrack', id, depth, row, col}
+  // {type:'return', id, depth, row, found:boolean}
+  // {type:'solution', positions:[...]}
+  function isSafe(row, col, queens) {
+    for (let r=0; r<row; r++){
+      const c = queens[r];
+      if (c===col) return false;
+      if (Math.abs(r-row)===Math.abs(c-col)) return false;
+    }
+    return true;
+  }
+  function conflictsAt(row, col, queens){
+    const bad=[];
+    for (let r=0; r<row; r++){
+      const c = queens[r];
+      if (c===col || Math.abs(r-row)===Math.abs(c-col)) bad.push({r,c});
+    }
+    return bad;
+  }
+
+  function traceNQueens(N, stopAtFirst) {
+    steps = [];
+    nextNodeId = 0;
+    function bt(row, queens, depth, parentId){
+      const id = nextNodeId++;
+      steps.push({type:'call', id, depth, row, parentId});
+      if (row === N){
+        steps.push({type:'solution', positions:[...queens]});
+        steps.push({type:'return', id, depth, row, found:true});
+        return true;
+      }
+      let foundAny = false;
+      for (let col=0; col<N; col++){
+        const confs = conflictsAt(row,col,queens);
+        steps.push({type:'try', id, depth, row, col, conflicts: confs});
+        if (confs.length===0){
+          steps.push({type:'place', id, depth, row, col});
+          queens[row]=col;
+          const childFound = bt(row+1, queens, depth+1, id);
+          if (childFound) { foundAny = true; if (stopAtFirst) { steps.push({type:'return', id, depth, row, found:true}); return true; } }
+          steps.push({type:'backtrack', id, depth, row, col});
+          queens[row]=-1;
+        }
+      }
+      steps.push({type:'return', id, depth, row, found:foundAny});
+      return foundAny;
+    }
+    bt(0, Array(N).fill(-1), 0, null);
+    return steps;
+  }
+
+  // ---------- UI: Board ----------
+  function buildBoard(){
+    els.board.innerHTML = '';
+    els.board.style.setProperty('--size', N);
+    const total = N*N;
+    for (let i=0;i<total;i++){
+      const cell = make('div','cell');
+      // alternating color
+      const r = Math.floor(i/N), c = i%N;
+      if ((r+c)%2===1) cell.classList.add('dark');
+      cell.dataset.r=r; cell.dataset.c=c;
+      els.board.append(cell);
+    }
+  }
+  function drawBoard(queens){
+    // clear
+    els.board.querySelectorAll('.cell').forEach(cell=>{
+      cell.classList.remove('try','conflict','place');
+      cell.innerHTML='';
+    });
+    // draw queens
+    for (let r=0;r<N;r++){
+      const c = queens[r];
+      if (c>=0){
+        const cell = cellAt(r,c);
+        const span = make('span','queen','♛');
+        cell.append(span);
+      }
+    }
+  }
+  function cellAt(r,c){ return els.board.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); }
+
+  // ---------- UI: Tree ----------
+  function buildTree(){
+    nodesById.clear(); containerById.clear();
+    els.tree.innerHTML='';
+    for (const s of steps){
+      if (s.type==='call'){
+        ensureTreeNode(s);
+      }
+    }
+  }
+  function ensureTreeNode(step){
+    if (nodesById.has(step.id)) return nodesById.get(step.id);
+    const node = make('div','node');
+    node.dataset.id = step.id;
+    if (step.parentId==null) node.classList.add('root');
+    node.style.setProperty('--depth', step.depth);
+    const sig = make('div','sig');
+    sig.innerHTML = `<strong>placeRow</strong>(<span class="args">row=${step.row}</span>)`;
+    const ret = make('div','ret');
+    ret.textContent = '';
+    const kids = make('div','children');
+    const wrap = make('div'); wrap.append(node, kids);
+    node.append(sig, ret);
+
+    if (step.parentId==null) els.tree.append(wrap);
+    else {
+      const parentKids = containerById.get(step.parentId) || (()=>{ const pNode=ensureTreeNode(steps.find(x=>x.id===step.parentId && x.type==='call')); return containerById.get(step.parentId); })();
+      parentKids.append(wrap);
+    }
+    nodesById.set(step.id,node);
+    containerById.set(step.id,kids);
+    return node;
+  }
+  function markTreeActive(id){
+    nodesById.forEach(n=>n.classList.remove('active','returning'));
+    const node = nodesById.get(id);
+    if (node) node.classList.add('active');
+  }
+  function markTreeReturn(id, text){
+    const node = nodesById.get(id);
+    if (!node) return;
+    node.classList.add('returning');
+    node.querySelector('.ret').textContent = text;
+  }
+
+  // ---------- UI: Stack ----------
+  function renderStack(){
+    els.stack.innerHTML='';
+    if (!frameStack.length){
+      const empty = make('div','empty');
+      empty.innerHTML='Nothing on the stack.';
+      els.stack.append(empty);
+      return;
+    }
+    for (let i=frameStack.length-1;i>=0;i--){
+      const fr = frameStack[i];
+      const el = make('div','frame'+(i===frameStack.length-1?' top':'')); 
+      const title = make('div','title', `placeRow(row=${fr.row})`);
+      const vars = make('div','vars', `triedCols={${[...fr.tried].sort((a,b)=>a-b).join(',')}}`);
+      el.append(title, vars);
+      els.stack.append(el);
+    }
+  }
+
+  // ---------- UI: Log ----------
+  function logRow(kind, msg){
+    const row = make('div', 'row ' + kind);
+    row.textContent = msg;
+    els.log.append(row);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+  function clearLog(){ els.log.innerHTML=''; }
+
+  // ---------- Player ----------
+  function setPlaying(on){ playing=on; els.play.textContent = on ? '⏸ Pause' : '▶ Play'; }
+  function stopTimer(){ if (timer){ clearInterval(timer); timer=null; } }
+  function playLoop(){
+    stopTimer(); setPlaying(true);
+    const delay = clamp(parseInt(els.speed.value,10)||300, 40, 2000);
+    timer = setInterval(()=>{
+      if (idx >= steps.length){ setPlaying(false); stopTimer(); return; }
+      applyStep(steps[idx++]);
+    }, delay);
+  }
+
+  // ---------- Step Application ----------
+  function applyStep(s){
+    if (s.type==='call'){
+      frameStack.push({ id:s.id, row:s.row, tried:new Set() });
+      markTreeActive(s.id);
+      renderStack();
+      els.status.textContent = `Row ${s.row}: exploring columns…`;
+      logRow('call', `enter row=${s.row}`);
+    }
+    else if (s.type==='try'){
+      const top = frameStack[frameStack.length-1];
+      if (top) top.tried.add(s.col);
+      renderStack();
+
+      markTreeActive(s.id);
+      drawBoard(boardState);
+      const cell = cellAt(s.row, s.col);
+      if (cell){ cell.classList.add('try'); cell.innerHTML = '<span>?</span>'; }
+      if (els.showThreats.value==='on'){
+        for (const t of s.conflicts){
+          const cc = cellAt(t.r,t.c);
+          if (cc) cc.classList.add('conflict');
+        }
+      }
+      logRow(s.conflicts.length? 'bad':'try', s.conflicts.length? `try (row=${s.row}, col=${s.col}) → conflict` : `try (row=${s.row}, col=${s.col}) → safe`);
+    }
+    else if (s.type==='place'){
+      boardState[s.row]=s.col;
+      drawBoard(boardState);
+      const cell = cellAt(s.row, s.col);
+      if (cell){ cell.classList.add('place'); }
+      els.status.textContent = `Placed at row ${s.row}, col ${s.col}. Recurse to row ${s.row+1}.`;
+      logRow('try', `place row=${s.row} col=${s.col}`);
+    }
+    else if (s.type==='backtrack'){
+      // remove queen if still there
+      if (boardState[s.row]===s.col) boardState[s.row] = -1;
+      drawBoard(boardState);
+      els.status.textContent = `Backtrack from row ${s.row}, col ${s.col}.`;
+      logRow('bk', `backtrack from row=${s.row} col=${s.col}`);
+    }
+    else if (s.type==='solution'){
+      solutions += 1;
+      els.sols.textContent = String(solutions);
+      drawBoard(s.positions);
+      els.status.textContent = `🎉 Found solution #${solutions}`;
+      logRow('ret', `solution #${solutions}: [${s.positions.map((c,i)=>`r${i}→c${c}`).join(', ')}]`);
+    }
+    else if (s.type==='return'){
+      markTreeReturn(s.id, s.found ? 'found=true' : 'found=false');
+      const top = frameStack[frameStack.length-1];
+      if (top && top.id===s.id) frameStack.pop();
+      renderStack();
+      logRow('ret', `return row=${s.row} → ${s.found}`);
+    }
+  }
+
+  // ---------- Actions ----------
+  function rebuild(){
+    stopTimer(); setPlaying(false); idx=0; frameStack=[]; clearLog();
+    solutions = 0; els.sols.textContent='0';
+    N = clamp(parseInt(els.n.value,10)||6, 4, 12);
+    boardState = Array(N).fill(-1);
+    buildBoard(); drawBoard(boardState); els.status.textContent='Built fresh board.';
+    steps = traceNQueens(N, els.mode.value==='first');
+    buildTree();
+    // initial log
+    logRow('call', `Search built: N=${N}, steps=${steps.length}, stop=${els.mode.value}`);
+  }
+  function resetAll(){
+    stopTimer(); setPlaying(false); idx=0; frameStack=[]; clearLog();
+    boardState = Array(N).fill(-1); drawBoard(boardState);
+    nodesById.forEach(n=>n.classList.remove('active','returning'));
+    renderStack(); els.status.textContent='Reset.';
+    solutions = 0; els.sols.textContent='0';
+  }
+  function stepOnce(){
+    if (idx >= steps.length) return;
+    applyStep(steps[idx++]);
+  }
+
+  // ---------- Wire up ----------
+  els.build.addEventListener('click', rebuild);
+  els.play.addEventListener('click', ()=>{
+    if (!steps.length) rebuild();
+    if (playing){ setPlaying(false); stopTimer(); }
+    else playLoop();
+  });
+  els.step.addEventListener('click', ()=>{ if (!steps.length) rebuild(); stopTimer(); setPlaying(false); stepOnce(); });
+  els.reset.addEventListener('click', resetAll);
+  els.n.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); rebuild(); } });
+
+  // Initial
+  rebuild();
+})();
+</script>
+</body>
+</html>
