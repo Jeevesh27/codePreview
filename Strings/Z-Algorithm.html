@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Z-Algorithm Visualizer — Responsive</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+
+    --cell: clamp(28px, 6vw, 44px);
+    --chip-gap: clamp(6px, 1.6vw, 10px);
+    --pad: clamp(10px, 2.2vw, 18px);
+    --font: clamp(14px, 1.9vw, 16px);
+    --font-sm: clamp(11px, 1.5vw, 13px);
+    --ring:0 0 0 2px rgba(108,243,255,.3) inset, 0 8px 18px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 14px; }
+
+  /* ===== Sticky toolbar (all controls on top) ===== */
+  .toolbar-wrap {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(15,18,32,.95), rgba(15,18,32,.75));
+    backdrop-filter: blur(6px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.28);
+  }
+  .toolbar { display: grid; gap: var(--gap); padding: var(--pad) 0; }
+
+  .controls {
+    display: grid; gap: var(--gap);
+    grid-template-columns: 1.2fr 0.8fr 0.4fr auto;
+    align-items: start;
+  }
+  @media (max-width: 980px){ .controls { grid-template-columns: 1fr } }
+
+  .field { display: grid; gap: 8px; }
+  label { font-size: var(--font-sm); color: var(--muted) }
+  textarea, input[type=text]{
+    width: 100%;
+    background: var(--slot);
+    border: 1px solid #232a52;
+    border-radius: 12px;
+    color: var(--text);
+    padding: 10px 12px;
+    outline: none;
+    font-size: var(--font);
+    transition: box-shadow var(--speed), border-color var(--speed);
+  }
+  textarea { resize: vertical; min-height: 54px; max-height: 160px; }
+  textarea:focus, input[type=text]:focus { box-shadow: var(--ring); border-color: var(--accent) }
+
+  .actions { display: grid; grid-auto-flow: column; gap: 10px; justify-content: end; }
+  @media (max-width: 980px){ .actions { grid-auto-flow: row; grid-template-columns: repeat(3,minmax(0,1fr)); } }
+
+  button {
+    appearance: none; border:0; cursor:pointer; user-select:none;
+    padding: 10px 14px; border-radius: 12px; font-weight: 700; letter-spacing:.2px;
+    background: linear-gradient(180deg, #233064, #1b2654);
+    color: var(--text); box-shadow: var(--shadow);
+    transition: transform .06s ease, opacity var(--speed), filter var(--speed);
+    white-space: nowrap;
+  }
+  button:hover { transform: translateY(-1px); filter: brightness(1.05) }
+  button:active { transform: translateY(0) scale(.98) }
+  button[disabled] { opacity:.6; cursor:not-allowed }
+  .primary { background: linear-gradient(180deg, #1b9db0, #12727f) }
+  .ghost { background: #263067 }
+  .danger { background: linear-gradient(180deg, #7b2f2f, #5a2323) }
+
+  .meta {
+    display: grid; gap: var(--gap);
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .legend { display:flex; flex-wrap: wrap; gap: 10px; }
+  .pill { display:inline-flex; align-items:center; gap:8px; background:var(--chip); padding:6px 10px; border-radius:999px; font-size: var(--font-sm); color:#d8e1ff }
+  .swatch { width:12px; height:12px; border-radius:3px; background:#fff }
+  .phase { font-size: var(--font-sm); letter-spacing:.4px; text-transform:uppercase; color:#001b1f; background: var(--accent-2); padding: 4px 10px; border-radius: 999px; font-weight: 900; }
+
+  .speedbox { display:flex; align-items:center; gap:10px; justify-content:flex-end; }
+  .speedbox label { color: var(--muted); font-size: var(--font-sm) }
+  input[type=range]{ width: clamp(140px, 28vw, 280px) }
+
+  /* ===== Headline & layout ===== */
+  .hero { display:flex; align-items:flex-end; justify-content:space-between; padding: 18px 0 12px; }
+  h1 { margin:0; font-size: clamp(18px, 3.4vw, 24px); letter-spacing:.2px }
+  .muted { color: var(--muted) }
+
+  .grid { display:grid; gap: var(--gap); padding: calc(var(--pad) + 6px) 0 var(--pad); grid-template-columns: 1fr; }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--pad);
+    min-width: 0;
+  }
+
+  /* ===== Visualization rows ===== */
+  .rowgrid {
+    position: relative;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: var(--cell);
+    gap: var(--chip-gap);
+    align-items:center;
+    padding: 10px 10px 28px 10px;
+    background: var(--panel);
+    border-radius: 12px;
+    overflow-x:auto;
+    scroll-snap-type: x proximity;
+    padding-top: 20px;
+  }
+  .chip {
+    width: var(--cell); height: var(--cell);
+    display:grid; place-items:center;
+    border-radius: 10px;
+    background: var(--chip);
+    color: var(--text);
+    font-weight:800; font-size: var(--font);
+    position: relative;
+    transition: background var(--speed), box-shadow var(--speed), transform var(--speed);
+    scroll-snap-align: start;
+  }
+  .chip.pair { background: #4a4524; box-shadow: 0 0 0 2px rgba(255,209,102,.42) inset }
+  .chip.match { background: #1f4f3c; box-shadow: 0 0 0 2px rgba(132,250,176,.2) inset }
+  .chip.mismatch { background: #4a2730; box-shadow: 0 0 0 2px rgba(255,120,120,.35) inset }
+  .chip.hit { background: #23563b }
+
+  .track-title { position:absolute; top:1px; left:10px; font-size: var(--font-sm); color: var(--muted) }
+  .idxbar {
+    position:absolute; left:10px; bottom: 4px;
+    display:grid; grid-auto-flow:column; grid-auto-columns: var(--cell);
+    gap: var(--chip-gap);
+    font-size: 10px; color: var(--muted);
+  }
+  .idx { text-align:center }
+
+  .pointer { position:absolute; height: 14px; width: var(--cell); left:0; bottom:-18px; display:grid; place-items:center; font-size: 11px; color: var(--accent); transition: left var(--speed) }
+  .pointer::after{ content:"▼"; line-height: 1 }
+
+  /* Z-box L..R overlay */
+  .zbox {
+    position:absolute; top:6px; left:10px; height: calc(var(--cell) + 8px);
+    border-radius: 10px;
+    outline: 2px dashed rgba(255,209,102,.55);
+    background: rgba(255,209,102,.08);
+    transition: left var(--speed) ease, width var(--speed) ease;
+    pointer-events:none;
+  }
+
+  /* Z array row */
+  .zgrid .chip { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight:800 }
+
+  .info-grid { display:grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+  @media (max-width: 980px){ .info-grid { grid-template-columns: 1fr } }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items:center; }
+  .kv .k { color: var(--muted); font-size: var(--font-sm) }
+  .kv .v { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  .log { min-height: 60px; background: var(--panel); border-radius: 12px; padding: 12px; color: var(--text); line-height: 1.4; box-shadow: inset 0 0 0 1px rgba(255,255,255,.03); }
+  .tips { text-align:center; color: var(--muted); font-size: var(--font-sm); padding: 10px 0 24px; }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight:700 }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- ===== Toolbar ===== -->
+  <div class="toolbar-wrap">
+    <div class="toolbar">
+      <div class="controls">
+        <div class="field">
+          <label for="pattern">Pattern</label>
+          <input id="pattern" type="text" spellcheck="false" value="ABA" />
+        </div>
+        <div class="field">
+          <label for="text">Text</label>
+          <textarea id="text" spellcheck="false">ABACABAABA</textarea>
+        </div>
+        <div class="field">
+          <label for="delim">Delimiter</label>
+          <input id="delim" type="text" maxlength="1" value="$" />
+        </div>
+        <div class="actions">
+          <button id="build" class="primary" title="Build & reset (Enter)">Build + Reset</button>
+          <button id="step" title="Next step (.)">Step</button>
+          <button id="play" class="ghost" title="Play (Space)">Play</button>
+          <button id="pause" class="ghost" disabled title="Pause (Space)">Pause</button>
+          <button id="finish" class="ghost" title="Finish (F)">Finish</button>
+          <button id="clear" class="danger" title="Clear highlights">Clear</button>
+        </div>
+      </div>
+
+      <div class="meta">
+        <div class="legend">
+          <span class="pill"><span class="swatch" style="background:var(--pair)"></span>Compare vs prefix</span>
+          <span class="pill"><span class="swatch" style="background:#1f4f3c"></span>Match</span>
+          <span class="pill"><span class="swatch" style="background:#4a2730"></span>Mismatch</span>
+          <span class="pill"><span class="swatch" style="background:#ffd166"></span>Z-box [L..R]</span>
+        </div>
+        <div class="speedbox">
+          <label for="speed">Speed</label>
+          <input id="speed" type="range" min="120" max="1500" step="20" value="420" />
+          <span id="phaseTag" class="phase">Z-Array</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Headline ===== -->
+  <div class="hero">
+    <h1>🌀 Z-Algorithm Visualizer</h1>
+    <div class="muted">Compute Z-array over <b>P + delim + T</b>; matches when <b>Z[i] = |P|</b>.</div>
+  </div>
+
+  <!-- ===== Visualization ===== -->
+  <div class="grid">
+    <div class="card">
+      <div class="rowgrid" id="sRow">
+        <div class="track-title">S = P + delim + T</div>
+        <div class="zbox" id="zbox" aria-hidden="true"></div>
+        <div class="pointer" id="iPtr">i</div>
+        <div class="idxbar" id="sIdx"></div>
+      </div>
+    </div>
+
+    <div class="card zgrid">
+      <div class="rowgrid" id="zRow">
+        <div class="track-title">Z-array</div>
+        <div class="idxbar" id="zIdx"></div>
+      </div>
+    </div>
+
+    <div class="card info-grid" style="grid-column:1 / -1;">
+      <div class="kv">
+        <div class="k">Pattern |P|</div><div class="v" id="patLen">—</div>
+        <div class="k">Delimiter</div><div class="v" id="delimV">—</div>
+        <div class="k">i</div><div class="v" id="iV">—</div>
+        <div class="k">L, R</div><div class="v" id="lrV">—</div>
+        <div class="k">k = i - L</div><div class="v" id="kV">—</div>
+      </div>
+      <div class="kv">
+        <div class="k">Z[i]</div><div class="v" id="Zi">—</div>
+        <div class="k">Beta length</div><div class="v" id="betaV">—</div>
+        <div class="k">Matches</div><div class="v" id="hits">[]</div>
+        <div class="k">Match map</div><div class="v" id="map">S[i] → T[i - (|P|+1)]</div>
+      </div>
+    </div>
+
+    <div class="card" style="grid-column:1 / -1;">
+      <div class="log" id="log" aria-live="polite">Press <b>Build + Reset</b>, then <b>Play</b> or <b>Step</b>.</div>
+    </div>
+  </div>
+
+  <div class="tips">
+    Time: <span class="kbd">O(n + m)</span> · Z-box lets us reuse work inside <span class="kbd">[L, R]</span>.
+  </div>
+</div>
+
+<script type="module">
+/* ===== Elements ===== */
+const els = {
+  sRow: document.getElementById('sRow'),
+  sIdx: document.getElementById('sIdx'),
+  zRow: document.getElementById('zRow'),
+  zIdx: document.getElementById('zIdx'),
+  zbox: document.getElementById('zbox'),
+  iPtr: document.getElementById('iPtr'),
+
+  patLen: document.getElementById('patLen'),
+  delimV: document.getElementById('delimV'),
+  iV: document.getElementById('iV'),
+  lrV: document.getElementById('lrV'),
+  kV: document.getElementById('kV'),
+  Zi: document.getElementById('Zi'),
+  betaV: document.getElementById('betaV'),
+  hitsV: document.getElementById('hits'),
+  mapV: document.getElementById('map'),
+  log: document.getElementById('log'),
+  phaseTag: document.getElementById('phaseTag'),
+
+  pIn: document.getElementById('pattern'),
+  tIn: document.getElementById('text'),
+  dIn: document.getElementById('delim'),
+  speed: document.getElementById('speed'),
+
+  build: document.getElementById('build'),
+  step: document.getElementById('step'),
+  play: document.getElementById('play'),
+  pause: document.getElementById('pause'),
+  finish: document.getElementById('finish'),
+  clear: document.getElementById('clear'),
+};
+
+const state = {
+  P: [], T: [], S: [], n: 0, m: 0, N: 0,
+  delim: '$',
+  Z: [],
+  L: 0, R: 0,
+  i: 1,
+  steps: [], idx: -1, timer: null,
+  cellW: 38, gap: 8,
+  hits: [],
+};
+
+function measureCell(){
+  const chip = els.sRow.querySelector('.chip');
+  if (chip) {
+    state.cellW = chip.getBoundingClientRect().width;
+    state.gap = parseFloat(getComputedStyle(els.sRow).columnGap) || 8;
+  }
+}
+function leftOf(k){ return 10 + k * (state.cellW + state.gap) }
+
+/* ===== DOM helpers ===== */
+function makeChips(container, arr, key){
+  container.innerHTML = '';
+  arr.forEach((ch, i) => {
+    const sp = document.createElement('span');
+    sp.className = 'chip';
+    sp.dataset[key] = i;
+    sp.textContent = ch;
+    container.appendChild(sp);
+  });
+}
+function makeIdx(container, n){
+  container.innerHTML = '';
+  for (let i=0;i<n;i++){
+    const d = document.createElement('div');
+    d.className = 'idx'; d.textContent = i;
+    container.appendChild(d);
+  }
+}
+function movePtr(el, i){ el.style.left = leftOf(i) + 'px'; }
+function moveZbox(L, R){
+  if (R < L) { els.zbox.style.width = '0px'; return; }
+  els.zbox.style.left = leftOf(L) + 'px';
+  els.zbox.style.width = ((state.cellW + state.gap) * (R - L + 1) - state.gap + 4) + 'px';
+}
+
+function clearHighlights(){
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('pair','match','mismatch','hit'));
+}
+
+/* ===== Utilities ===== */
+function updateInfo(extra={}){
+  els.patLen.textContent = state.m;
+  els.delimV.textContent = state.delim;
+  els.iV.textContent = state.i;
+  els.lrV.textContent = `[${state.L}, ${state.R}]`;
+  els.kV.textContent = (state.i > state.R ? '—' : (state.i - state.L));
+  els.Zi.textContent = 'Z[' + (extra.i ?? state.i) + '] = ' + (extra.Zi ?? (state.Z[state.i] ?? 0));
+  els.betaV.textContent = (state.i > state.R ? '—' : (state.R - state.i + 1));
+  els.hitsV.textContent = JSON.stringify(state.hits);
+}
+function log(msg){ els.log.innerHTML = msg }
+
+/* ===== Step builder (classic Z algorithm) ===== */
+function buildSteps(){
+  const S = state.S, N = state.N, Z = new Array(N).fill(0);
+  let L = 0, R = 0;
+  const steps = [];
+
+  steps.push({type:'phase', note:`Compute Z-array over S (length ${N}).`});
+
+  for (let i = 1; i < N; i++) {
+    let z = 0;
+    steps.push({type:'start-i', i, L, R, note:`i=${i}${i>R?' (outside box)':' (inside box)'}`});
+
+    if (i > R) {
+      // naive match from 0
+      while (i + z < N && S[z] === S[i + z]) {
+        steps.push({type:'cmp', i, z, a:S[z], b:S[i+z], same:true});
+        z++;
+      }
+      if (i + z < N) steps.push({type:'cmp', i, z, a:S[z], b:S[i+z], same:false});
+      Z[i] = z;
+      steps.push({type:'setZ', i, z});
+      if (z > 0) { L = i; R = i + z - 1; steps.push({type:'updateBox', L, R}); }
+    } else {
+      const k = i - L;
+      const beta = R - i + 1;
+      steps.push({type:'inside', i, k, beta, zk: Z[k], note:`Copy Z[k=${k}] = ${Z[k]}, beta=${beta}`});
+      if (Z[k] < beta) {
+        Z[i] = Z[k];
+        steps.push({type:'setZ', i, z:Z[i]});
+      } else {
+        z = beta;
+        // attempt to extend
+        while (i + z < N && S[z] === S[i + z]) {
+          steps.push({type:'cmp', i, z, a:S[z], b:S[i+z], same:true});
+          z++;
+        }
+        if (i + z < N) steps.push({type:'cmp', i, z, a:S[z], b:S[i+z], same:false});
+        Z[i] = z;
+        steps.push({type:'setZ', i, z});
+        L = i; R = i + z - 1; steps.push({type:'updateBox', L, R});
+      }
+    }
+
+    // report a hit if Z[i] == |P|
+    if (Z[i] === state.m) {
+      const posInText = i - (state.m + 1); // i after "P + delim"
+      steps.push({type:'hit', i, posInText});
+    }
+  }
+
+  steps.push({type:'done', Z});
+  return {steps, Z};
+}
+
+/* ===== Render steps ===== */
+function applyStep(step){
+  if (!step) return;
+
+  switch(step.type){
+    case 'phase':
+      log(step.note); updateInfo(); break;
+
+    case 'start-i':
+      clearHighlights();
+      state.i = step.i; state.L = step.L; state.R = step.R;
+      movePtr(els.iPtr, step.i);
+      moveZbox(state.L, state.R);
+      updateInfo();
+      log(step.note);
+      break;
+
+    case 'cmp': {
+      // highlight S[z] vs S[i+z]
+      const a = els.sRow.querySelector(`[data-s="${step.z}"]`);
+      const b = els.sRow.querySelector(`[data-s="${step.i + step.z}"]`);
+      if (a && b) (step.same ? [a,b].forEach(e=>e.classList.add('match')) : [a,b].forEach(e=>e.classList.add('mismatch')));
+      log(`Compare S[${step.z}] "${step.a}" with S[${step.i + step.z}] "${step.b}" → ${step.same?'✓':'✗'}`);
+      break;
+    }
+
+    case 'inside':
+      state.i = step.i;
+      updateInfo({i:step.i, Zi: state.Z[step.i] || 0});
+      log(step.note);
+      // shade beta window visually by moving zbox (already shows L..R)
+      break;
+
+    case 'setZ': {
+      const chip = els.zRow.querySelector(`[data-z="${step.i}"]`);
+      if (chip) { chip.textContent = String(step.z); chip.classList.add('match'); }
+      state.Z[step.i] = step.z;
+      els.Zi.textContent = `Z[${step.i}] = ${step.z}`;
+      log(`Set Z[${step.i}] = ${step.z}`);
+      break;
+    }
+
+    case 'updateBox':
+      state.L = step.L; state.R = step.R;
+      moveZbox(state.L, state.R);
+      updateInfo();
+      log(`Update Z-box → L=${state.L}, R=${state.R}`);
+      break;
+
+    case 'hit': {
+      // Mark the text part positions
+      state.hits.push(step.posInText);
+      const startInS = step.i;
+      for (let k=0;k<state.m;k++){
+        const sChip = els.sRow.querySelector(`[data-s="${startInS + k}"]`);
+        if (sChip) sChip.classList.add('hit');
+      }
+      els.hitsV.textContent = JSON.stringify(state.hits);
+      log(`Match: Z[${step.i}] = |P| → text index ${step.posInText}`);
+      break;
+    }
+
+    case 'done':
+      log(`Done. Z-array computed. Matches: ${JSON.stringify(state.hits)}`);
+      break;
+  }
+}
+
+/* ===== Transport ===== */
+function stepForward(){
+  if (state.idx + 1 >= state.steps.length) return;
+  state.idx++;
+  applyStep(state.steps[state.idx]);
+}
+function play(){
+  if (state.timer) return;
+  els.play.disabled = true; els.pause.disabled = false;
+  const tick = () => {
+    if (state.idx + 1 >= state.steps.length) { pause(); return; }
+    stepForward();
+  };
+  state.timer = setInterval(tick, Number(els.speed.value));
+}
+function pause(){ if (state.timer) clearInterval(state.timer); state.timer=null; els.play.disabled=false; els.pause.disabled=true; }
+function finish(){ pause(); while (state.idx + 1 < state.steps.length) stepForward(); }
+function clearAll(){ pause(); clearHighlights(); log('Cleared. Build again to start fresh.'); }
+
+/* ===== Build & paint ===== */
+function rebuild(){
+  // read inputs
+  const Pstr = els.pIn.value;
+  const Tstr = els.tIn.value;
+  let d = els.dIn.value || '$';
+  if (d.length !== 1) d = '$';
+  state.delim = d;
+
+  state.P = [...Pstr];
+  state.T = [...Tstr];
+  state.m = state.P.length;
+  state.n = state.T.length;
+
+  // Build S = P + d + T
+  state.S = [...state.P, state.delim, ...state.T];
+  state.N = state.S.length;
+  state.Z = new Array(state.N).fill(0);
+  state.L = 0; state.R = 0; state.i = 1;
+  state.hits = [];
+  state.idx = -1;
+  if (state.timer) { clearInterval(state.timer); state.timer=null; }
+
+  // Paint S row & Z row
+  makeChips(els.sRow, state.S, 's'); makeIdx(els.sIdx, state.N);
+  els.zRow.innerHTML = '<div class="track-title">Z-array</div><div class="idxbar" id="zIdx"></div>';
+  const zIdxBar = els.zRow.querySelector('#zIdx'); makeIdx(zIdxBar, state.N);
+  // Z chips
+  state.Z.forEach((_, i) => {
+    const sp = document.createElement('span');
+    sp.className = 'chip'; sp.dataset.z = i; sp.textContent = i===0 ? '—' : '0';
+    els.zRow.appendChild(sp);
+  });
+
+  measureCell();
+  movePtr(els.iPtr, 1);
+  moveZbox(1,0); // collapsed
+
+  // Steps
+  const res = buildSteps();
+  state.steps = res.steps;
+  // keep Z reference for applyStep to write into
+  state.Z = new Array(state.N).fill(0);
+
+  // Info
+  updateInfo();
+  clearHighlights();
+  log('Built. Press Play or Step.');
+  enablePlay(true);
+}
+function enablePlay(v){ els.play.disabled = !v; els.pause.disabled = true; }
+
+/* ===== Shortcuts ===== */
+function onKey(e){
+  if (['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); rebuild(); }
+    return;
+  }
+  if (e.code === 'Space') { e.preventDefault(); state.timer? pause(): play(); }
+  if (e.key === '.') stepForward();
+  if (e.key.toLowerCase() === 'f') finish();
+  if (e.key.toLowerCase() === 'r') rebuild();
+}
+
+/* Wire up */
+els.build.addEventListener('click', rebuild);
+els.step.addEventListener('click', stepForward);
+els.play.addEventListener('click', play);
+els.pause.addEventListener('click', pause);
+els.finish.addEventListener('click', finish);
+els.clear.addEventListener('click', clearAll);
+els.speed.addEventListener('input', ()=>{ if (state.timer) { pause(); play(); } });
+window.addEventListener('keydown', onKey);
+window.addEventListener('resize', measureCell);
+
+/* Boot */
+rebuild();
+</script>
+</body>
+</html>
