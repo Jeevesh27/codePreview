@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>KMP (Knuth–Morris–Pratt) Visualizer — Responsive</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+
+    /* Responsive sizing */
+    --cell: clamp(28px, 6vw, 44px);
+    --chip-gap: clamp(6px, 1.6vw, 10px);
+    --pad: clamp(10px, 2.2vw, 18px);
+    --font: clamp(14px, 1.9vw, 16px);
+    --font-sm: clamp(11px, 1.5vw, 13px);
+    --ring:0 0 0 2px rgba(108,243,255,.3) inset, 0 8px 18px rgba(0,0,0,.25);
+    --toolbar-h: clamp(64px, 18vw, 160px);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 14px; }
+
+  /* ===== Sticky toolbar (all controls on top) ===== */
+  .toolbar-wrap {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(15,18,32,.95), rgba(15,18,32,.75));
+    backdrop-filter: blur(6px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.28);
+  }
+  .toolbar {
+    display: grid; gap: var(--gap);
+    grid-template-columns: 1fr;
+    padding: var(--pad) 0;
+  }
+  .toolbar .row {
+    display: grid; gap: var(--gap);
+    align-items: center;
+  }
+  /* Controls grid: inputs & actions symmetrical */
+  .controls {
+    display: grid; gap: var(--gap);
+    grid-template-columns: 1.2fr 0.8fr auto;
+  }
+  .controls .field { display: grid; gap: 8px; }
+  .controls label { font-size: var(--font-sm); color: var(--muted); }
+  textarea, input[type=text]{
+    width: 100%;
+    background: var(--slot);
+    border: 1px solid #232a52;
+    border-radius: 12px;
+    color: var(--text);
+    padding: 10px 12px;
+    outline: none;
+    font-size: var(--font);
+    transition: box-shadow var(--speed), border-color var(--speed);
+  }
+  textarea { resize: vertical; min-height: 54px; max-height: 160px; }
+  textarea:focus, input[type=text]:focus { box-shadow: var(--ring); border-color: var(--accent); }
+
+  .actions {
+    display: grid; grid-auto-flow: column; gap: 10px; align-content: start; justify-content: end;
+  }
+  button {
+    appearance: none; border:0; cursor:pointer; user-select:none;
+    padding: 10px 14px; border-radius: 12px; font-weight: 700; letter-spacing:.2px;
+    background: linear-gradient(180deg, #233064, #1b2654);
+    color: var(--text); box-shadow: var(--shadow);
+    transition: transform .06s ease, opacity var(--speed), filter var(--speed);
+    white-space: nowrap;
+  }
+  button:hover { transform: translateY(-1px); filter: brightness(1.05); }
+  button:active { transform: translateY(0) scale(.98); }
+  button[disabled] { opacity:.55; cursor: not-allowed; }
+  .primary { background: linear-gradient(180deg, #1b9db0, #12727f); }
+  .ghost { background: #263067; }
+  .danger { background: linear-gradient(180deg, #7b2f2f, #5a2323); }
+
+  /* Speed + Phase */
+  .meta {
+    display: grid; gap: var(--gap);
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .legend {
+    display:flex; flex-wrap: wrap; gap: 10px;
+  }
+  .pill { display:inline-flex; align-items:center; gap:8px; background:var(--chip); padding:6px 10px; border-radius:999px; font-size: var(--font-sm); color:#d8e1ff }
+  .swatch { width:12px; height:12px; border-radius:3px; background:#fff }
+  .phase { font-size: var(--font-sm); letter-spacing:.4px; text-transform:uppercase; color:#001b1f; background: var(--accent); padding: 4px 10px; border-radius: 999px; font-weight: 900; }
+
+  .speedbox { display:flex; align-items:center; gap:10px; justify-content:flex-end; }
+  .speedbox label { color: var(--muted); font-size: var(--font-sm); }
+  input[type=range]{ width: clamp(140px, 28vw, 280px); }
+
+  /* Responsive toolbar layout */
+  @media (max-width: 980px){
+    .controls { grid-template-columns: 1fr; }
+    .actions { justify-content: stretch; grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0,1fr)); }
+  }
+
+  /* ===== Cards & layout below ===== */
+  .hero {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    padding: 18px 0 12px;
+  }
+  h1 { margin:0; font-size: clamp(18px, 3.4vw, 24px); letter-spacing:.2px }
+  .muted { color: var(--muted) }
+
+  .grid {
+    display:grid; gap: var(--gap); padding: calc(var(--pad) + 6px) 0 var(--pad);
+    grid-template-columns: 1fr 1fr;
+  }
+  @media (max-width: 980px){ .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--pad);
+    min-width: 0;
+  }
+
+  /* ===== Visualization rows ===== */
+  .rowgrid {
+    position: relative;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: var(--cell);
+    gap: var(--chip-gap);
+    align-items:center;
+    padding: 10px 10px 26px 10px;
+    background: var(--panel);
+    border-radius: 12px;
+    overflow-x:auto;
+    scroll-snap-type: x proximity;
+  }
+  .chip {
+    width: var(--cell); height: var(--cell);
+    display:grid; place-items:center;
+    border-radius: 10px;
+    background: var(--chip);
+    color: var(--text);
+    font-weight:800; font-size: var(--font);
+    position: relative;
+    transition: transform var(--speed), background var(--speed), color var(--speed), box-shadow var(--speed);
+    scroll-snap-align: start;
+  }
+  .chip.muted { opacity:.55 }
+  .chip.match { background: #1f4f3c; box-shadow: 0 0 0 2px rgba(132,250,176,.2) inset }
+  .chip.pair { background: #4a4524; box-shadow: 0 0 0 2px rgba(255,209,102,.42) inset }
+  .chip.mismatch { background: #4a2730; box-shadow: 0 0 0 2px rgba(255,120,120,.35) inset }
+  .chip.found { background: #23563b }
+  .chip.new { background: #1f4f3c; box-shadow: 0 0 0 2px rgba(138,233,193,.6) inset }
+
+  .track-title { position:absolute; top:-12px; left:10px; font-size: var(--font-sm); color: var(--muted) }
+
+  .overlay {
+    position:absolute; left:10px; top:10px;
+    display:grid; grid-auto-flow:column; grid-auto-columns: var(--cell);
+    gap: var(--chip-gap); pointer-events:none; transition: left var(--speed) ease;
+  }
+
+  .idxbar {
+    position:absolute; left:10px; bottom: 4px;
+    display:grid; grid-auto-flow:column; grid-auto-columns: var(--cell);
+    gap: var(--chip-gap);
+    font-size: 10px; color: var(--muted);
+  }
+  .idx { text-align:center }
+
+  .pointer {
+    position:absolute; height: 14px; width: var(--cell);
+    left:0; bottom:-18px; display:grid; place-items:center;
+    font-size: 11px; color: var(--accent);
+    transition: left var(--speed);
+  }
+  .pointer::after{ content:"▼"; line-height: 1; }
+
+  /* LPS block */
+  .lps { display:grid; gap: var(--gap); }
+  .lps .pointer { color: var(--accent-2) }
+  .note { font-size: var(--font-sm); color: var(--muted) }
+
+  /* Log */
+  .log {
+    min-height: 56px;
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 12px;
+    color: var(--text);
+    line-height: 1.4;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+  }
+
+  /* Footer tip */
+  .tips { text-align:center; color: var(--muted); font-size: var(--font-sm); padding: 10px 0 24px; }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-weight:700 }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- ===== Toolbar (all controls on top) ===== -->
+  <div class="toolbar-wrap">
+    <div class="toolbar">
+      <div class="controls">
+        <div class="field">
+          <label for="text">Text</label>
+          <textarea id="text" spellcheck="false" aria-label="Text to search">ABABDABACDABABCABAB</textarea>
+        </div>
+        <div class="field">
+          <label for="pattern">Pattern</label>
+          <input id="pattern" type="text" spellcheck="false" value="ABABCABAB" aria-label="Pattern to find" />
+        </div>
+        <div class="actions">
+          <button id="build" class="primary" title="Build LPS & reset (Enter)">Build + Reset</button>
+          <button id="step" title="Next step (.)">Step</button>
+          <button id="play" class="ghost" title="Play (Space)">Play</button>
+          <button id="pause" class="ghost" disabled title="Pause (Space)">Pause</button>
+          <button id="finish" class="ghost" title="Finish (F)">Finish</button>
+          <button id="clear" class="danger" title="Clear highlights">Clear</button>
+        </div>
+      </div>
+
+      <div class="row meta">
+        <div class="legend" aria-hidden="true">
+          <span class="pill"><span class="swatch" style="background:var(--pair)"></span>Current compare</span>
+          <span class="pill"><span class="swatch" style="background:#1f4f3c"></span>Match / New LPS</span>
+          <span class="pill"><span class="swatch" style="background:#4a2730"></span>Mismatch</span>
+          <span class="pill"><span class="swatch" style="background:#23563b"></span>Full match in text</span>
+        </div>
+        <div class="speedbox">
+          <label for="speed">Speed</label>
+          <input id="speed" type="range" min="120" max="1500" step="20" value="420" />
+          <span id="phaseTag" class="phase">LPS</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Headline ===== -->
+  <div class="hero">
+    <h1>🔎 KMP (Knuth–Morris–Pratt) Visualizer</h1>
+    <div class="muted">Build the <b>LPS</b> table and watch how KMP skips redundant checks.</div>
+  </div>
+
+  <!-- ===== Visualization ===== -->
+  <div class="grid">
+    <div class="card" aria-label="Text and Pattern view">
+      <div class="rowgrid" id="textRow">
+        <div class="track-title">Text</div>
+        <div class="overlay" id="patternOverlay" aria-hidden="true"></div>
+        <div class="pointer" id="iPtr" style="bottom:-20px; color:var(--accent)">i</div>
+        <div class="idxbar" id="textIdx"></div>
+      </div>
+    </div>
+
+    <div class="card lps" aria-label="LPS table">
+      <div class="rowgrid lps-letters" id="lpsLetters">
+        <div class="track-title">Pattern</div>
+        <div class="idxbar" id="patIdx"></div>
+        <div class="pointer" id="iLps">i</div>
+        <div class="pointer" id="lenLps" style="color:#ffd166">len</div>
+      </div>
+      <div class="rowgrid lps-values" id="lpsValues">
+        <div class="track-title">LPS</div>
+      </div>
+      <div class="note">LPS[k] = length of the longest <i>proper</i> prefix of pattern[0..k] that is also a suffix.</div>
+    </div>
+
+    <div class="card" style="grid-column: 1 / -1;">
+      <div class="log" id="log" aria-live="polite">Press <b>Build + Reset</b>, then <b>Play</b> or <b>Step</b>.</div>
+    </div>
+  </div>
+
+  <div class="tips">⌛ Preprocessing: <span class="kbd">O(m)</span> · 🔍 Search: <span class="kbd">O(n)</span></div>
+</div>
+
+<script type="module">
+const els = {
+  textRow: document.getElementById('textRow'),
+  patternOverlay: document.getElementById('patternOverlay'),
+  textIdx: document.getElementById('textIdx'),
+  iPtr: document.getElementById('iPtr'),
+
+  lpsLetters: document.getElementById('lpsLetters'),
+  lpsValues: document.getElementById('lpsValues'),
+  patIdx: document.getElementById('patIdx'),
+  iLps: document.getElementById('iLps'),
+  lenLps: document.getElementById('lenLps'),
+
+  log: document.getElementById('log'),
+  phaseTag: document.getElementById('phaseTag'),
+
+  textInput: document.getElementById('text'),
+  patInput: document.getElementById('pattern'),
+  speed: document.getElementById('speed'),
+
+  build: document.getElementById('build'),
+  step: document.getElementById('step'),
+  play: document.getElementById('play'),
+  pause: document.getElementById('pause'),
+  finish: document.getElementById('finish'),
+  clear: document.getElementById('clear'),
+};
+
+const state = {
+  text: [], pat: [], lps: [], steps: [], idx: -1, timer: null,
+  cellW: 38, gap: 8,
+};
+
+function esc(s){ return s.replace(/</g,"&lt;").replace(/>/g,"&gt;") }
+
+function measureCell(){
+  const chip = els.textRow.querySelector('.chip');
+  if (chip) {
+    state.cellW = chip.getBoundingClientRect().width;
+    // Read the actual computed gap (safer for responsiveness)
+    const styles = getComputedStyle(els.textRow);
+    state.gap = parseFloat(styles.columnGap) || 8;
+  }
+}
+
+function makeChips(container, arr, key='t') {
+  container.innerHTML = '';
+  for (let i=0;i<arr.length;i++) {
+    const sp = document.createElement('span');
+    sp.className = 'chip';
+    sp.dataset[key] = i;
+    sp.textContent = arr[i];
+    container.appendChild(sp);
+  }
+}
+function makeIndices(container, n) {
+  container.innerHTML = '';
+  for (let i=0;i<n;i++) {
+    const idx = document.createElement('div');
+    idx.className = 'idx';
+    idx.textContent = i;
+    container.appendChild(idx);
+  }
+}
+
+function offsetLeftFromIndex(index) {
+  const leftPad = 10;
+  return leftPad + index * (state.cellW + state.gap);
+}
+function movePtr(ptrEl, index) {
+  ptrEl.style.left = offsetLeftFromIndex(Math.max(0,index)) + 'px';
+}
+
+function clearHighlights(){
+  document.querySelectorAll('.chip').forEach(c=> {
+    c.classList.remove('pair','match','mismatch','found','new','muted');
+  });
+  log('Ready.');
+}
+
+function buildRows() {
+  const text = els.textInput.value;
+  const pat  = els.patInput.value;
+  state.text = [...text]; state.pat = [...pat];
+
+  makeChips(els.textRow, state.text, 't');
+  makeIndices(els.textIdx, state.text.length);
+
+  els.patternOverlay.innerHTML = '';
+  makeChips(els.patternOverlay, state.pat, 'p');
+
+  makeChips(els.lpsLetters, state.pat, 'p');
+  makeIndices(els.patIdx, state.pat.length);
+
+  els.lpsValues.innerHTML = '';
+  for (let i=0;i<state.pat.length;i++){
+    const sp = document.createElement('span');
+    sp.className = 'chip muted';
+    sp.dataset.l = i;
+    sp.textContent = i===0? '0' : '–';
+    els.lpsValues.appendChild(sp);
+  }
+
+  // After DOM
+  measureCell();
+  movePtr(els.iPtr, 0);
+  movePtr(els.iLps, 0);
+  movePtr(els.lenLps, 0);
+  clearHighlights();
+}
+
+function log(msg){ els.log.innerHTML = msg }
+function updatePhase(phase){
+  els.phaseTag.textContent = phase === 'lps' ? 'LPS' : 'Search';
+  els.phaseTag.style.background = (phase === 'lps' ? 'var(--accent)' : 'var(--accent-2)');
+}
+
+function positionOverlay(startIndex) {
+  els.patternOverlay.style.left = offsetLeftFromIndex(Math.max(0, startIndex)) + 'px';
+}
+function setPairHighlight(i, j, mismatch=false) {
+  els.textRow.querySelectorAll('.chip').forEach(c=> c.classList.remove('pair','mismatch','match'));
+  els.patternOverlay.querySelectorAll('.chip').forEach(c=> c.classList.remove('pair','mismatch','match'));
+  const t = els.textRow.querySelector(`[data-t="${i}"]`);
+  const p = els.patternOverlay.querySelector(`[data-p="${j}"]`);
+  if (t) t.classList.add(mismatch ? 'mismatch' : 'pair');
+  if (p) p.classList.add(mismatch ? 'mismatch' : 'pair');
+}
+function setFoundSpan(start, m){
+  for (let k=0;k<m;k++){
+    const t = els.textRow.querySelector(`[data-t="${start+k}"]`);
+    if (t) t.classList.add('found');
+  }
+}
+
+/* ---- KMP Steps ---- */
+function buildLpsSteps(patArr) {
+  const steps = [];
+  const lps = new Array(patArr.length).fill(0);
+  if (!patArr.length) return { lps, steps };
+
+  steps.push({phase:'lps', type:'lps-init', i:0, len:0, note:`Initialize LPS[0] = 0`});
+  let len = 0, i = 1;
+  while (i < patArr.length) {
+    steps.push({phase:'lps', type:'lps-compare', i, len, a:patArr[i], b:patArr[len],
+      note:`Compare pattern[${i}] = "${esc(patArr[i])}" with pattern[${len}] = "${esc(patArr[len])}"`});
+
+    if (patArr[i] === patArr[len]) {
+      len++; lps[i] = len;
+      steps.push({phase:'lps', type:'lps-set', i, len, val:len,
+        note:`Match ✓ → set LPS[${i}] = ${len}; advance i++, len++`});
+      i++;
+    } else {
+      if (len !== 0) {
+        steps.push({phase:'lps', type:'lps-fallback', i, from:len, to:lps[len-1],
+          note:`Mismatch ↩︎ → fallback len = LPS[${len-1}] = ${lps[len-1]}`});
+        len = lps[len-1];
+      } else {
+        lps[i] = 0;
+        steps.push({phase:'lps', type:'lps-set', i, len, val:0,
+          note:`Mismatch with len=0 → set LPS[${i}] = 0; advance i++`});
+        i++;
+      }
+    }
+  }
+  steps.push({phase:'lps', type:'lps-done', lps:[...lps], note:`LPS built.`});
+  return { lps, steps };
+}
+function buildSearchSteps(textArr, patArr, lps) {
+  const steps = [];
+  const n = textArr.length, m = patArr.length;
+  let i = 0, j = 0;
+
+  if (m === 0) {
+    steps.push({phase:'search', type:'edge', note:'Empty pattern matches at index 0.'});
+    return steps;
+  }
+  while (i < n) {
+    steps.push({phase:'search', type:'compare', i, j, a:textArr[i], b:patArr[j],
+      note:`Compare text[${i}] = "${esc(textArr[i])}" with pattern[${j}] = "${esc(patArr[j])}"`});
+
+    if (textArr[i] === patArr[j]) {
+      i++; j++;
+      steps.push({phase:'search', type:'advance', i, j, note:`Match ✓ → advance i, j`});
+      if (j === m) {
+        const start = i - j;
+        steps.push({phase:'search', type:'found', start, end:i-1, note:`Full match at index ${start}`});
+        j = lps[j-1];
+        steps.push({phase:'search', type:'shift', i, j, note:`Continue with j = LPS[m-1] = ${j}`});
+      }
+    } else {
+      if (j !== 0) {
+        const newJ = lps[j-1];
+        steps.push({phase:'search', type:'shift', i, j:newJ,
+          note:`Mismatch ↩︎ → set j = LPS[${j-1}] = ${newJ}`});
+        j = newJ;
+      } else {
+        i++;
+        steps.push({phase:'search', type:'skip', i, j, note:`Mismatch with j=0 → move i++`});
+      }
+    }
+  }
+  steps.push({phase:'search', type:'done', note:`Search finished.`});
+  return steps;
+}
+
+/* ---- Engine ---- */
+function rebuild() {
+  buildRows();
+
+  const pat = state.pat = [...els.patInput.value];
+  const text = state.text = [...els.textInput.value];
+
+  const lpsRes = buildLpsSteps(pat);
+  state.lps = lpsRes.lps;
+
+  const searchSteps = buildSearchSteps(text, pat, state.lps);
+  state.steps = [...lpsRes.steps, {phase:'divider', type:'phase-switch', note:'Switch to SEARCH'}, ...searchSteps];
+  state.idx = -1;
+
+  // Show LPS[0] if pattern exists
+  if (pat.length > 0) {
+    const c0 = els.lpsValues.querySelector('[data-l="0"]');
+    if (c0) { c0.textContent = '0'; c0.classList.remove('muted'); c0.classList.add('new') }
+  }
+
+  updatePhase('lps');
+  log('Built steps. Press Play or Step.');
+  positionOverlay(0);
+  enablePlay(true);
+}
+function enablePlay(v){
+  els.play.disabled = !v; els.pause.disabled = true;
+}
+function applyStep(step){
+  if (step.phase === 'lps') {
+    updatePhase('lps');
+    movePtr(els.iLps, step.i ?? 0);
+    if (typeof step.len === 'number') movePtr(els.lenLps, step.len);
+
+    els.lpsLetters.querySelectorAll('.chip').forEach(c=> c.classList.remove('pair','mismatch','match','new'));
+    if (step.type === 'lps-compare') {
+      const a = els.lpsLetters.querySelector(`[data-p="${step.i}"]`);
+      const b = els.lpsLetters.querySelector(`[data-p="${step.len}"]`);
+      if (a) a.classList.add('pair');
+      if (b) b.classList.add('pair');
+    }
+    if (step.type === 'lps-set') {
+      const cell = els.lpsValues.querySelector(`[data-l="${step.i}"]`);
+      if (cell) { cell.textContent = String(step.val); cell.classList.remove('muted'); cell.classList.add('new') }
+      const letter = els.lpsLetters.querySelector(`[data-p="${step.i}"]`);
+      if (letter) letter.classList.add('match');
+    }
+    if (step.type === 'lps-fallback') {
+      const from = els.lpsLetters.querySelector(`[data-p="${step.from}"]`);
+      if (from) from.classList.add('mismatch');
+      movePtr(els.lenLps, step.to);
+    }
+    if (step.type === 'lps-init' && state.pat.length > 0) {
+      const cell0 = els.lpsValues.querySelector('[data-l="0"]');
+      if (cell0) { cell0.textContent = '0'; cell0.classList.remove('muted'); cell0.classList.add('new') }
+    }
+  } else if (step.phase === 'search') {
+    updatePhase('search');
+
+    if (step.type === 'found') {
+      positionOverlay(step.start);
+    } else {
+      const start = Math.max(0, (step.i ?? 0) - (step.j ?? 0));
+      positionOverlay(start);
+    }
+    movePtr(els.iPtr, step.i ?? 0);
+
+    els.textRow.querySelectorAll('.chip').forEach(c=> c.classList.remove('pair','mismatch','match'));
+    els.patternOverlay.querySelectorAll('.chip').forEach(c=> c.classList.remove('pair','mismatch','match'));
+
+    if (step.type === 'compare') setPairHighlight(step.i, step.j, false);
+    if (step.type === 'advance') {
+      const t = els.textRow.querySelector(`[data-t="${(step.i ?? 1)-1}"]`);
+      const p = els.patternOverlay.querySelector(`[data-p="${(step.j ?? 1)-1}"]`);
+      if (t) t.classList.add('match'); if (p) p.classList.add('match');
+    }
+    if (step.type === 'shift') {
+      if (typeof step.j === 'number' && (step.i ?? 0) < state.text.length && step.j < state.pat.length) {
+        setPairHighlight(step.i ?? 0, step.j, false);
+      }
+    }
+    if (step.type === 'skip') {
+      const prev = (step.i ?? 1) - 1;
+      const t = els.textRow.querySelector(`[data-t="${prev}"]`);
+      const p = els.patternOverlay.querySelector(`[data-p="${step.j ?? 0}"]`);
+      if (t) t.classList.add('mismatch'); if (p) p.classList.add('mismatch');
+    }
+    if (step.type === 'found') setFoundSpan(step.start, state.pat.length);
+  }
+  if (step.type === 'phase-switch') {
+    log(`<span class="phase">Search</span> Using the LPS table to slide the pattern without rechecking known prefixes.`);
+  } else {
+    log(step.note || '');
+  }
+}
+function stepForward(){
+  if (state.idx + 1 >= state.steps.length) return;
+  state.idx++; applyStep(state.steps[state.idx]);
+}
+function play(){
+  if (state.timer) return;
+  els.play.disabled = true; els.pause.disabled = false;
+  const tick = ()=> {
+    if (state.idx + 1 >= state.steps.length) { pause(); return; }
+    stepForward();
+  };
+  state.timer = setInterval(tick, Number(els.speed.value));
+}
+function pause(){ if (state.timer) clearInterval(state.timer); state.timer=null; els.play.disabled=false; els.pause.disabled=true; }
+function finish(){ pause(); while (state.idx + 1 < state.steps.length) stepForward(); }
+function clearAll(){ pause(); clearHighlights(); log('Cleared. Build again to start fresh.'); }
+
+/* Accessibility & shortcuts */
+function onKey(e){
+  if (['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); rebuild(); }
+    return;
+  }
+  if (e.code === 'Space') { e.preventDefault(); state.timer? pause(): play(); }
+  if (e.key === '.') { stepForward(); }
+  if (e.key.toLowerCase() === 'f') { finish(); }
+  if (e.key.toLowerCase() === 'r') { rebuild(); }
+}
+
+els.build.addEventListener('click', rebuild);
+els.step.addEventListener('click', stepForward);
+els.play.addEventListener('click', play);
+els.pause.addEventListener('click', pause);
+els.finish.addEventListener('click', finish);
+els.clear.addEventListener('click', clearAll);
+els.speed.addEventListener('input', ()=>{ if (state.timer) { pause(); play(); } });
+window.addEventListener('keydown', onKey);
+window.addEventListener('resize', measureCell);
+
+/* Initial render */
+rebuild();
+</script>
+</body>
+</html>
