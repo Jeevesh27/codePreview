@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Rabin–Karp Visualizer — Responsive</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+
+    --cell: clamp(28px, 6vw, 44px);
+    --chip-gap: clamp(6px, 1.6vw, 10px);
+    --pad: clamp(10px, 2.2vw, 18px);
+    --font: clamp(14px, 1.9vw, 16px);
+    --font-sm: clamp(11px, 1.5vw, 13px);
+    --ring:0 0 0 2px rgba(108,243,255,.3) inset, 0 8px 18px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 14px; }
+
+  /* ===== Sticky toolbar ===== */
+  .toolbar-wrap {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(15,18,32,.95), rgba(15,18,32,.75));
+    backdrop-filter: blur(6px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.28);
+  }
+  .toolbar { display: grid; gap: var(--gap); padding: var(--pad) 0; }
+
+  .controls {
+    display: grid; gap: var(--gap);
+    grid-template-columns: 1.2fr 0.8fr 0.5fr 0.5fr auto;
+    align-items: start;
+  }
+  @media (max-width: 980px){ .controls { grid-template-columns: 1fr; } }
+
+  .field { display: grid; gap: 8px; }
+  label { font-size: var(--font-sm); color: var(--muted) }
+  textarea, input[type=text], input[type=number]{
+    width: 100%;
+    background: var(--slot);
+    border: 1px solid #232a52;
+    border-radius: 12px;
+    color: var(--text);
+    padding: 10px 12px;
+    outline: none;
+    font-size: var(--font);
+    transition: box-shadow var(--speed), border-color var(--speed);
+  }
+  textarea { resize: vertical; min-height: 54px; max-height: 160px; }
+  textarea:focus, input:focus { box-shadow: var(--ring); border-color: var(--accent) }
+
+  .actions { display: grid; grid-auto-flow: column; gap: 10px; justify-content: end; }
+  @media (max-width: 980px){ .actions { grid-auto-flow: row; grid-template-columns: repeat(3,minmax(0,1fr)); } }
+
+  button {
+    appearance: none; border:0; cursor:pointer; user-select:none;
+    padding: 10px 14px; border-radius: 12px; font-weight: 700; letter-spacing:.2px;
+    background: linear-gradient(180deg, #233064, #1b2654);
+    color: var(--text); box-shadow: var(--shadow);
+    transition: transform .06s ease, opacity var(--speed), filter var(--speed);
+    white-space: nowrap;
+  }
+  button:hover { transform: translateY(-1px); filter: brightness(1.05) }
+  button:active { transform: translateY(0) scale(.98) }
+  button[disabled] { opacity:.6; cursor:not-allowed }
+  .primary { background: linear-gradient(180deg, #1b9db0, #12727f) }
+  .ghost { background: #263067 }
+  .danger { background: linear-gradient(180deg, #7b2f2f, #5a2323) }
+
+  .meta {
+    display: grid; gap: var(--gap);
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .legend { display:flex; flex-wrap: wrap; gap: 10px; }
+  .pill { display:inline-flex; align-items:center; gap:8px; background:var(--chip); padding:6px 10px; border-radius:999px; font-size: var(--font-sm); color:#d8e1ff }
+  .swatch { width:12px; height:12px; border-radius:3px; background:#fff }
+  .phase { font-size: var(--font-sm); letter-spacing:.4px; text-transform:uppercase; color:#001b1f; background: var(--accent-2); padding: 4px 10px; border-radius: 999px; font-weight: 900; }
+
+  .speedbox { display:flex; align-items:center; gap:10px; justify-content:flex-end; }
+  .speedbox label { color: var(--muted); font-size: var(--font-sm) }
+  input[type=range]{ width: clamp(140px, 28vw, 280px) }
+
+  /* ===== Cards & layout ===== */
+  .hero { display:flex; align-items:flex-end; justify-content:space-between; padding: 18px 0 12px; }
+  h1 { margin:0; font-size: clamp(18px, 3.4vw, 24px); letter-spacing:.2px }
+  .muted { color: var(--muted) }
+
+  .grid { display:grid; gap: var(--gap); padding: calc(var(--pad) + 6px) 0 var(--pad); grid-template-columns: 1fr 1fr; }
+  @media (max-width: 980px){ .grid { grid-template-columns: 1fr } }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--pad);
+    min-width: 0;
+  }
+
+  /* ===== Visualization rows ===== */
+  .rowgrid {
+    position: relative;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: var(--cell);
+    gap: var(--chip-gap);
+    align-items:center;
+    padding: 10px 10px 28px 10px;
+    background: var(--panel);
+    border-radius: 12px;
+    overflow-x:auto;
+    scroll-snap-type: x proximity;
+  }
+  .chip {
+    width: var(--cell); height: var(--cell);
+    display:grid; place-items:center;
+    border-radius: 10px;
+    background: var(--chip);
+    color: var(--text);
+    font-weight:800; font-size: var(--font);
+    position: relative;
+    transition: background var(--speed), box-shadow var(--speed), transform var(--speed);
+    scroll-snap-align: start;
+  }
+  .chip.pair { background: #4a4524; box-shadow: 0 0 0 2px rgba(255,209,102,.42) inset }
+  .chip.match { background: #1f4f3c; box-shadow: 0 0 0 2px rgba(132,250,176,.2) inset }
+  .chip.mismatch { background: #4a2730; box-shadow: 0 0 0 2px rgba(255,120,120,.35) inset }
+  .chip.found { background: #23563b }
+
+  .overlay-box {
+    position:absolute; top:6px; left:10px; height: calc(var(--cell) + 8px);
+    border-radius: 10px;
+    outline: 2px dashed rgba(255,209,102,.55);
+    background: rgba(255,209,102,.08);
+    transition: left var(--speed) ease, width var(--speed) ease;
+    pointer-events:none;
+  }
+
+  .track-title { position:absolute; top:-12px; left:10px; font-size: var(--font-sm); color: var(--muted) }
+  .idxbar {
+    position:absolute; left:10px; bottom: 4px;
+    display:grid; grid-auto-flow:column; grid-auto-columns: var(--cell);
+    gap: var(--chip-gap);
+    font-size: 10px; color: var(--muted);
+  }
+  .idx { text-align:center }
+
+  .pointer {
+    position:absolute; height: 14px; width: var(--cell);
+    left:0; bottom:-18px; display:grid; place-items:center;
+    font-size: 11px; color: var(--accent);
+    transition: left var(--speed);
+  }
+  .pointer::after{ content:"▼"; line-height: 1 }
+
+  /* Info panels */
+  .info-grid { display:grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+  @media (max-width: 980px){ .info-grid { grid-template-columns: 1fr } }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items:center; }
+  .kv .k { color: var(--muted); font-size: var(--font-sm) }
+  .kv .v { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  .log {
+    min-height: 60px;
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 12px;
+    color: var(--text);
+    line-height: 1.4;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+  }
+
+  .tips { text-align:center; color: var(--muted); font-size: var(--font-sm); padding: 10px 0 24px; }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight:700 }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- ===== Toolbar ===== -->
+  <div class="toolbar-wrap">
+    <div class="toolbar">
+      <div class="controls">
+        <div class="field">
+          <label for="text">Text</label>
+          <textarea id="text" spellcheck="false">GACGCCAAGTTAACG</textarea>
+        </div>
+        <div class="field">
+          <label for="pattern">Pattern</label>
+          <input id="pattern" type="text" spellcheck="false" value="AAG" />
+        </div>
+        <div class="field">
+          <label for="radix">Base (radix)</label>
+          <input id="radix" type="number" min="2" max="1024" value="256" />
+        </div>
+        <div class="field">
+          <label for="mod">Modulus</label>
+          <input id="mod" type="number" min="5" step="1" value="101" />
+        </div>
+        <div class="actions">
+          <button id="build" class="primary" title="Build hashes & reset (Enter)">Build + Reset</button>
+          <button id="step" title="Next step (.)">Step</button>
+          <button id="play" class="ghost" title="Play (Space)">Play</button>
+          <button id="pause" class="ghost" disabled title="Pause (Space)">Pause</button>
+          <button id="finish" class="ghost" title="Finish (F)">Finish</button>
+          <button id="clear" class="danger" title="Clear highlights">Clear</button>
+        </div>
+      </div>
+
+      <div class="meta">
+        <div class="legend">
+          <span class="pill"><span class="swatch" style="background:var(--pair)"></span>Window</span>
+          <span class="pill"><span class="swatch" style="background:#1f4f3c"></span>Verified match</span>
+          <span class="pill"><span class="swatch" style="background:#4a2730"></span>Mismatch</span>
+        </div>
+        <div class="speedbox">
+          <label for="speed">Speed</label>
+          <input id="speed" type="range" min="120" max="1500" step="20" value="420" />
+          <span id="phaseTag" class="phase">Rolling Hash</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Headline ===== -->
+  <div class="hero">
+    <h1>🧮 Rabin–Karp Visualizer</h1>
+    <div class="muted">Compute a rolling hash, slide the window, and verify on hash hits.</div>
+  </div>
+
+  <!-- ===== Visualization ===== -->
+  <div class="grid">
+    <!-- Text row with sliding window -->
+    <div class="card">
+      <div class="rowgrid" id="textRow">
+        <div class="track-title">Text</div>
+        <div class="overlay-box" id="winBox" aria-hidden="true"></div>
+        <div class="pointer" id="iPtr">i</div>
+        <div class="idxbar" id="textIdx"></div>
+      </div>
+    </div>
+
+    <!-- Pattern row -->
+    <div class="card">
+      <div class="rowgrid" id="patRow">
+        <div class="track-title">Pattern</div>
+        <div class="idxbar" id="patIdx"></div>
+      </div>
+    </div>
+
+    <!-- Info panels -->
+    <div class="card info-grid" style="grid-column:1 / -1;">
+      <div class="kv">
+        <div class="k">Pattern hash (hp)</div><div class="v" id="hp">—</div>
+        <div class="k">Window hash (hw)</div><div class="v" id="hw">—</div>
+        <div class="k">Base (radix)</div><div class="v" id="radixV">—</div>
+        <div class="k">Modulus</div><div class="v" id="modV">—</div>
+        <div class="k">High power (base^(m-1) mod mod)</div><div class="v" id="highPow">—</div>
+      </div>
+      <div class="kv">
+        <div class="k">Window</div><div class="v" id="winRange">—</div>
+        <div class="k">Compare</div><div class="v" id="cmp">—</div>
+        <div class="k">Roll step</div><div class="v" id="roll">—</div>
+        <div class="k">Matches</div><div class="v" id="hits">[]</div>
+      </div>
+    </div>
+
+    <!-- Narration -->
+    <div class="card" style="grid-column:1 / -1;">
+      <div class="log" id="log" aria-live="polite">Press <b>Build + Reset</b>, then <b>Play</b> or <b>Step</b>.</div>
+    </div>
+  </div>
+
+  <div class="tips">
+    Avg: <span class="kbd">O(n + m)</span> · Worst: <span class="kbd">O(n·m)</span> (collisions) · Hash hits are verified with direct comparison.
+  </div>
+</div>
+
+<script type="module">
+/* ===== Helpers ===== */
+const els = {
+  textRow: document.getElementById('textRow'),
+  patRow: document.getElementById('patRow'),
+  textIdx: document.getElementById('textIdx'),
+  patIdx: document.getElementById('patIdx'),
+  winBox: document.getElementById('winBox'),
+  iPtr: document.getElementById('iPtr'),
+
+  hp: document.getElementById('hp'),
+  hw: document.getElementById('hw'),
+  radixV: document.getElementById('radixV'),
+  modV: document.getElementById('modV'),
+  highPow: document.getElementById('highPow'),
+  winRange: document.getElementById('winRange'),
+  cmp: document.getElementById('cmp'),
+  roll: document.getElementById('roll'),
+  hits: document.getElementById('hits'),
+
+  log: document.getElementById('log'),
+  phaseTag: document.getElementById('phaseTag'),
+
+  txtIn: document.getElementById('text'),
+  patIn: document.getElementById('pattern'),
+  radixIn: document.getElementById('radix'),
+  modIn: document.getElementById('mod'),
+  speed: document.getElementById('speed'),
+
+  build: document.getElementById('build'),
+  step: document.getElementById('step'),
+  play: document.getElementById('play'),
+  pause: document.getElementById('pause'),
+  finish: document.getElementById('finish'),
+  clear: document.getElementById('clear'),
+};
+
+const state = {
+  T: [], P: [], n: 0, m: 0,
+  R: 256, M: 101,
+  hp: 0, hw: 0, highPow: 1, // base^(m-1) % M
+  i: 0, steps: [], idx: -1, timer: null,
+  cellW: 38, gap: 8,
+  hits: []
+};
+
+function esc(s){ return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function measureCell(){
+  const chip = els.textRow.querySelector('.chip');
+  if (chip) {
+    state.cellW = chip.getBoundingClientRect().width;
+    state.gap = parseFloat(getComputedStyle(els.textRow).columnGap) || 8;
+  }
+}
+function leftOf(k){ return 10 + k * (state.cellW + state.gap) } // matches CSS padding/gap
+
+function makeChips(container, arr, key){
+  container.innerHTML = '';
+  arr.forEach((ch, i) => {
+    const sp = document.createElement('span');
+    sp.className = 'chip';
+    sp.dataset[key] = i;
+    sp.textContent = ch;
+    container.appendChild(sp);
+  });
+}
+function makeIdx(container, n){
+  container.innerHTML = '';
+  for (let i=0;i<n;i++){
+    const d = document.createElement('div');
+    d.className = 'idx'; d.textContent = i;
+    container.appendChild(d);
+  }
+}
+function moveWindow(start, width){
+  els.winBox.style.left = leftOf(start) + 'px';
+  els.winBox.style.width = width>0 ? ((state.cellW + state.gap) * width - state.gap + 4) + 'px' : '0px';
+}
+function movePtr(ptr, index){
+  ptr.style.left = leftOf(index) + 'px';
+}
+
+/* ===== Hash math ===== */
+// Convert char -> code (simple ASCII)
+function code(c){ return c.codePointAt(0) % state.M } // mod to keep numbers smaller in log
+
+function mod(x, m){ x%=m; return x<0? x+m : x; }
+
+// Compute initial hash of first m chars
+function initialHash(arr, m){
+  let h=0;
+  for (let i=0;i<m;i++){
+    h = mod(h*state.R + arr[i].codePointAt(0), state.M);
+  }
+  return h;
+}
+
+// Roll: remove leading, add trailing
+// hw' = ( (hw - lead*R^(m-1)) * R + next ) mod M
+function rollHash(hw, leadChar, nextChar){
+  const lead = mod(leadChar.codePointAt(0) * state.highPow, state.M);
+  let v = mod(hw - lead, state.M);
+  v = mod(v * state.R, state.M);
+  v = mod(v + nextChar.codePointAt(0), state.M);
+  return v;
+}
+
+/* ===== Step generation ===== */
+function buildSteps(){
+  const T = state.T, P = state.P, n = state.n, m = state.m;
+  const steps = [];
+
+  // 1) Precompute hashes
+  steps.push({type:'phase', note:'Compute initial hashes.'});
+  state.hp = initialHash(P, m);
+  state.hw = initialHash(T, m);
+
+  // 2) Slide window
+  for (let i=0; i <= n - m; i++){
+    steps.push({type:'window', i, note:`Window [${i}..${i+m-1}]`});
+
+    // Compare hashes
+    steps.push({
+      type:'compare-hash',
+      i, hp: state.hp, hw: state.hw,
+      note:`Compare hashes: hp=${state.hp}, hw=${state.hw}`
+    });
+
+    if (state.hw === state.hp) {
+      // Verify characters
+      steps.push({type:'verify-start', i, note:`Hash hit → verify characters.`});
+      let all = true;
+      for (let k=0;k<m;k++){
+        const same = T[i+k] === P[k];
+        steps.push({type:'verify', i, k, same, note:`Compare T[${i+k}] = "${esc(T[i+k])}" with P[${k}] = "${esc(P[k])}" → ${same?'✓':'✗'}`});
+        if (!same) { all=false; break; }
+      }
+      if (all) {
+        steps.push({type:'found', i, note:`Match at index ${i}`});
+      } else {
+        steps.push({type:'verify-end', i, note:`Verification failed — collision.`});
+      }
+    }
+
+    // Roll hash for next window
+    if (i < n - m) {
+      const next = T[i+m];
+      const lead = T[i];
+      const newHw = rollHash(state.hw, lead, next);
+      steps.push({
+        type:'roll',
+        i, from: state.hw, to: newHw,
+        lead, next,
+        note:`Roll: remove '${esc(lead)}', add '${esc(next)}' → hw = ${newHw}`
+      });
+      state.hw = newHw;
+    }
+  }
+  steps.push({type:'done', note:'Search finished.'});
+  return steps;
+}
+
+/* ===== Rendering ===== */
+function updateInfo(){
+  els.hp.textContent = state.hp;
+  els.hw.textContent = state.hw;
+  els.radixV.textContent = state.R;
+  els.modV.textContent = state.M;
+  els.highPow.textContent = state.highPow;
+  els.hits.textContent = JSON.stringify(state.hits);
+}
+
+function clearHighlights(){
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('pair','match','mismatch','found'));
+  els.cmp.textContent = '—';
+  els.roll.textContent = '—';
+}
+
+function rebuild(){
+  // read inputs
+  const Tstr = els.txtIn.value;
+  const Pstr = els.patIn.value;
+  const R = Math.max(2, parseInt(els.radixIn.value || '256', 10));
+  const M = Math.max(5, parseInt(els.modIn.value || '101', 10));
+
+  state.T = [...Tstr]; state.P = [...Pstr];
+  state.n = state.T.length; state.m = state.P.length;
+  state.R = R; state.M = M;
+  state.hits = [];
+  state.idx = -1;
+  state.timer && clearInterval(state.timer); state.timer = null;
+
+  // paint rows
+  makeChips(els.textRow, state.T, 't'); makeIdx(els.textIdx, state.n);
+  makeChips(els.patRow, state.P, 'p'); makeIdx(els.patIdx, state.m);
+  measureCell();
+  movePtr(els.iPtr, 0);
+  moveWindow(0, Math.max(0, state.m));
+
+  // precompute highPow = R^(m-1) mod M
+  state.highPow = 1;
+  for (let i=0;i<state.m-1;i++) state.highPow = mod(state.highPow * state.R, state.M);
+
+  // init hashes
+  state.hp = state.m ? initialHash(state.P, state.m) : 0;
+  state.hw = (state.m && state.n >= state.m) ? initialHash(state.T, state.m) : 0;
+
+  // build steps
+  state.steps = (state.m && state.n >= state.m) ? buildSteps() : [{type:'done', note:'Nothing to do (pattern empty or longer than text).'}];
+
+  updateInfo();
+  clearHighlights();
+  log('Built. Press Play or Step.');
+  enablePlay(true);
+}
+function enablePlay(v){ els.play.disabled = !v; els.pause.disabled = true; }
+
+function log(msg){ els.log.innerHTML = msg }
+
+function highlightWindow(i){
+  moveWindow(i, state.m);
+  movePtr(els.iPtr, i);
+  els.winRange.textContent = `[${i}..${i+state.m-1}]`;
+}
+
+function applyStep(step){
+  if (!step) return;
+  switch(step.type){
+    case 'phase':
+      log('Compute pattern hash and initial window hash.'); break;
+
+    case 'window':
+      clearHighlights();
+      highlightWindow(step.i);
+      log(step.note);
+      break;
+
+    case 'compare-hash': {
+      updateInfo();
+      els.cmp.textContent = `hp (${step.hp}) ?= hw (${step.hw})`;
+      const chips = [...els.textRow.querySelectorAll('.chip')].slice(step.i, step.i+state.m);
+      chips.forEach(c => c.classList.add('pair'));
+      log(step.note + (step.hp===step.hw ? ' → Hash hit!' : ' → Different.'));
+      break;
+    }
+
+    case 'verify-start':
+      log(step.note);
+      break;
+
+    case 'verify': {
+      const t = els.textRow.querySelector(`[data-t="${step.i+step.k}"]`);
+      const p = els.patRow.querySelector(`[data-p="${step.k}"]`);
+      if (t && p) (step.same ? [t,p].forEach(e=>e.classList.add('match')) : [t,p].forEach(e=>e.classList.add('mismatch')));
+      els.cmp.textContent = `Verify @ k=${step.k}`;
+      break;
+    }
+
+    case 'verify-end':
+      log(step.note);
+      break;
+
+    case 'found': {
+      for (let k=0;k<state.m;k++){
+        const t = els.textRow.querySelector(`[data-t="${step.i+k}"]`);
+        if (t) t.classList.add('found');
+      }
+      state.hits.push(step.i);
+      updateInfo();
+      log(step.note);
+      break;
+    }
+
+    case 'roll': {
+      els.roll.textContent = `((hw - lead·R^(m-1))·R + next) mod M = ${step.to}  (lead='${esc(step.lead)}', next='${esc(step.next)}')`;
+      log(step.note);
+      break;
+    }
+
+    case 'done':
+      log(step.note);
+      break;
+  }
+}
+
+/* ===== Transport ===== */
+function stepForward(){
+  if (state.idx + 1 >= state.steps.length) return;
+  state.idx++;
+  applyStep(state.steps[state.idx]);
+}
+function play(){
+  if (state.timer) return;
+  els.play.disabled = true; els.pause.disabled = false;
+  const tick = () => {
+    if (state.idx + 1 >= state.steps.length) { pause(); return; }
+    stepForward();
+  };
+  state.timer = setInterval(tick, Number(els.speed.value));
+}
+function pause(){ if (state.timer) clearInterval(state.timer); state.timer=null; els.play.disabled=false; els.pause.disabled=true; }
+function finish(){ pause(); while (state.idx + 1 < state.steps.length) stepForward(); }
+function clearAll(){ pause(); clearHighlights(); log('Cleared. Build again to start fresh.'); }
+
+/* ===== Shortcuts ===== */
+function onKey(e){
+  if (['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); rebuild(); }
+    return;
+  }
+  if (e.code === 'Space') { e.preventDefault(); state.timer? pause(): play(); }
+  if (e.key === '.') stepForward();
+  if (e.key.toLowerCase() === 'f') finish();
+  if (e.key.toLowerCase() === 'r') rebuild();
+}
+
+/* Wire up */
+els.build.addEventListener('click', rebuild);
+els.step.addEventListener('click', stepForward);
+els.play.addEventListener('click', play);
+els.pause.addEventListener('click', pause);
+els.finish.addEventListener('click', finish);
+els.clear.addEventListener('click', clearAll);
+els.speed.addEventListener('input', ()=>{ if (state.timer) { pause(); play(); } });
+window.addEventListener('keydown', onKey);
+window.addEventListener('resize', measureCell);
+
+/* Boot */
+rebuild();
+</script>
+</body>
+</html>
