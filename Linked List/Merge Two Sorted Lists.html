@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>🔗 Merge Two Sorted Lists — Iterative & Recursive (Step-by-step)</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  body{ margin:0; background:var(--bg); color:var(--text);
+        font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
+  .app{ max-width:1100px; margin:24px auto; padding:0 16px; }
+  header{ display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  header h1{ font-size:clamp(20px,3vw,28px); margin:0; }
+  .badge{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b132b; font-weight:700;
+          padding:6px 10px; border-radius:999px; box-shadow:var(--shadow); font-size:12px; letter-spacing:.2px; }
+
+  .grid{ display:grid; gap:18px; grid-template-columns: 1.2fr .8fr; }
+  @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+
+  .panel{ background:linear-gradient(180deg,var(--panel),var(--panel-2));
+          border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; position:relative; }
+
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+             background:var(--panel-2); border-radius:12px; padding:10px; border:1px solid rgba(255,255,255,.06); }
+  .group{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.03); padding:8px 10px; border-radius:10px; }
+  label{ color:var(--muted); font-size:13px; }
+  input[type="range"]{ width:150px; }
+  select{ background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.08);
+          border-radius:8px; padding:6px 8px; outline:none; }
+  button{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b132b; border:none;
+          border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer; box-shadow:var(--shadow);
+          transition:transform .06s ease, filter .2s ease; }
+  button:active{ transform:translateY(1px) scale(.99); }
+  button.secondary{ background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.08); box-shadow:none; font-weight:600; }
+
+  .pill{ background:var(--chip); border:1px solid rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; font-weight:600; color:var(--text); }
+  .pill.ok{ background:rgba(132,250,176,.15); border-color:rgba(132,250,176,.35); color:var(--ok); }
+  .pill.warn{ background:rgba(255,209,102,.12); border-color:rgba(255,209,102,.35); color:var(--pair); }
+  .pill.muted{ background:rgba(255,255,255,.06); color:var(--muted); }
+
+  .canvas{ background: radial-gradient(1200px 600px at 10% 10%, rgba(138,233,193,.06), transparent 60%),
+                       radial-gradient(1000px 500px at 90% 0%, rgba(108,243,255,.07), transparent 55%),
+                       var(--panel);
+           border-radius:12px; padding:14px; overflow:auto; min-height:330px; border:1px solid rgba(255,255,255,.06); }
+  .canvas svg{ display:block; width:max(900px,100%); height:340px; }
+
+  .row-label{ font-size:12px; fill:var(--muted); }
+
+  .node{ filter: drop-shadow(0 8px 14px rgba(0,0,0,.35)); }
+  .node rect{ fill:#1a2142; stroke:#2b356d; stroke-width:1.2; rx:10; ry:10; }
+  .node.active rect{ stroke:var(--pair); }
+  .node.moved rect{ stroke:var(--new); }
+  .node text{ font-weight:700; font-size:14px; fill:var(--text); }
+  .edge{ stroke:#5160b9; stroke-width:2; marker-end:url(#arrow); }
+  marker#arrow > path{ fill:#5160b9; }
+
+  .pointer circle{ filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); stroke:#0b132b; stroke-width:2; }
+  .pointer text{ font-weight:900; font-size:12px; fill:#0b132b; }
+  .pointer.l1 circle{ fill:var(--pair); }   /* A pointer */
+  .pointer.l2 circle{ fill:var(--accent); } /* B pointer */
+  .pointer.tail circle{ fill:var(--new); }  /* Tail pointer */
+
+  .status{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; color:var(--muted); font-size:14px; margin-top:10px; }
+  .code{ font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+         background:#0f142e; border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:10px; overflow:auto; font-size:13px; color:#d6dcff; }
+  .trace{ max-height:220px; overflow:auto; background:#0f142e; border:1px solid rgba(255,255,255,.06);
+          border-radius:12px; padding:10px; font-family: ui-monospace, monospace; font-size:12px; color:#d6dcff; white-space:pre; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <span class="badge">Merge Two Sorted Lists</span>
+    <h1>🔗 Merge Two Sorted Lists (Iterative &amp; Recursive — step-by-step)</h1>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: Visualization -->
+    <section class="panel">
+      <div class="controls" role="group" aria-label="Controls">
+        <div class="group">
+          <label for="lenA">Len A</label>
+          <input id="lenA" type="range" min="1" max="10" value="5"/>
+          <span id="lenAOut" class="pill muted">5</span>
+        </div>
+        <div class="group">
+          <label for="lenB">Len B</label>
+          <input id="lenB" type="range" min="1" max="10" value="5"/>
+          <span id="lenBOut" class="pill muted">5</span>
+        </div>
+        <div class="group">
+          <label for="maxVal">Max Value</label>
+          <input id="maxVal" type="range" min="9" max="99" value="40" step="1"/>
+          <span id="maxValOut" class="pill muted">40</span>
+        </div>
+        <div class="group">
+          <label for="method">Method</label>
+          <select id="method">
+            <option value="iter">Iterative (dummy + tail)</option>
+            <option value="recur">Recursive (step-by-step)</option>
+          </select>
+        </div>
+        <div class="group">
+          <button id="btnRebuild" class="secondary">Rebuild</button>
+          <button id="btnStep">Step</button>
+          <button id="btnPlay">Play</button>
+          <button id="btnFinish" class="secondary">Finish</button>
+          <button id="btnReset" class="secondary">Reset</button>
+        </div>
+      </div>
+
+      <div class="canvas" id="canvas">
+        <svg id="svg" role="img" aria-label="Two input lists, result list, and pointers">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L10,3 L0,6 Z"></path>
+            </marker>
+          </defs>
+          <!-- Edges -->
+          <g id="edges"></g>
+          <!-- Nodes -->
+          <g id="nodes"></g>
+
+          <!-- Pointers -->
+          <g id="ptrA" class="pointer l1">
+            <circle cx="0" cy="0" r="12"></circle><text x="0" y="4" text-anchor="middle">A</text>
+          </g>
+          <g id="ptrB" class="pointer l2">
+            <circle cx="0" cy="0" r="12"></circle><text x="0" y="4" text-anchor="middle">B</text>
+          </g>
+          <g id="ptrTail" class="pointer tail">
+            <circle cx="0" cy="0" r="12"></circle><text x="0" y="4" text-anchor="middle">T</text>
+          </g>
+
+          <!-- Row labels -->
+          <text class="row-label" id="labA" x="10" y="70">List A</text>
+          <text class="row-label" id="labB" x="10" y="150">List B</text>
+          <text class="row-label" id="labR" x="10" y="230">Result</text>
+        </svg>
+      </div>
+
+      <div class="status">
+        <span id="stepPill" class="pill">Steps: 0</span>
+        <span id="cmpPill" class="pill warn">Compare head(A) vs head(B)</span>
+        <span id="resultPill" class="pill" style="display:none;"></span>
+      </div>
+    </section>
+
+    <!-- RIGHT: Explanation -->
+    <aside class="panel">
+      <h2 style="margin:0 0 10px;">Approaches</h2>
+      <ul style="margin:0 0 12px 1.1em;">
+        <li><strong>Iterative:</strong> Use a dummy node and a <em>tail</em> pointer. Repeatedly pick the smaller head among A and B, attach to tail, advance that list. Time <strong>O(n+m)</strong>, space <strong>O(1)</strong>.</li>
+        <li><strong>Recursive (steppable):</strong> At each step, we <em>compare</em> heads, <em>recurse</em> on the remainder, then <em>return</em> and prepend the chosen head. The call stack (right) shows entries/returns. Time <strong>O(n+m)</strong>, space <strong>O(n+m)</strong> (stack).</li>
+      </ul>
+
+      <div class="code" aria-label="Recursive pseudocode">
+<pre><code>// Recursive
+if A == null: return B
+if B == null: return A
+if A.val &lt;= B.val:
+  A.next = merge(A.next, B)
+  return A
+else:
+  B.next = merge(A, B.next)
+  return B
+</code></pre>
+      </div>
+
+      <h3 style="margin:14px 0 6px;">Recursive call trace</h3>
+      <div id="trace" class="trace" aria-live="polite">Choose <em>Recursive</em> and hit <strong>Step</strong> or <strong>Play</strong>.</div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ---------- DOM ----------
+  const svg = document.getElementById('svg');
+  const gNodes = document.getElementById('nodes');
+  const gEdges = document.getElementById('edges');
+  const ptrA = document.getElementById('ptrA');
+  const ptrB = document.getElementById('ptrB');
+  const ptrT = document.getElementById('ptrTail');
+  const traceBox = document.getElementById('trace');
+
+  const lenA = document.getElementById('lenA');
+  const lenB = document.getElementById('lenB');
+  const maxVal = document.getElementById('maxVal');
+  const lenAOut = document.getElementById('lenAOut');
+  const lenBOut = document.getElementById('lenBOut');
+  const maxValOut = document.getElementById('maxValOut');
+  const methodSel = document.getElementById('method');
+
+  const btnRebuild = document.getElementById('btnRebuild');
+  const btnStep = document.getElementById('btnStep');
+  const btnPlay = document.getElementById('btnPlay');
+  const btnFinish = document.getElementById('btnFinish');
+  const btnReset = document.getElementById('btnReset');
+
+  const stepPill = document.getElementById('stepPill');
+  const cmpPill = document.getElementById('cmpPill');
+  const resultPill = document.getElementById('resultPill');
+
+  // ---------- Geometry ----------
+  const nodeW = 72, nodeH = 40, spacing = 96;
+  const rowYA = 80, rowYB = 160, rowYR = 240;
+  const baseX = 80;
+
+  // ---------- Data / State ----------
+  let A = [], B = [], R = [];
+  let nextA = [], nextB = [];
+  let posA = [], posB = [], posR = [];
+  let curA = -1, curB = -1;         // for pointer highlights (method-specific)
+  let steps = 0;
+  let playing = false, timer = null;
+
+  // Recursive stepping state
+  let rec = {
+    started: false,
+    done: false,
+    stack: [],        // frames: {a, b, phase:'enter'|'afterChild', pick:'A'|'B'|null}
+    trace: []
+  };
+
+  // ---------- Robust helpers (no undefined in trace) ----------
+  function normA(i){ return (i >= 0 && i < A.length) ? i : -1; }
+  function normB(i){ return (i >= 0 && i < B.length) ? i : -1; }
+  function isEmptyA(i){ return !(i >= 0 && i < A.length); }
+  function isEmptyB(i){ return !(i >= 0 && i < B.length); }
+  function vA(i){ return isEmptyA(i) ? '∅' : A[i]; }
+  function vB(i){ return isEmptyB(i) ? '∅' : B[i]; }
+  function indent(n){ return '  '.repeat(Math.max(0,n)); }
+
+  // ---------- Setup ----------
+  lenAOut.textContent = lenA.value;
+  lenBOut.textContent = lenB.value;
+  maxValOut.textContent = maxVal.value;
+
+  function randSorted(n, maxV){
+    const arr = Array.from({length:n}, ()=> 1 + Math.floor(Math.random()*maxV));
+    arr.sort((a,b)=>a-b);
+    return arr;
+  }
+
+  function resetRecState(){
+    rec.started = false;
+    rec.done = false;
+    rec.stack = [];
+    rec.trace = [];
+    traceBox.textContent = 'Choose Recursive and hit Step or Play.';
+  }
+
+  function buildLists(){
+    const nA = Number(lenA.value), nB = Number(lenB.value), M = Number(maxVal.value);
+    A = randSorted(nA, M);
+    B = randSorted(nB, M);
+
+    nextA = Array.from({length:nA}, (_,i)=> i<nA-1 ? i+1 : null);
+    nextB = Array.from({length:nB}, (_,i)=> i<nB-1 ? i+1 : null);
+    R = [];
+
+    steps = 0;
+    curA = nA ? 0 : -1;
+    curB = nB ? 0 : -1;
+    resetRecState();
+
+    layout();
+    drawAll();
+    placePointers(true);
+    updateStatus();
+    resultPill.style.display = 'none';
+  }
+
+  function layout(){
+    posA = []; posB = []; posR = [];
+    for(let i=0;i<A.length;i++) posA.push({x: baseX + i*spacing, y: rowYA});
+    for(let i=0;i<B.length;i++) posB.push({x: baseX + i*spacing, y: rowYB});
+    for(let i=0;i<A.length + B.length;i++) posR.push({x: baseX + i*spacing, y: rowYR});
+    const maxNodes = Math.max(A.length, B.length, A.length+B.length);
+    const width = baseX + Math.max(1,maxNodes-1)*spacing + 220;
+    svg.setAttribute('viewBox', `0 0 ${Math.max(900,width)} 320`);
+  }
+
+  function drawAll(){
+    gNodes.innerHTML = '';
+    gEdges.innerHTML = '';
+
+    function node(x,y,label,rowKey,idx,isMoved){
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('class','node'+(isMoved?' moved':''));
+      g.setAttribute('data-row',rowKey);
+      g.setAttribute('data-idx',String(idx));
+
+      const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rect.setAttribute('x', x); rect.setAttribute('y', y - nodeH/2);
+      rect.setAttribute('width', nodeW); rect.setAttribute('height', nodeH);
+      g.appendChild(rect);
+
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('x', x + nodeW/2); text.setAttribute('y', y + 5);
+      text.setAttribute('text-anchor','middle');
+      text.textContent = label;
+      g.appendChild(text);
+      gNodes.appendChild(g);
+    }
+
+    function drawEdge(x1,y1,x2,y2){
+      const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+      l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+      l.setAttribute('class','edge');
+      l.setAttribute('marker-end','url(#arrow)');
+      gEdges.appendChild(l);
+    }
+
+    // Draw A with edges
+    for(let i=0;i<A.length;i++){
+      node(posA[i].x, posA[i].y, A[i], 'A', i, false);
+      if(nextA[i] !== null){
+        drawEdge(posA[i].x + nodeW + 4, posA[i].y, posA[nextA[i]].x - 4, posA[nextA[i]].y);
+      }
+    }
+    // Draw B
+    for(let i=0;i<B.length;i++){
+      node(posB[i].x, posB[i].y, B[i], 'B', i, false);
+      if(nextB[i] !== null){
+        drawEdge(posB[i].x + nodeW + 4, posB[i].y, posB[nextB[i]].x - 4, posB[nextB[i]].y);
+      }
+    }
+    // Draw R (built so far)
+    for(let i=0;i<R.length;i++){
+      node(posR[i].x, posR[i].y, R[i], 'R', i, true);
+      if(i>0){
+        drawEdge(posR[i-1].x + nodeW + 4, posR[i-1].y, posR[i].x - 4, posR[i].y);
+      }
+    }
+
+    // Highlight active heads (depends on method)
+    document.querySelectorAll('.node').forEach(n=>n.classList.remove('active'));
+    if(curA !== -1){
+      const g = gNodes.querySelector(`.node[data-row="A"][data-idx="${curA}"]`);
+      if(g) g.classList.add('active');
+    }
+    if(curB !== -1){
+      const g = gNodes.querySelector(`.node[data-row="B"][data-idx="${curB}"]`);
+      if(g) g.classList.add('active');
+    }
+  }
+
+  function placePointers(immediate=false){
+    const dur = immediate ? 0 : 300;
+    const set = (el, x, y)=>{
+      el.style.transition = `transform ${dur}ms ease`;
+      el.setAttribute('transform', `translate(${x},${y - nodeH/2 - 18})`);
+    };
+    // A pointer
+    if(curA !== -1 && posA[curA]) set(ptrA, posA[curA].x + nodeW/2, posA[curA].y);
+    else set(ptrA, baseX - 40, rowYA);
+    // B pointer
+    if(curB !== -1 && posB[curB]) set(ptrB, posB[curB].x + nodeW/2, posB[curB].y);
+    else set(ptrB, baseX - 40, rowYB);
+    // Tail pointer (end of R)
+    const tIndex = R.length ? R.length - 1 : -1;
+    if(tIndex >= 0) set(ptrT, posR[tIndex].x + nodeW/2, posR[tIndex].y);
+    else set(ptrT, baseX - 40, rowYR);
+  }
+
+  function updateStatus(note){
+    stepPill.textContent = `Steps: ${steps}`;
+    if(note){ cmpPill.textContent = note; return; }
+    if(methodSel.value === 'iter'){
+      const aVal = curA !== -1 ? A[curA] : '∅';
+      const bVal = curB !== -1 ? B[curB] : '∅';
+      cmpPill.textContent = `Compare A:${aVal} vs B:${bVal}`;
+    } else {
+      if(!rec.started){
+        cmpPill.textContent = 'Recursive: ready';
+      } else {
+        const f = rec.stack[rec.stack.length-1];
+        const phaseText = f.phase==='afterChild' ? ' ↩ return phase' : '';
+        cmpPill.textContent = `merge(${vA(f.a)}, ${vB(f.b)})${phaseText}`;
+      }
+    }
+  }
+
+  // ---------- Iterative flow ----------
+  function stepIter(){
+    if(curA === -1 && curB === -1){ finish('Merged (iterative) ✅'); return; }
+    if(curA === -1){ attachFrom('B'); return; }
+    if(curB === -1){ attachFrom('A'); return; }
+    const take = (A[curA] <= B[curB]) ? 'A' : 'B';
+    attachFrom(take);
+  }
+
+  function attachFrom(which){
+    let val;
+    if(which === 'A'){
+      val = A[curA];
+      curA = (nextA[curA] === null) ? -1 : nextA[curA];
+    } else {
+      val = B[curB];
+      curB = (nextB[curB] === null) ? -1 : nextB[curB];
+    }
+    R.push(val);
+    drawAll(); placePointers(); steps++;
+    updateStatus(`${which} -> tail (${val})`);
+  }
+
+  // ---------- Recursive (step-by-step) ----------
+  function ensureRecStarted(){
+    if(rec.started) return;
+    rec.started = true;
+    rec.done = false;
+    rec.stack = [];
+    rec.trace = [];
+    const a0 = normA(0);
+    const b0 = normB(0);
+    rec.stack.push({a:a0, b:b0, phase:'enter', pick:null});
+    curA = a0; curB = b0;
+    rec.trace.push(`merge(${vA(a0)}, ${vB(b0)})`);
+    traceBox.textContent = rec.trace.join('\n');
+    updateStatus();
+  }
+
+  function stepRecursive(){
+    if(rec.done) return;
+    ensureRecStarted();
+
+    const f = rec.stack[rec.stack.length-1];
+    const depth = rec.stack.length - 1;
+
+    // clamp frame indices
+    f.a = normA(f.a);
+    f.b = normB(f.b);
+
+    // ENTER phase: decide or base-case
+    if(f.phase === 'enter'){
+      // Base cases
+      if(isEmptyA(f.a) && isEmptyB(f.b)){
+        R = [];
+        drawAll(); placePointers(); steps++;
+        rec.trace.push(`${indent(depth)}↩ return ∅`);
+        rec.stack.pop();
+        if(rec.stack.length === 0){ rec.done = true; finish('Merged (recursive) ✅'); }
+        traceBox.textContent = rec.trace.join('\n');
+        updateStatus('Base: both ∅'); return;
+      }
+      if(isEmptyA(f.a)){
+        const rest = isEmptyB(f.b) ? [] : B.slice(f.b);
+        R = rest.slice(); // show tail from B
+        drawAll(); placePointers(); steps++;
+        rec.trace.push(`${indent(depth)}A=∅ → return B[${rest.join(', ')}]`);
+        rec.stack.pop();
+        if(rec.stack.length === 0){ rec.done = true; finish('Merged (recursive) ✅'); }
+        traceBox.textContent = rec.trace.join('\n');
+        updateStatus('Base: A is ∅ → return B'); return;
+      }
+      if(isEmptyB(f.b)){
+        const rest = isEmptyA(f.a) ? [] : A.slice(f.a);
+        R = rest.slice(); // show tail from A
+        drawAll(); placePointers(); steps++;
+        rec.trace.push(`${indent(depth)}B=∅ → return A[${rest.join(', ')}]`);
+        rec.stack.pop();
+        if(rec.stack.length === 0){ rec.done = true; finish('Merged (recursive) ✅'); }
+        traceBox.textContent = rec.trace.join('\n');
+        updateStatus('Base: B is ∅ → return A'); return;
+      }
+
+      // Choose and recurse
+      const aVal = A[f.a], bVal = B[f.b];
+      f.pick = (aVal <= bVal) ? 'A' : 'B';
+      f.phase = 'afterChild';
+      const childA = (f.pick === 'A') ? normA(f.a + 1) : f.a;
+      const childB = (f.pick === 'B') ? normB(f.b + 1) : f.b;
+      const child = {a: childA, b: childB, phase:'enter', pick:null};
+
+      rec.trace.push(`${indent(depth)}pick ${f.pick}:${f.pick==='A'?aVal:bVal}`);
+      rec.trace.push(`${indent(depth)}→ recurse merge(${vA(child.a)}, ${vB(child.b)})`);
+      rec.stack.push(child);
+      curA = child.a; curB = child.b;
+      steps++;
+      traceBox.textContent = rec.trace.join('\n');
+      updateStatus();
+      placePointers();
+      return;
+    }
+
+    // AFTER-CHILD phase: child returned a (sub)merged list in R; now prepend chosen head and return
+    if(f.phase === 'afterChild'){
+      const chosenVal = (f.pick === 'A') ? A[f.a] : B[f.b];
+      R.unshift(chosenVal);        // prepend head while unwinding
+      drawAll(); placePointers(); steps++;
+
+      rec.trace.push(`${indent(depth)}↩ return ${chosenVal}`);
+      rec.stack.pop();            // return to caller
+      if(rec.stack.length === 0){ rec.done = true; finish('Merged (recursive) ✅'); }
+      else {
+        const caller = rec.stack[rec.stack.length-1];
+        curA = caller.a; curB = caller.b;
+      }
+      traceBox.textContent = rec.trace.join('\n');
+      updateStatus('Return: prepend chosen head');
+      return;
+    }
+  }
+
+  function autoplay(on){
+    if(on){
+      if(playing) return;
+      playing = true; btnPlay.textContent = 'Pause';
+      timer = setInterval(()=>{
+        if(methodSel.value === 'iter'){
+          if(curA === -1 && curB === -1){ autoplay(false); finish('Merged (iterative) ✅'); return; }
+          stepIter();
+        } else {
+          if(rec.done){ autoplay(false); return; }
+          stepRecursive();
+        }
+      }, 650);
+    } else {
+      playing = false; btnPlay.textContent = 'Play';
+      if(timer){ clearInterval(timer); timer = null; }
+    }
+  }
+
+  function finish(msg){
+    resultPill.style.display = 'inline-block';
+    resultPill.className = 'pill ok';
+    resultPill.textContent = msg;
+    updateStatus();
+  }
+
+  function resetAll(){
+    autoplay(false);
+    buildLists();
+  }
+
+  // ---------- UI Events ----------
+  lenA.addEventListener('input', ()=>{ lenAOut.textContent=lenA.value; });
+  lenB.addEventListener('input', ()=>{ lenBOut.textContent=lenB.value; });
+  maxVal.addEventListener('input', ()=>{ maxValOut.textContent=maxVal.value; });
+
+  btnRebuild.addEventListener('click', ()=> buildLists());
+  btnReset.addEventListener('click', ()=> resetAll());
+
+  btnStep.addEventListener('click', ()=>{
+    if(methodSel.value === 'iter') stepIter();
+    else stepRecursive();
+  });
+
+  btnPlay.addEventListener('click', ()=> autoplay(!playing));
+
+  btnFinish.addEventListener('click', ()=>{
+    if(methodSel.value === 'iter'){
+      while(!(curA===-1 && curB===-1)) stepIter();
+      finish('Merged (iterative) ✅');
+    } else {
+      // run to completion safely
+      for(let i=0;i<1000 && !rec.done;i++) stepRecursive();
+    }
+  });
+
+  methodSel.addEventListener('change', ()=>{
+    autoplay(false);
+    buildLists(); // keep states clean when switching
+  });
+
+  document.addEventListener('keydown',(e)=>{
+    if(e.key===' '){ e.preventDefault(); autoplay(!playing); }
+    if(e.key==='ArrowRight'){ e.preventDefault(); if(methodSel.value==='iter') stepIter(); else stepRecursive(); }
+    if(e.key==='r' || e.key==='R'){ e.preventDefault(); resetAll(); }
+  });
+
+  // ---------- Init ----------
+  buildLists();
+})();
+</script>
+</body>
+</html>
