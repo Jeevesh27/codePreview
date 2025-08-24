@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Binary Tree Traversal Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  /* Layout */
+  html, body { height: 100%; background: var(--bg); color: var(--text); }
+  body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 32px auto;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+
+  .title {
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .badge {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0b1320; font-weight: 800; padding: 6px 10px; border-radius: 999px;
+    font-size: 12px; letter-spacing: .5px; text-transform: uppercase;
+  }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  /* Control bar */
+  .controls {
+    display: grid; grid-template-columns: 1fr auto auto auto auto; gap: var(--gap);
+    padding: 16px; align-items: center;
+  }
+  .controls .group { display: flex; align-items: center; gap: 10px; }
+  label { color: var(--muted); font-size: 13px; }
+  select, button, input[type="range"] {
+    background: var(--slot); color: var(--text); border: 1px solid rgba(255,255,255,.06);
+    padding: 10px 12px; border-radius: 10px; outline: none;
+  }
+  button {
+    cursor: pointer; font-weight: 700; letter-spacing: .2px;
+    transition: transform .05s ease, box-shadow .2s ease, background .2s ease;
+  }
+  button:hover { box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+  button:active { transform: translateY(1px); }
+  .primary { background: var(--accent); color: #0b1320; }
+  .ghost { background: var(--chip); }
+
+  /* Canvas */
+  .canvas {
+    position: relative; height: clamp(360px, 52vh, 640px);
+  }
+  svg {
+    width: 100%; height: 100%; display: block;
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+  }
+
+  /* Arrow marker + edges */
+  defs marker#arrow > path { fill: var(--muted); }
+  .edge {
+    stroke: var(--muted); stroke-width: 2;
+    marker-end: url(#arrow); opacity: .9;
+    transition: stroke var(--speed), opacity var(--speed);
+  }
+  .edge.active { stroke: var(--pair); opacity: 1; }
+
+  /* Nodes */
+  .node {
+    transition: transform var(--speed), filter var(--speed);
+    cursor: default;
+  }
+  .dot {
+    fill: var(--chip);
+    stroke: rgba(255,255,255,.1);
+    stroke-width: 1.5;
+    filter: drop-shadow(0 10px 18px rgba(0,0,0,.45));
+  }
+  .node text {
+    fill: var(--text);
+    font-weight: 800;
+    font-size: 14px;
+    dominant-baseline: middle;
+    text-anchor: middle;
+  }
+  .node.focus .dot {
+    fill: var(--pair);
+  }
+  .node.visited .dot {
+    fill: var(--new);
+  }
+  .node.focus { transform: scale(1.08); }
+  .node.visited { transform: scale(1.0); }
+
+  /* Trail / output chips */
+  .trail {
+    display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; border-top: 1px solid rgba(255,255,255,.06);
+  }
+  .chip {
+    background: var(--chip); color: var(--text); border: 1px solid rgba(255,255,255,.06);
+    border-radius: 999px; padding: 6px 10px; font-weight: 700; min-width: 34px; text-align: center;
+  }
+
+  .footer-note {
+    padding: 0 16px 16px 16px; color: var(--muted); font-size: 13px;
+  }
+
+  .legend {
+    display:flex; gap:12px; align-items:center; color:var(--muted); font-size:12px; padding: 0 16px 12px;
+  }
+  .key { display:flex; gap:6px; align-items:center; }
+  .swatch { width:14px; height:14px; border-radius:3px; }
+  .swatch.focus { background: var(--pair); }
+  .swatch.visited { background: var(--new); }
+  .swatch.edge { background: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="title">
+        <span class="badge">Binary Trees</span>
+        <h2 style="margin:0">🔄 Traversal Visualizer</h2>
+      </div>
+      <div style="color:var(--muted);font-size:13px;">
+        Inorder shows sorted output for BSTs (Left → Root → Right)
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="controls">
+        <div class="group">
+          <label for="algo">Traversal</label>
+          <select id="algo">
+            <option value="inorder" selected>Inorder (L → R → R)</option>
+            <option value="preorder">Preorder (R → L → R)</option>
+            <option value="postorder">Postorder (L → R → R)</option>
+          </select>
+        </div>
+
+        <div class="group">
+          <label for="speed">Speed</label>
+          <input id="speed" type="range" min="200" max="1600" value="800" step="50" />
+        </div>
+
+        <button id="play" class="primary">▶ Play</button>
+        <button id="step" class="ghost">⏭ Step</button>
+        <button id="reset" class="ghost">⟲ Reset</button>
+      </div>
+
+      <div class="legend">
+        <div class="key"><span class="swatch edge"></span>Edge</div>
+        <div class="key"><span class="swatch focus"></span>Visiting</div>
+        <div class="key"><span class="swatch visited"></span>Visited</div>
+      </div>
+
+      <div class="canvas">
+        <svg id="svg" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" />
+            </marker>
+          </defs>
+          <!-- Edges (lines with arrows) -->
+          <!-- Generated by JS -->
+          <!-- Nodes (circles + labels) -->
+          <!-- Generated by JS -->
+        </svg>
+      </div>
+
+      <div class="trail" id="trail"></div>
+      <div class="footer-note">Tip: Use <b>Step</b> to advance one node at a time. Adjust <b>Speed</b> and try different traversals.</div>
+    </div>
+  </div>
+
+<script>
+/* ========= Data =========
+   We'll use a classic BST with sorted inorder: 1..7
+   Shape:
+            4
+         /     \
+        2       6
+      /  \    /  \
+     1    3  5    7
+*/
+const nodes = {
+  n1:{id:"n1", val:4, left:"n2", right:"n3"},
+  n2:{id:"n2", val:2, left:"n4", right:"n5"},
+  n3:{id:"n3", val:6, left:"n6", right:"n7"},
+  n4:{id:"n4", val:1, left:null, right:null},
+  n5:{id:"n5", val:3, left:null, right:null},
+  n6:{id:"n6", val:5, left:null, right:null},
+  n7:{id:"n7", val:7, left:null, right:null},
+};
+
+// Pre-computed beauty positions (responsive inside viewBox)
+const layout = {
+  n1:{x:500, y:80},
+  n2:{x:280, y:200},
+  n3:{x:720, y:200},
+  n4:{x:170, y:340},
+  n5:{x:390, y:340},
+  n6:{x:610, y:340},
+  n7:{x:830, y:340},
+};
+const RADIUS = 26;
+
+const svg = document.getElementById('svg');
+const trailEl = document.getElementById('trail');
+const algoSel = document.getElementById('algo');
+const playBtn = document.getElementById('play');
+const stepBtn = document.getElementById('step');
+const resetBtn = document.getElementById('reset');
+const speedRange = document.getElementById('speed');
+
+let order = [];        // node ids in traversal order
+let idx = 0;           // current pointer into order
+let playing = false;   // autoplay toggle
+let timer = null;
+
+// ---------- SVG Helpers ----------
+function mk(tag, attrs = {}) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function draw() {
+  // Clear
+  while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+
+  // Edges
+  const edges = [];
+  for (const n of Object.values(nodes)) {
+    if (n.left)  edges.push([n.id, n.left]);
+    if (n.right) edges.push([n.id, n.right]);
+  }
+  edges.forEach(([a,b])=>{
+    const p1 = layout[a], p2 = layout[b];
+    // line shortened to meet node edges
+    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const x1 = p1.x + Math.cos(angle)*RADIUS;
+    const y1 = p1.y + Math.sin(angle)*RADIUS;
+    const x2 = p2.x - Math.cos(angle)*RADIUS;
+    const y2 = p2.y - Math.sin(angle)*RADIUS;
+    const line = mk('line', { x1, y1, x2, y2, class:'edge', 'data-a':a, 'data-b':b });
+    svg.appendChild(line);
+  });
+
+  // Nodes
+  for (const n of Object.values(nodes)) {
+    const g = mk('g', { class:'node', id:n.id, transform:`translate(${layout[n.id].x},${layout[n.id].y})` });
+    const c = mk('circle', { r:RADIUS, class:'dot' });
+    const t = mk('text', {}); t.textContent = n.val;
+    g.appendChild(c); g.appendChild(t);
+    svg.appendChild(g);
+  }
+}
+
+// ---------- Traversals ----------
+function inorder(id){ if(!id) return; const n = nodes[id]; inorder(n.left); order.push(id); inorder(n.right); }
+function preorder(id){ if(!id) return; const n = nodes[id]; order.push(id); preorder(n.left); preorder(n.right); }
+function postorder(id){ if(!id) return; const n = nodes[id]; postorder(n.left); postorder(n.right); order.push(id); }
+
+function buildOrder(){
+  order = [];
+  const alg = algoSel.value;
+  if (alg === 'inorder') inorder('n1');
+  if (alg === 'preorder') preorder('n1');
+  if (alg === 'postorder') postorder('n1');
+}
+
+// ---------- UI State ----------
+function clearStates() {
+  [...svg.querySelectorAll('.node')].forEach(n => n.classList.remove('focus','visited'));
+  [...svg.querySelectorAll('.edge')].forEach(e => e.classList.remove('active'));
+  trailEl.innerHTML = '';
+}
+
+function setEdgeActive(parentId, childId, active) {
+  const edge = [...svg.querySelectorAll('.edge')].find(e => e.getAttribute('data-a')===parentId && e.getAttribute('data-b')===childId);
+  if (edge) edge.classList.toggle('active', !!active);
+}
+
+function stepOnce() {
+  if (idx >= order.length) { playing = false; playBtn.textContent = '▶ Play'; return; }
+
+  // previous -> visited
+  if (idx > 0) {
+    const prev = document.getElementById(order[idx-1]);
+    prev.classList.remove('focus');
+    prev.classList.add('visited');
+  }
+
+  // current -> focus
+  const now = document.getElementById(order[idx]);
+  now.classList.add('focus');
+
+  // show trail chip
+  const chip = document.createElement('span');
+  chip.className = 'chip';
+  chip.textContent = nodes[order[idx]].val;
+  trailEl.appendChild(chip);
+
+  // briefly glow its incoming edge
+  // (find parent by scanning)
+  const parent = Object.values(nodes).find(p => p.left === order[idx] || p.right === order[idx]);
+  if (parent) {
+    setEdgeActive(parent.id, order[idx], true);
+    setTimeout(()=> setEdgeActive(parent.id, order[idx], false), Math.min(1200, Number(speedRange.value)+200));
+  }
+
+  idx++;
+}
+
+function playLoop() {
+  if (!playing) return;
+  stepOnce();
+  if (idx < order.length) {
+    timer = setTimeout(playLoop, Number(speedRange.value));
+  } else {
+    playing = false;
+    playBtn.textContent = '▶ Play';
+    // mark last focused as visited
+    if (order.length) {
+      const last = document.getElementById(order[order.length-1]);
+      last.classList.remove('focus');
+      last.classList.add('visited');
+    }
+  }
+}
+
+function resetAll() {
+  clearTimeout(timer);
+  playing = false;
+  playBtn.textContent = '▶ Play';
+  idx = 0;
+  clearStates();
+  buildOrder();
+}
+
+// ---------- Wire up ----------
+draw();
+buildOrder();
+
+playBtn.addEventListener('click', ()=>{
+  if (!playing) {
+    playing = true;
+    playBtn.textContent = '⏸ Pause';
+    playLoop();
+  } else {
+    playing = false;
+    playBtn.textContent = '▶ Play';
+    clearTimeout(timer);
+  }
+});
+
+stepBtn.addEventListener('click', ()=>{
+  if (playing) return; // step when paused
+  stepOnce();
+});
+
+resetBtn.addEventListener('click', resetAll);
+algoSel.addEventListener('change', resetAll);
+
+</script>
+</body>
+</html>
