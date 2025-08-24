@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Monotonic Queue Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  body { margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+  .wrap { max-width:1100px; margin:40px auto; padding:0 18px; display:grid; gap:var(--gap); }
+  header { display:flex; flex-wrap:wrap; gap:var(--gap); align-items:flex-start; justify-content:space-between; }
+  h1 { margin:0; font-size:clamp(20px,2.4vw,28px); }
+  .subtitle { color:var(--muted); font-size:14px; margin-top:6px; max-width:70ch; }
+
+  .panel { background:linear-gradient(180deg,var(--panel),var(--panel-2)); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; }
+  .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .btn{
+    appearance:none; border:none; border-radius:12px; padding:12px 14px; font-weight:600;
+    background:var(--chip); color:var(--text); cursor:pointer; transition:transform .06s ease, filter .2s ease;
+  }
+  .btn:hover{ filter:brightness(1.06); }
+  .btn:active{ transform:translateY(1px) scale(.995); }
+  .btn.primary{ background:linear-gradient(180deg, var(--accent), var(--accent-2)); color:#0b1220; }
+  .btn.warning{ background:linear-gradient(180deg, #ff8a8a, #ffa3a3); color:#230000; }
+  .btn.ghost{ background:transparent; border:1px solid var(--chip); }
+  .btn.small{ padding:8px 10px; font-size:13px; }
+  input[type="number"]{
+    background:var(--slot); border:1px solid transparent; color:var(--text);
+    border-radius:12px; padding:12px 14px; width:120px; font-size:15px;
+  }
+  input[type="number"]:focus{ outline:none; border-color:var(--accent); }
+  .toggle { font-size:13px; color:var(--muted); margin-left:6px; }
+
+  /* Deque view */
+  .deque {
+    min-height:84px;
+    display:flex; gap:10px; align-items:center;
+    padding:16px; border-radius:12px; background:var(--slot); outline:1px solid rgba(255,255,255,.06);
+    overflow:auto;
+  }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .chip {
+    display:flex; align-items:center; gap:8px;
+    padding:10px 12px; border-radius:10px; background:var(--chip); border:1px solid rgba(255,255,255,.08);
+    font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.3);
+    transform:translateY(6px) scale(.96); opacity:0;
+    transition:opacity var(--speed) ease, transform var(--speed) ease, background var(--speed) ease, outline var(--speed) ease;
+  }
+  .chip.show { opacity:1; transform:translateY(0) scale(1); }
+  .chip.new { outline:2px solid var(--new); background:linear-gradient(180deg, rgba(138,233,193,.22), var(--chip)); }
+  .chip.drop { outline:2px dashed var(--pair); filter:grayscale(.2) brightness(.9); }
+  .badge { font-size:11px; color:#0b1220; background:var(--accent); padding:4px 8px; border-radius:999px; font-weight:800; }
+  .muted { color:var(--muted); font-weight:600; font-size:12px; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.06); }
+
+  /* Grid */
+  .grid { display:grid; gap:var(--gap); grid-template-columns:1fr; }
+  .cols { display:grid; gap:var(--gap); grid-template-columns:1fr 1fr; }
+  @media (max-width:900px){ .cols { grid-template-columns:1fr; } }
+
+  .status { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--muted); font-size:14px; }
+  .status strong{ color:var(--text); }
+  .toast { margin-left:auto; background:rgba(255,255,255,.06); padding:8px 10px; border-radius:10px; font-size:13px; color:var(--muted); }
+
+  /* stream / window */
+  .stream { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .cell { padding:8px 10px; border-radius:10px; background:rgba(255,255,255,.07); font-weight:700; border:1px solid rgba(255,255,255,.06); }
+  .cell.cur { outline:2px solid var(--accent); }
+  .cell.inwin { outline:2px solid var(--new); }
+  .kv { display:flex; gap:8px; flex-wrap:wrap; }
+  code { background:rgba(255,255,255,.06); padding:2px 6px; border-radius:6px; }
+
+  .history { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:12.5px; color:var(--muted); line-height:1.5; max-height:140px; overflow:auto; background:rgba(255,255,255,.05); padding:10px 12px; border-radius:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>📈 Monotonic Queue <span class="badge">O(1) window max/min</span></h1>
+      <div class="subtitle">
+        A deque that keeps elements in <strong>monotonic order</strong>. For <em>decreasing</em> mode it holds candidates for a window <strong>maximum</strong>;
+        for <em>increasing</em> mode it holds candidates for a window <strong>minimum</strong>. On push, it pops irrelevant items from the back.
+      </div>
+    </div>
+    <div class="panel controls">
+      <input id="val" type="number" placeholder="Value e.g. 12" />
+      <button class="btn primary" id="pushBtn">Push Back</button>
+      <button class="btn" id="popFrontBtn">Pop Front</button>
+      <button class="btn ghost" id="peekBtn">Peek Front</button>
+      <button class="btn ghost" id="toggleBtn">Mode: <span id="modeTxt">Decreasing (for Max)</span></button>
+      <button class="btn warning" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+      <h3 style="margin:0;">Deque (front → back)</h3>
+      <span class="muted">irrelevant popped items are highlighted briefly</span>
+      <div class="toast" id="toast">Ready.</div>
+    </div>
+    <div id="deque" class="deque" aria-live="polite"></div>
+    <div class="hint">Rule: while <code>back</code> breaks monotonicity, pop it. Then push new value at the back.</div>
+    <div class="status" style="margin-top:10px;">
+      <div>Size: <strong id="size">0</strong></div>
+      <div>Front: <strong id="front">—</strong></div>
+      <div>Order: <strong id="order">Decreasing</strong></div>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div class="panel">
+      <h3 style="margin:0 0 10px;">Manual Ops</h3>
+      <div class="history" id="history"></div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin:0 0 10px;">Sliding Window Demo</h3>
+      <div class="controls" style="margin-bottom:10px;">
+        <button class="btn small" id="newArrBtn">New Array</button>
+        <label class="toggle">Window k:
+          <input id="k" type="number" min="1" max="20" value="3" style="width:70px; margin-left:6px;">
+        </label>
+        <button class="btn small primary" id="stepBtn">Step ▶</button>
+        <button class="btn small" id="autoBtn">Auto</button>
+        <button class="btn small warning" id="stopBtn">Stop</button>
+      </div>
+      <div class="stream" id="stream"></div>
+      <div class="kv" style="margin-top:10px;">
+        <div>Window: <code id="winText">—</code></div>
+        <div>MonoQueue answer: <code id="mqAns">—</code></div>
+        <div>Naive answer: <code id="naiveAns">—</code></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ====== State ======
+  let decreasing = true; // true: for max, false: for min
+  const dq = []; // { val, idx? } front at index 0
+  const el = q => document.querySelector(q);
+
+  // DOM refs
+  const dequeEl  = el('#deque');
+  const sizeEl   = el('#size');
+  const frontEl  = el('#front');
+  const orderEl  = el('#order');
+  const toastEl  = el('#toast');
+  const historyEl= el('#history');
+  const valInput = el('#val');
+  const modeTxt  = el('#modeTxt');
+
+  // Stream demo
+  let arr = [];
+  let iPtr = -1; // current index processed
+  let autoTimer = null;
+
+  // ====== Utils ======
+  const notify = (m)=>{ toastEl.textContent = m; toastEl.animate([{opacity:.65},{opacity:1}],{duration:200}); };
+  const log = (s)=>{ const t=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); historyEl.textContent += `[${t}] ${s}\n`; historyEl.scrollTop = historyEl.scrollHeight; };
+
+  const compareBreaks = (backVal, incomingVal) => {
+    // If decreasing mode: keep big→small. Pop while back < incoming.
+    // If increasing mode: keep small→big. Pop while back > incoming.
+    return decreasing ? (backVal < incomingVal) : (backVal > incomingVal);
+  };
+
+  // ====== Rendering ======
+  function render({highlightIdx=null, droppedIdxs=[]}={}) {
+    dequeEl.innerHTML = '';
+    dq.forEach((node, idx) => {
+      const div = document.createElement('div');
+      div.className = 'chip';
+      div.innerHTML = `<span>${node.val}</span>` + (node.idx!==undefined ? `<span class="muted">#${node.idx}</span>` : '');
+      if (idx === highlightIdx) div.classList.add('new');
+      dequeEl.appendChild(div);
+      requestAnimationFrame(()=>div.classList.add('show'));
+    });
+
+    // briefly show dropped elements as faded chips at the end for feedback
+    droppedIdxs.forEach(v => {
+      const ghost = document.createElement('div');
+      ghost.className = 'chip drop show';
+      ghost.textContent = v;
+      dequeEl.appendChild(ghost);
+      setTimeout(()=>ghost.remove(), 700);
+    });
+
+    sizeEl.textContent = dq.length;
+    frontEl.textContent = dq.length ? dq[0].val : '—';
+    orderEl.textContent = decreasing ? 'Decreasing' : 'Increasing';
+  }
+
+  // ====== Core Monotonic Queue Ops ======
+  function pushBack(x, {withIndex=null}={}) {
+    const dropped = [];
+    while (dq.length && compareBreaks(dq[dq.length-1].val, x)) {
+      dropped.push(dq[dq.length-1].val);
+      dq.pop();
+    }
+    dq.push(withIndex!==null ? {val:x, idx:withIndex} : {val:x});
+    render({highlightIdx: dq.length-1, droppedIdxs:dropped});
+    log(`pushBack(${x}) ${dropped.length?`→ dropped [${dropped.join(', ')}]`:''}`);
+    notify(`Pushed ${x}`);
+  }
+
+  function popFront() {
+    if (!dq.length) { notify('Deque is empty.'); return; }
+    const v = dq.shift().val;
+    render();
+    log(`popFront() → ${v}`);
+    notify(`Popped ${v} from front`);
+    return v;
+  }
+
+  function peekFront() {
+    const v = dq.length ? dq[0].val : null;
+    if (v==null) notify('Empty—no front.');
+    else { notify(`Front = ${v}`); dequeEl.animate([{filter:'brightness(1.1)'},{filter:'brightness(1)'}],{duration:350}); }
+    return v;
+  }
+
+  function resetAll() {
+    dq.length = 0;
+    render();
+    historyEl.textContent = '';
+    notify('Cleared.');
+  }
+
+  function toggleMode() {
+    decreasing = !decreasing;
+    modeTxt.textContent = decreasing ? 'Decreasing (for Max)' : 'Increasing (for Min)';
+    render();
+    log(`Mode → ${decreasing ? 'Decreasing (max)' : 'Increasing (min)'}`);
+    notify('Mode changed.');
+  }
+
+  // ====== Manual Controls ======
+  el('#pushBtn').addEventListener('click', () => {
+    const v = Number(valInput.value);
+    if (Number.isNaN(v)) return notify('Enter a number to push.');
+    pushBack(v);
+    valInput.value = '';
+    valInput.focus();
+  });
+  valInput.addEventListener('keydown', e => { if (e.key==='Enter') el('#pushBtn').click(); });
+  el('#popFrontBtn').addEventListener('click', popFront);
+  el('#peekBtn').addEventListener('click', peekFront);
+  el('#resetBtn').addEventListener('click', resetAll);
+  el('#toggleBtn').addEventListener('click', toggleMode);
+
+  // ====== Sliding Window Demo ======
+  const streamEl = el('#stream');
+  const kInput = el('#k');
+  const winText = el('#winText');
+  const mqAns   = el('#mqAns');
+  const naiveAns= el('#naiveAns');
+
+  function newArray() {
+    // reset deque + stream
+    resetAll();
+    arr = Array.from({length: 12}, () => Math.floor(Math.random()*41)-20); // -20..20
+    iPtr = -1;
+    drawStream();
+    updateAnswers();
+    notify('New array generated.');
+  }
+
+  function drawStream(windowSize = Number(kInput.value)) {
+    streamEl.innerHTML = '';
+    arr.forEach((v, i) => {
+      const c = document.createElement('div');
+      c.className = 'cell';
+      c.textContent = v;
+      if (i === iPtr) c.classList.add('cur');
+      if (iPtr >= windowSize-1 && i >= iPtr-windowSize+1 && i <= iPtr) c.classList.add('inwin');
+      streamEl.appendChild(c);
+    });
+  }
+
+  function step() {
+    const k = Math.max(1, Math.min(arr.length, Number(kInput.value)||1));
+    if (iPtr >= arr.length-1) { notify('Done. End of array.'); return; }
+    iPtr++;
+    // push new element with index; pop from back while broken
+    pushBack(arr[iPtr], {withIndex:iPtr});
+    // remove items that are out of the window from front
+    while (dq.length && dq[0].idx <= iPtr - k) {
+      log(`expire index #${dq[0].idx} (value ${dq[0].val})`);
+      dq.shift();
+      render();
+    }
+    drawStream(k);
+    updateAnswers();
+  }
+
+  function mqAnswerInWindow() {
+    if (iPtr < 0) return null;
+    const k = Math.max(1, Math.min(arr.length, Number(kInput.value)||1));
+    if (iPtr < k-1) return null;
+    return dq.length ? dq[0].val : null;
+  }
+
+  function naiveAnswerInWindow() {
+    if (iPtr < 0) return null;
+    const k = Math.max(1, Math.min(arr.length, Number(kInput.value)||1));
+    if (iPtr < k-1) return null;
+    const start = iPtr - k + 1;
+    const slice = arr.slice(start, iPtr+1);
+    return decreasing ? Math.max(...slice) : Math.min(...slice);
+  }
+
+  function updateAnswers() {
+    const k = Math.max(1, Math.min(arr.length, Number(kInput.value)||1));
+    const start = Math.max(0, iPtr - k + 1);
+    if (iPtr >= k-1) {
+      winText.textContent = `[${start}..${iPtr}] → ` + arr.slice(start, iPtr+1).join(', ');
+      mqAns.textContent = mqAnswerInWindow() ?? '—';
+      naiveAns.textContent = naiveAnswerInWindow() ?? '—';
+    } else {
+      winText.textContent = '—';
+      mqAns.textContent = '—';
+      naiveAns.textContent = '—';
+    }
+  }
+
+  el('#newArrBtn').addEventListener('click', newArray);
+  el('#stepBtn').addEventListener('click', step);
+  el('#autoBtn').addEventListener('click', () => {
+    if (autoTimer) return;
+    autoTimer = setInterval(() => {
+      if (iPtr >= arr.length-1) { clearInterval(autoTimer); autoTimer=null; notify('Auto finished.'); return; }
+      step();
+    }, 520);
+  });
+  el('#stopBtn').addEventListener('click', () => { clearInterval(autoTimer); autoTimer=null; notify('Auto stopped.'); });
+  kInput.addEventListener('change', () => { drawStream(); updateAnswers(); });
+
+  // Seed
+  newArray();
+  // Also seed a quick demonstration of manual pushes
+  [7, 3, 5, 9, 4].forEach((v, idx) => setTimeout(()=>pushBack(v), 220*idx));
+})();
+</script>
+</body>
+</html>
