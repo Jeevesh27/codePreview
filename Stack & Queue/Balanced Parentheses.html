@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Balanced Parentheses — Stack Visualizer (O(n))</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for pair/match */
+    --new:#8ae9c1;  /* green for push */
+  }
+
+  body { margin:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+  .wrap { max-width:1100px; margin:40px auto; padding:0 18px; display:grid; gap:var(--gap); }
+  header { display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; justify-content:space-between; }
+  h1 { margin:0; font-size:clamp(20px,2.4vw,28px); }
+  .subtitle { color:var(--muted); font-size:14px; margin-top:6px; max-width:70ch; }
+  .badge { font-size:11px; color:#0b1220; background:var(--accent); padding:4px 8px; border-radius:999px; font-weight:800; letter-spacing:.4px; }
+
+  .panel { background:linear-gradient(180deg,var(--panel),var(--panel-2)); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .btn{ appearance:none; border:none; border-radius:12px; padding:12px 14px; font-weight:600; background:var(--chip); color:var(--text); cursor:pointer; transition:transform .06s ease, filter .2s ease; }
+  .btn:hover{ filter:brightness(1.06); }
+  .btn:active{ transform:translateY(1px) scale(.995); }
+  .btn.primary{ background:linear-gradient(180deg,var(--accent),var(--accent-2)); color:#0b1220; }
+  .btn.warning{ background:linear-gradient(180deg,#ff8a8a,#ffa3a3); color:#230000; }
+  .btn.ghost{ background:transparent; border:1px solid var(--chip); }
+  .btn.small{ padding:8px 10px; font-size:13px; }
+
+  input[type="text"]{
+    background:var(--slot); border:1px solid transparent; color:var(--text);
+    border-radius:12px; padding:12px 14px; min-width:280px; font-size:15px;
+  }
+  input[type="text"]:focus{ outline:none; border-color:var(--accent); }
+
+  .cols { display:grid; gap:var(--gap); grid-template-columns: 1.1fr .9fr; }
+  @media (max-width:900px){ .cols { grid-template-columns:1fr; } }
+
+  /* Stream (expression) */
+  .stream { display:flex; gap:8px; flex-wrap:wrap; align-items:center; min-height:56px; }
+  .cell {
+    position:relative; padding:8px 10px; border-radius:10px; background:rgba(255,255,255,.07);
+    font-weight:700; border:1px solid rgba(255,255,255,.06); min-width:26px; text-align:center;
+    transition:filter var(--speed) ease, transform var(--speed) ease, outline var(--speed) ease;
+  }
+  .cell.cur { outline:2px solid var(--accent); transform:translateY(-2px); }
+  .cell.match { outline:2px solid var(--pair); }
+  .cell.push { outline:2px solid var(--new); }
+  .cell.ok { outline:2px solid var(--ok); }
+  .cell.err { outline:2px solid #ff8a8a; background:linear-gradient(180deg, rgba(255,138,138,.15), rgba(255,255,255,.06)); }
+
+  /* Stack view */
+  .stack {
+    min-height:240px; display:flex; flex-direction:column-reverse; gap:10px; padding:16px;
+    border-radius:12px; background:var(--slot); outline:1px solid rgba(255,255,255,.06);
+  }
+  .stack::before{ content:"top →"; position:absolute; }
+  .node {
+    display:inline-flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px;
+    background:var(--chip); border:1px solid rgba(255,255,255,.08); box-shadow:0 6px 18px rgba(0,0,0,.3);
+    transform:translateY(6px) scale(.96); opacity:0; transition:opacity var(--speed) ease, transform var(--speed) ease, outline var(--speed) ease, background var(--speed) ease;
+  }
+  .node.show{ opacity:1; transform:translateY(0) scale(1); }
+  .node.push { outline:2px solid var(--new); background:linear-gradient(180deg, rgba(138,233,193,.22), var(--chip)); }
+  .node.pop  { outline:2px dashed var(--pair); filter:grayscale(.15) brightness(.93); }
+
+  .status { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--muted); font-size:14px; }
+  .status strong { color:var(--text); }
+  .toast { margin-left:auto; background:rgba(255,255,255,.06); padding:8px 10px; border-radius:10px; font-size:13px; color:var(--muted); }
+  .history { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; color:var(--muted); line-height:1.5; max-height:160px; overflow:auto; background:rgba(255,255,255,.05); padding:10px 12px; border-radius:10px; white-space:pre-wrap; }
+
+  code { background:rgba(255,255,255,.06); padding:2px 6px; border-radius:6px; }
+  .legend { display:flex; gap:10px; flex-wrap:wrap; }
+  .tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.06); }
+  .sw{ width:10px; height:10px; border-radius:2px; background:var(--new); }
+  .sw.pair{ background:var(--pair); }
+  .sw.ok{ background:var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>✅ Balanced Parentheses <span class="badge">Stack • O(n)</span></h1>
+      <div class="subtitle">
+        Push opening brackets onto a stack. For each closing bracket, check if it matches the stack's top.
+        At the end, the stack must be empty. Supports <code>()</code>, <code>[]</code>, <code>{}</code>.
+      </div>
+    </div>
+    <div class="panel controls">
+      <input id="expr" type="text" placeholder="Type an expression, e.g. (a+[b*c]-{d/2})" />
+      <button class="btn primary" id="buildBtn">Load</button>
+      <button class="btn" id="stepBtn">Step ▶</button>
+      <button class="btn" id="autoBtn">Auto</button>
+      <button class="btn warning" id="stopBtn">Stop</button>
+      <button class="btn ghost" id="checkBtn">Check All</button>
+      <button class="btn ghost" id="examplesBtn">Examples</button>
+      <button class="btn ghost" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <section class="cols">
+    <div class="panel">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div class="legend">
+          <span class="tag"><span class="sw"></span>push</span>
+          <span class="tag"><span class="sw pair"></span>match</span>
+          <span class="tag"><span class="sw ok"></span>balanced</span>
+        </div>
+        <div class="toast" id="toast">Ready.</div>
+      </div>
+      <div id="stream" class="stream"></div>
+      <div class="status" style="margin-top:10px;">
+        <div>Index: <strong id="idx">—</strong></div>
+        <div>Top of stack: <strong id="top">—</strong></div>
+        <div>Result: <strong id="result">—</strong></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin:0 0 10px;">Stack (bottom → top)</h3>
+      <div id="stack" class="stack" aria-live="polite"></div>
+      <div class="history" id="history" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <strong>Algorithm (pseudocode):</strong>
+    <pre style="white-space:pre-wrap; margin:8px 0 0; color:var(--muted);">
+stack = []
+for ch in s:
+  if ch in '([{': push ch
+  else if ch in ')]}':
+    if stack empty: fail
+    if pair(top, ch) mismatches: fail
+    pop
+balanced if stack empty at end
+    </pre>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ====== State ======
+  const el = q => document.querySelector(q);
+  const streamEl = el('#stream');
+  const stackEl  = el('#stack');
+  const toastEl  = el('#toast');
+  const idxEl    = el('#idx');
+  const topEl    = el('#top');
+  const resultEl = el('#result');
+  const historyEl= el('#history');
+  const input    = el('#expr');
+
+  let arr = [];          // array of characters
+  let ptr = -1;          // current pointer
+  let stack = [];        // stack of {ch, i}
+  let done = false;      // finished?
+  let failed = false;    // mismatch encountered?
+  let autoTimer = null;
+
+  const open = new Set(['(', '[', '{']);
+  const pairMap = new Map([ [')','('], [']','['], ['}','{'] ]);
+
+  // ====== UI Helpers ======
+  const notify = m => { toastEl.textContent = m; toastEl.animate([{opacity:.65},{opacity:1}], {duration:200}); };
+  const log = s => { const t=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); historyEl.textContent += `[${t}] ${s}\n`; historyEl.scrollTop = historyEl.scrollHeight; };
+
+  function drawStream() {
+    streamEl.innerHTML = '';
+    arr.forEach((ch,i)=>{
+      const d = document.createElement('div');
+      d.className = 'cell';
+      d.textContent = ch === ' ' ? '␠' : ch; // show spaces nicely
+      if (i === ptr) d.classList.add('cur');
+      streamEl.appendChild(d);
+    });
+  }
+
+  function drawStack({pushedIndex=null, popped=false}={}) {
+    stackEl.innerHTML = '';
+    stack.forEach((item, i) => {
+      const n = document.createElement('div');
+      n.className = 'node';
+      n.innerHTML = `<strong>${item.ch}</strong> <span class="tag" style="margin-left:6px;background:rgba(255,255,255,.06);color:var(--muted);padding:2px 6px;border-radius:999px;">#${item.i}</span>`;
+      if (i === stack.length-1 && pushedIndex === item.i) n.classList.add('push');
+      stackEl.appendChild(n);
+      requestAnimationFrame(()=>n.classList.add('show'));
+    });
+    if (popped) {
+      const ghost = document.createElement('div');
+      ghost.className = 'node pop show';
+      ghost.textContent = 'pop';
+      stackEl.appendChild(ghost);
+      setTimeout(()=>ghost.remove(), 700);
+    }
+    topEl.textContent = stack.length ? stack[stack.length-1].ch : '—';
+  }
+
+  function highlight(i, cls) {
+    const cell = streamEl.children[i];
+    if (cell) cell.classList.add(cls);
+  }
+
+  function clearHighlights() {
+    [...streamEl.children].forEach(c => c.classList.remove('cur','push','match','ok','err'));
+  }
+
+  // ====== Core Step ======
+  function step() {
+    if (done) { notify('Already finished.'); return; }
+    if (ptr >= arr.length - 1) { finish(); return; }
+
+    ptr++;
+    clearHighlights();
+    drawStream();
+
+    const ch = arr[ptr];
+    highlight(ptr, 'cur');
+
+    if (!'()[]{}'.includes(ch)) {
+      log(`skip '${ch}'`);
+      notify('Skipped (not a bracket).');
+      idxEl.textContent = ptr;
+      return;
+    }
+
+    if (open.has(ch)) {
+      stack.push({ch, i:ptr});
+      drawStack({pushedIndex:ptr});
+      highlight(ptr, 'push');
+      log(`push '${ch}' at #${ptr}`);
+      idxEl.textContent = ptr;
+      return;
+    }
+
+    // closing bracket
+    if (!stack.length) {
+      highlight(ptr, 'err');
+      fail(`Encountered '${ch}' with empty stack → unbalanced.`);
+      return;
+    }
+    const top = stack[stack.length-1];
+    if (top.ch !== pairMap.get(ch)) {
+      highlight(ptr, 'err');
+      // also mark the mismatched opener
+      highlight(top.i, 'err');
+      fail(`Mismatch: expected closing for '${top.ch}' but found '${ch}'.`);
+      return;
+    }
+
+    // match: pop
+    stack.pop();
+    drawStack({popped:true});
+    highlight(ptr, 'match');
+    highlight(top.i, 'match');
+    log(`match '${top.ch}' with '${ch}' (#${top.i}, #${ptr})`);
+
+    idxEl.textContent = ptr;
+
+    if (ptr === arr.length - 1) finish();
+  }
+
+  // ====== Finish / Fail ======
+  function finish() {
+    done = true;
+    if (failed) return;
+
+    if (stack.length === 0) {
+      resultEl.textContent = 'Balanced';
+      resultEl.style.color = 'var(--ok)';
+      [...streamEl.children].forEach(c => { if (!c.classList.contains('err')) c.classList.add('ok'); });
+      notify('Balanced ✓');
+      log('Result: BALANCED');
+    } else {
+      // leftover openers
+      stack.forEach(s => highlight(s.i, 'err'));
+      resultEl.textContent = 'Unbalanced (leftover opens)';
+      resultEl.style.color = '#ff8a8a';
+      notify('Unbalanced — leftover opens.');
+      log('Result: UNBALANCED (leftover opens)');
+    }
+  }
+
+  function fail(msg) {
+    failed = true;
+    done = true;
+    resultEl.textContent = 'Unbalanced';
+    resultEl.style.color = '#ff8a8a';
+    notify('Unbalanced ✗');
+    log('Error: ' + msg);
+  }
+
+  // ====== Controls ======
+  function loadExpr(text) {
+    clearInterval(autoTimer); autoTimer=null;
+    stack = []; ptr = -1; arr = [...text];
+    done = false; failed = false;
+    resultEl.textContent = '—'; resultEl.style.color = 'inherit';
+    historyEl.textContent = '';
+    drawStream(); drawStack();
+    idxEl.textContent = '—';
+    notify('Expression loaded.');
+  }
+
+  function autoPlay() {
+    if (autoTimer) return;
+    autoTimer = setInterval(() => {
+      if (done || ptr >= arr.length - 1) {
+        clearInterval(autoTimer); autoTimer=null; finish(); return;
+      }
+      step();
+    }, 420);
+  }
+
+  function checkAll() {
+    // Fast O(n) pass (no animation), then visualize final state/colors
+    const s = [...arr];
+    const st = [];
+    for (let i=0;i<s.length;i++){
+      const ch = s[i];
+      if (!'()[]{}'.includes(ch)) continue;
+      if (open.has(ch)) st.push({ch,i});
+      else {
+        if (!st.length){ highlight(i,'err'); fail(`'${ch}' with empty stack.`); return; }
+        const t = st[st.length-1];
+        if (t.ch !== pairMap.get(ch)){ highlight(i,'err'); highlight(t.i,'err'); fail('Mismatch.'); return; }
+        st.pop();
+        highlight(i,'match'); highlight(t.i,'match');
+      }
+    }
+    if (st.length){ st.forEach(it=>highlight(it.i,'err')); fail('Leftover opens.'); }
+    else { finish(); }
+  }
+
+  function resetAll() {
+    clearInterval(autoTimer); autoTimer=null;
+    input.value = '';
+    loadExpr('');
+    notify('Reset.');
+  }
+
+  // Example menu
+  function loadExample() {
+    const samples = [
+      '(a+[b*c]-{d/2})',
+      '([{}])',
+      '([)]',                 // mismatch
+      '(((())))',
+      'func(x[y{z(w)}])',
+      '([a+b]*(x+2y) - {z/3})',
+      '([)',                  // early close
+      '{[()]}[]({})',
+      '{[()]}}',              // extra close
+      '[(a+b]*c)'             // wrong order
+    ];
+    const pick = samples[Math.floor(Math.random()*samples.length)];
+    input.value = pick;
+    loadExpr(pick);
+  }
+
+  // Buttons
+  el('#buildBtn').addEventListener('click', () => loadExpr(input.value || ''));
+  el('#stepBtn').addEventListener('click', step);
+  el('#autoBtn').addEventListener('click', autoPlay);
+  el('#stopBtn').addEventListener('click', () => { clearInterval(autoTimer); autoTimer=null; notify('Stopped.'); });
+  el('#checkBtn').addEventListener('click', checkAll);
+  el('#resetBtn').addEventListener('click', resetAll);
+  el('#examplesBtn').addEventListener('click', loadExample);
+  input.addEventListener('keydown', e => { if(e.key==='Enter') el('#buildBtn').click(); });
+
+  // Seed a friendly default
+  const seed = '(a+[b*c]-{d/2})';
+  input.value = seed;
+  loadExpr(seed);
+})();
+</script>
+</body>
+</html>
