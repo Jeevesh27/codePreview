@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BST Delete — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  html, body { height:100%; background:var(--bg); color:var(--text); }
+  body { margin:0; font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; }
+  .wrap { max-width:1100px; margin:28px auto; padding:0 18px; display:grid; gap:18px; }
+
+  .header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; }
+  .title h2 { margin:0; font-size:clamp(1.2rem, 3vw, 1.5rem); line-height:1.3; }
+  .badge { background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b1320; font-weight:800; padding:6px 10px; border-radius:999px; font-size:12px; letter-spacing:.5px; text-transform:uppercase; flex-shrink:0; }
+  .note { color:var(--muted); font-size:clamp(12px, 2.5vw, 13px); line-height:1.4; max-width:400px; margin-top:8px; }
+  
+  @media (max-width: 768px) {
+    .header { flex-direction:column; align-items:flex-start; gap:12px; }
+    .note { max-width:100%; margin-top:4px; }
+  }
+  
+  @media (max-width: 480px) {
+    .title { flex-direction:column; align-items:flex-start; gap:8px; }
+    .title h2 { font-size:1.1rem; }
+  }
+
+  .grid { display:grid; grid-template-columns: 1.4fr .6fr; gap:18px; }
+  @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
+
+  .card {
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+
+  /* Controls */
+  .controls { display:flex; flex-wrap:wrap; gap:10px; padding:14px; border-bottom:1px solid rgba(255,255,255,.06); align-items:center; }
+  .controls input[type="number"]{
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px; width:120px;
+  }
+  button, input[type="range"] {
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px;
+  }
+  button { cursor:pointer; font-weight:800; letter-spacing:.2px; }
+  .primary { background:var(--accent); color:#0b1320; }
+  .ghost { background:var(--chip); }
+
+  /* Canvas */
+  .canvas { height: clamp(380px, 58vh, 640px); }
+  svg { width:100%; height:100%; display:block; }
+
+  defs marker#arrow path { fill: var(--muted); }
+  .edge { stroke: var(--muted); stroke-width:2; marker-end:url(#arrow); opacity:.9; transition: stroke var(--speed), opacity var(--speed); }
+  .edge.active { stroke: var(--pair); opacity:1; }
+
+  .node { transition: transform var(--speed), opacity 400ms ease; cursor:pointer; }
+  .node .dot { fill:var(--chip); stroke:rgba(255,255,255,.12); stroke-width:1.5; filter: drop-shadow(0 10px 18px rgba(0,0,0,.45)); }
+  .node text { fill:var(--text); font-weight:800; font-size:14px; dominant-baseline: middle; text-anchor: middle; }
+  .node.focus .dot { fill: var(--pair); }
+  .node.successor .dot { stroke: var(--accent-2); stroke-width:3; }
+  .node.faded { opacity:.25; }
+
+  /* Right column */
+  .panel { display:grid; grid-template-rows:auto auto 1fr auto; height:100%; }
+  .section { padding:14px; border-bottom:1px solid rgba(255,255,255,.06); }
+  .section:last-child { border-bottom:none; }
+  .pc-title { font-weight:800; margin-bottom:10px; color:var(--accent); }
+  .code { background:var(--slot); border-radius:12px; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:13px; }
+  .line { padding:4px 8px; border-radius:6px; }
+  .line.hl { background:rgba(255,255,255,.08); }
+
+  .log { display:flex; flex-direction:column; gap:8px; max-height:230px; overflow:auto; }
+  .log .row { background:var(--slot); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; }
+  .pill { background:var(--chip); padding:6px 10px; border-radius:999px; color:var(--muted); font-size:12px; border:1px solid rgba(255,255,255,.06); }
+  
+  /* Enhanced tip section */
+  .tip-section { border-bottom:none !important; }
+  .tip-container {
+    display:flex; align-items:flex-start; gap:12px;
+    background:linear-gradient(135deg, rgba(108,243,255,0.08), rgba(138,233,193,0.08));
+    border:1px solid rgba(108,243,255,0.15);
+    border-radius:12px; padding:14px;
+  }
+  .tip-icon { font-size:18px; flex-shrink:0; margin-top:2px; }
+  .tip-content { flex:1; min-width:0; }
+  .tip-title {
+    font-weight:800; font-size:13px; color:var(--accent);
+    margin-bottom:4px; letter-spacing:0.3px;
+  }
+  .tip-text {
+    color:var(--text); font-size:13px; line-height:1.5;
+    opacity:0.9;
+  }
+  
+  @media (max-width: 480px) {
+    .tip-container { flex-direction:column; gap:8px; text-align:center; }
+    .tip-icon { align-self:center; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">
+      <span class="badge">Binary Trees</span>
+      <h2 style="margin:0">➖ BST Delete (3 Cases)</h2>
+    </div>
+    <div class="note">Leaf → remove; One child → promote child; Two children → copy <b>inorder successor</b> then delete it.</div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card">
+      <div class="controls">
+        <input id="valueInput" type="number" placeholder="key e.g. 6"/>
+        <button id="deleteBtn" class="primary">Delete</button>
+        <button id="play" class="ghost">▶ Play</button>
+        <button id="step" class="ghost">⏭ Step</button>
+        <button id="reset" class="ghost">⟲ Reset</button>
+        <button id="pickBtn" class="ghost">🎯 Pick existing</button>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+          <span class="note">Speed</span>
+          <input id="speed" type="range" min="200" max="1600" value="850" step="50"/>
+        </div>
+      </div>
+      <div class="canvas">
+        <svg id="svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z"/>
+            </marker>
+          </defs>
+          <!-- drawn via JS -->
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="card panel">
+      <div class="section">
+        <div class="pc-title">Pseudocode</div>
+        <div class="code" id="code">
+          <div class="line" data-l="1">1&nbsp; deleteNode(root, key):</div>
+          <div class="line" data-l="2">2&nbsp; &nbsp; if root is NULL: return NULL</div>
+          <div class="line" data-l="3">3&nbsp; &nbsp; if key &lt; root.value:</div>
+          <div class="line" data-l="4">4&nbsp; &nbsp; &nbsp; &nbsp; root.left = deleteNode(root.left, key)</div>
+          <div class="line" data-l="5">5&nbsp; &nbsp; else if key &gt; root.value:</div>
+          <div class="line" data-l="6">6&nbsp; &nbsp; &nbsp; &nbsp; root.right = deleteNode(root.right, key)</div>
+          <div class="line" data-l="7">7&nbsp; &nbsp; else: // found node</div>
+          <div class="line" data-l="8">8&nbsp; &nbsp; &nbsp; if root.left is NULL: return root.right</div>
+          <div class="line" data-l="9">9&nbsp; &nbsp; &nbsp; else if root.right is NULL: return root.left</div>
+          <div class="line" data-l="10">10&nbsp; &nbsp; &nbsp; else:</div>
+          <div class="line" data-l="11">11&nbsp; &nbsp; &nbsp; &nbsp; successor = minValueNode(root.right)</div>
+          <div class="line" data-l="12">12&nbsp; &nbsp; &nbsp; &nbsp; root.value = successor.value</div>
+          <div class="line" data-l="13">13&nbsp; &nbsp; &nbsp; &nbsp; root.right = deleteNode(root.right, successor.value)</div>
+          <div class="line" data-l="14">14&nbsp; &nbsp; return root</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="pc-title">minValueNode(subtree)</div>
+        <div class="code" id="codeMin">
+          <div class="line" data-m="1">1&nbsp; minValueNode(node):</div>
+          <div class="line" data-m="2">2&nbsp; &nbsp; current = node</div>
+          <div class="line" data-m="3">3&nbsp; &nbsp; while current.left != NULL:</div>
+          <div class="line" data-m="4">4&nbsp; &nbsp; &nbsp; current = current.left</div>
+          <div class="line" data-m="5">5&nbsp; &nbsp; return current</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="pc-title">Step Log</div>
+        <div class="log" id="log"></div>
+      </div>
+
+      <div class="section tip-section">
+        <div class="tip-container">
+          <div class="tip-icon">➖</div>
+          <div class="tip-content">
+            <div class="tip-title">Pro Tip</div>
+            <div class="tip-text">Time: average O(log n), worst O(n). Inorder successor is the <b>leftmost</b> node of the right subtree.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Data model ===== */
+let idCounter = 0;
+function makeNode(value){ return { id:"n"+(++idCounter), value, left:null, right:null }; }
+let root = null;
+
+/* Seed tree: 4,2,6,1,3,5,7,8,9 (a few extras to show cases) */
+[4,2,6,1,3,5,7,8,9].forEach(v=>root = realInsert(root, v));
+
+/* ===== Layout (inorder positioning) ===== */
+const svg = document.getElementById('svg');
+const RADIUS = 26, LEVEL_GAP = 110, H_MARGIN = 50, V_TOP = 60;
+
+function computePositions(){
+  const pos = new Map();
+  let xCounter = 0;
+  function inorder(n, depth){
+    if(!n) return;
+    inorder(n.left, depth+1);
+    pos.set(n.id, { x: ++xCounter, y: depth });
+    inorder(n.right, depth+1);
+  }
+  inorder(root, 0);
+  const width = 1000 - 2*H_MARGIN;
+  const xScale = width / (Math.max(xCounter,1)+1);
+  for (const [id, p] of pos){
+    p.X = H_MARGIN + p.x * xScale;
+    p.Y = V_TOP + p.y * LEVEL_GAP;
+  }
+  return pos;
+}
+
+function drawTree({flashEdge=null, markSuccessor=null, fadeId=null} = {}){
+  while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+  const pos = computePositions();
+
+  function edge(a,b){
+    const p1 = pos.get(a), p2 = pos.get(b);
+    const ang = Math.atan2(p2.Y-p1.Y, p2.X-p1.X);
+    const x1 = p1.X + Math.cos(ang)*RADIUS, y1 = p1.Y + Math.sin(ang)*RADIUS;
+    const x2 = p2.X - Math.cos(ang)*RADIUS, y2 = p2.Y - Math.sin(ang)*RADIUS;
+    const line = mk('line', {x1,y1,x2,y2,class:'edge','data-a':a,'data-b':b});
+    svg.appendChild(line);
+    return line;
+  }
+  function node(n){
+    const g = mk('g',{class:'node',id:n.id,transform:`translate(${pos.get(n.id).X},${pos.get(n.id).Y})`});
+    const c = mk('circle',{r:RADIUS,class:'dot'});
+    const t = mk('text',{}); t.textContent = n.value;
+    if (fadeId && n.id === fadeId) g.classList.add('faded');
+    g.appendChild(c); g.appendChild(t); svg.appendChild(g);
+  }
+  (function draw(n){
+    if(!n) return;
+    if(n.left) edge(n.id, n.left.id);
+    if(n.right) edge(n.id, n.right.id);
+    draw(n.left); draw(n.right);
+  })(root);
+  (function drawN(n){ if(!n) return; node(n); drawN(n.left); drawN(n.right); })(root);
+
+  if (flashEdge){
+    const line = [...svg.querySelectorAll('.edge')]
+      .find(e=>e.getAttribute('data-a')===flashEdge.a && e.getAttribute('data-b')===flashEdge.b);
+    if (line){ line.classList.add('active'); setTimeout(()=>line.classList.remove('active'), 900); }
+  }
+  if (markSuccessor){
+    document.getElementById(markSuccessor)?.classList.add('successor');
+  }
+}
+
+function mk(tag, attrs={}){ const el=document.createElementNS('http://www.w3.org/2000/svg', tag); for(const[k,v] of Object.entries(attrs)) el.setAttribute(k,v); return el; }
+
+/* ===== Real operations (no animation) ===== */
+function realInsert(n, v){
+  if (!n) return makeNode(v);
+  if (v < n.value) n.left = realInsert(n.left, v);
+  else if (v > n.value) n.right = realInsert(n.right, v);
+  return n;
+}
+function realDelete(n, key){
+  if (!n) return null;
+  if (key < n.value) n.left = realDelete(n.left, key);
+  else if (key > n.value) n.right = realDelete(n.right, key);
+  else {
+    if (!n.left) return n.right;
+    if (!n.right) return n.left;
+    const succ = minNode(n.right);
+    n.value = succ.value;
+    n.right = realDelete(n.right, succ.value);
+  }
+  return n;
+}
+function minNode(n){ while(n && n.left) n = n.left; return n; }
+
+/* ===== Plan builder for animated delete ===== */
+let plan = []; // queue of steps
+function buildPlan(key){
+  plan = [];
+  if (!root){ plan.push({type:'empty'}); return; }
+
+  // Search path to node
+  let cur = root, parent = null;
+  while (cur && cur.value !== key){
+    plan.push({type:'compare', nodeId:cur.id, nodeVal:cur.value, key});
+    if (key < cur.value){
+      plan.push({type:'descend', from:cur.id, to:cur.left?.id || null, dir:'left'});
+      parent = cur; cur = cur.left;
+    }else{
+      plan.push({type:'descend', from:cur.id, to:cur.right?.id || null, dir:'right'});
+      parent = cur; cur = cur.right;
+    }
+  }
+  if (!cur){ plan.push({type:'notFound', key}); return; }
+
+  // Found node:
+  plan.push({type:'found', nodeId:cur.id, key});
+
+  const hasL = !!cur.left, hasR = !!cur.right;
+  if (!hasL && !hasR){
+    plan.push({type:'removeLeaf', nodeId:cur.id, parentId:parent?.id || null});
+    return;
+  }
+  if (!hasL || !hasR){
+    const childId = (cur.left?.id) || (cur.right?.id);
+    plan.push({type:'promoteChild', nodeId:cur.id, parentId:parent?.id || null, childId});
+    return;
+  }
+
+  // Two children: find successor in right subtree
+  plan.push({type:'twoChildren', nodeId:cur.id});
+  // start at right child then go left chain
+  let sParent = cur, s = cur.right;
+  plan.push({type:'goRight', from:cur.id, to:s.id});
+  while (s.left){
+    plan.push({type:'minStep', from:s.id, to:s.left.id});
+    sParent = s; s = s.left;
+  }
+  plan.push({type:'chooseSuccessor', succId:s.id, parentId:sParent.id});
+  // copy value
+  plan.push({type:'copyValue', from:s.id, to:cur.id});
+  // delete successor node (it has no left; may have right)
+  const succChild = s.right?.id || null;
+  plan.push({type:'deleteSuccAtParent', parentId:sParent.id, succId:s.id, childId:succChild});
+}
+
+/* ===== Pseudocode highlighting & log ===== */
+const code = document.getElementById('code');
+const codeMin = document.getElementById('codeMin');
+const logEl = document.getElementById('log');
+function highlightLine(n){
+  [...code.querySelectorAll('.line')].forEach(l=>l.classList.remove('hl'));
+  if (n!=null) code.querySelector(`.line[data-l="${n}"]`)?.classList.add('hl');
+}
+function highlightMin(n){
+  [...codeMin.querySelectorAll('.line')].forEach(l=>l.classList.remove('hl'));
+  if (n!=null) codeMin.querySelector(`.line[data-m="${n}"]`)?.classList.add('hl');
+}
+function log(msg){
+  const row=document.createElement('div'); row.className='row'; row.textContent=msg; logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ===== Engine: execute steps ===== */
+let playing=false, timer=null;
+function resetUI(){
+  clearTimeout(timer); playing=false; playBtn.textContent='▶ Play';
+  plan=[]; logEl.innerHTML=''; highlightLine(null); highlightMin(null);
+  drawTree();
+}
+
+function focusNode(id){
+  [...svg.querySelectorAll('.node')].forEach(n=>n.classList.remove('focus','successor'));
+  document.getElementById(id)?.classList.add('focus');
+}
+
+function step(){
+  if (plan.length===0){ playing=false; playBtn.textContent='▶ Play'; highlightLine(14); return; }
+
+  const s = plan.shift();
+  switch(s.type){
+
+    case 'empty':
+      highlightLine(2); log('Tree is empty.'); break;
+
+    case 'compare':
+      highlightLine(3);
+      focusNode(s.nodeId);
+      if (s.key < s.nodeVal) log(`key ${s.key} < ${s.nodeVal} → go left`);
+      else log(`key ${s.key} > ${s.nodeVal} → go right`);
+      break;
+
+    case 'descend':
+      highlightLine(s.dir==='left' ? 4 : 6);
+      if (s.to){ drawTree({flashEdge:{a:s.from,b:s.to}}); focusNode(s.to); }
+      else { drawTree(); log('Hit NULL — key not found down this path.'); }
+      break;
+
+    case 'notFound':
+      highlightLine(2); log(`Key ${s.key} not found.`); plan=[]; break;
+
+    case 'found':
+      highlightLine(7); focusNode(s.nodeId); log(`Found node ${s.key}. Decide case...`); break;
+
+    case 'removeLeaf': {
+      // Remove reference from parent
+      const {nodeId,parentId} = s;
+      const parent = findNode(root, parentId);
+      if (!parent){ // deleting the root leaf
+        root = null;
+      } else if (parent.left && parent.left.id===nodeId){
+        parent.left = null;
+      } else if (parent.right && parent.right.id===nodeId){
+        parent.right = null;
+      }
+      highlightLine(8); log('Case 1: Leaf → remove it.');
+      drawTree();
+      break;
+    }
+
+    case 'promoteChild': {
+      const {nodeId,parentId,childId} = s;
+      const child = findNode(root, childId);
+      if (!parentId){ // deleting root with one child
+        root = child;
+      } else {
+        const parent = findNode(root, parentId);
+        if (parent.left && parent.left.id===nodeId) parent.left = child;
+        else if (parent.right && parent.right.id===nodeId) parent.right = child;
+      }
+      highlightLine(9); log(`Case 2: One child → promote child ${child.value}.`);
+      drawTree();
+      break;
+    }
+
+    case 'twoChildren':
+      highlightLine(10); log('Case 3: Two children → find inorder successor in right subtree.'); break;
+
+    case 'goRight': {
+      highlightLine(11);
+      drawTree({flashEdge:{a:s.from,b:s.to}});
+      focusNode(s.to);
+      highlightMin(1); setTimeout(()=>highlightMin(2),100);
+      break;
+    }
+
+    case 'minStep': {
+      highlightMin(3);
+      drawTree({flashEdge:{a:s.from,b:s.to}});
+      focusNode(s.to);
+      highlightMin(4);
+      break;
+    }
+
+    case 'chooseSuccessor': {
+      highlightMin(5); highlightLine(11);
+      drawTree({markSuccessor:s.succId});
+      const v = findNode(root, s.succId).value;
+      log(`Successor chosen: ${v} (leftmost of right subtree).`);
+      break;
+    }
+
+    case 'copyValue': {
+      const from = findNode(root, s.from), to = findNode(root, s.to);
+      highlightLine(12);
+      log(`Copy successor value ${from.value} into node ${to.value}.`);
+      to.value = from.value;
+      drawTree({markSuccessor:s.from});
+      break;
+    }
+
+    case 'deleteSuccAtParent': {
+      highlightLine(13);
+      const {parentId, succId, childId} = s;
+      const parent = findNode(root, parentId);
+      const child = childId ? findNode(root, childId) : null;
+
+      // successor can be immediate right child of the original node (parent == original node)
+      if (parent.left && parent.left.id===succId) parent.left = child;
+      else if (parent.right && parent.right.id===succId) parent.right = child;
+
+      const msg = child ? `Delete successor; promote its right child ${child.value}.` : 'Delete successor (leaf).';
+      log(msg);
+      drawTree();
+      break;
+    }
+  }
+}
+
+/* ===== Helpers ===== */
+function findNode(n, id){ if(!n) return null; if(n.id===id) return n; return findNode(n.left,id)||findNode(n.right,id); }
+function existsValue(n, v){ while(n){ if(v===n.value) return true; n = v<n.value ? n.left : n.right; } return false; }
+
+/* ===== UI wiring ===== */
+const valueInput = document.getElementById('valueInput');
+const deleteBtn  = document.getElementById('deleteBtn');
+const playBtn    = document.getElementById('play');
+const stepBtn    = document.getElementById('step');
+const resetBtn   = document.getElementById('reset');
+const pickBtn    = document.getElementById('pickBtn');
+const speedRange = document.getElementById('speed');
+
+function loop(){ if(!playing) return; step(); if(playing){ timer=setTimeout(loop, Number(speedRange.value)); } }
+
+deleteBtn.addEventListener('click', ()=>{
+  const key = Number(valueInput.value);
+  if (Number.isNaN(key)){ valueInput.focus(); return; }
+  if (!existsValue(root, key)){ log(`Key ${key} not in tree.`); highlightLine(2); plan=[]; return; }
+  log(`Delete request: ${key}`);
+  buildPlan(key);
+  playing = true; playBtn.textContent='⏸ Pause'; loop();
+});
+
+playBtn.addEventListener('click', ()=>{
+  if (plan.length===0) return;
+  if (!playing){ playing=true; playBtn.textContent='⏸ Pause'; loop(); }
+  else { playing=false; playBtn.textContent='▶ Play'; clearTimeout(timer); }
+});
+stepBtn.addEventListener('click', ()=>{ if(!playing) step(); });
+
+resetBtn.addEventListener('click', ()=>{
+  idCounter=0; root=null; [4,2,6,1,3,5,7,8,9].forEach(v=>root = realInsert(root, v));
+  valueInput.value=''; resetUI();
+});
+
+pickBtn.addEventListener('click', ()=>{
+  // choose a random existing node value
+  const vals=[]; (function walk(n){ if(!n) return; vals.push(n.value); walk(n.left); walk(n.right); })(root);
+  if (!vals.length) return;
+  const v = vals[Math.floor(Math.random()*vals.length)];
+  valueInput.value = v;
+  deleteBtn.click();
+});
+
+/* Init */
+drawTree();
+log('Ready. Enter a key and press Delete.');
+</script>
+</body>
+</html>
