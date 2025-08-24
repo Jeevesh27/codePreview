@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inorder Traversal — Visualizer</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #161a2d;
+      --panel-2: #1e2340;
+      --accent: #6cf3ff;
+      --accent-2: #8ae9c1;
+      --text: #ecf2ff;
+      --muted: #a6b0cf;
+      --ok: #84fab0;
+      --slot: #2a305a;
+      --chip: #39407a;
+      --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+      --radius: 16px;
+      --gap: 14px;
+      --speed: 300ms;
+      --pair: #ffd166;
+      --new: #8ae9c1;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 28px auto;
+      padding: 0 18px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b1320;
+      font-weight: 800;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.4fr .6fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 980px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid rgba(255, 255, 255, .06);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, .06);
+      align-items: center;
+    }
+
+    button,
+    input[type="range"] {
+      background: var(--slot);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, .1);
+      padding: 10px 12px;
+      border-radius: 10px;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 800;
+      letter-spacing: .2px;
+      transition: transform .05s ease, box-shadow .2s ease, background .2s ease;
+    }
+
+    button:hover {
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #0b1320;
+    }
+
+    .ghost {
+      background: var(--chip);
+    }
+
+    .controls label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-left: 6px;
+    }
+
+    /* Canvas */
+    .canvas {
+      height: clamp(380px, 58vh, 620px);
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Edges + arrows */
+    defs marker#arrow path {
+      fill: var(--muted);
+    }
+
+    .edge {
+      stroke: var(--muted);
+      stroke-width: 2;
+      marker-end: url(#arrow);
+      opacity: .9;
+      transition: stroke var(--speed), opacity var(--speed);
+    }
+
+    .edge.active {
+      stroke: var(--pair);
+      opacity: 1;
+    }
+
+    /* Nodes */
+    .node {
+      transition: transform var(--speed);
+      cursor: pointer;
+    }
+
+    .node .dot {
+      fill: var(--chip);
+      stroke: rgba(255, 255, 255, .12);
+      stroke-width: 1.5;
+      filter: drop-shadow(0 10px 18px rgba(0, 0, 0, .45));
+    }
+
+    .node text {
+      fill: var(--text);
+      font-weight: 800;
+      font-size: 14px;
+      dominant-baseline: middle;
+      text-anchor: middle;
+    }
+
+    .node:hover {
+      transform: scale(1.05);
+    }
+
+    .node.focus .dot {
+      fill: var(--pair);
+    }
+
+    .node.visited .dot {
+      fill: var(--new);
+    }
+
+    /* Output chips */
+    .trail {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 14px;
+      border-top: 1px solid rgba(255, 255, 255, .06);
+    }
+
+    .chip {
+      background: var(--chip);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, .06);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-weight: 800;
+      min-width: 34px;
+      text-align: center;
+    }
+
+    /* Right column: pseudocode & stack */
+    .panel {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100%;
+    }
+
+    .section {
+      padding: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, .06);
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    .pc-title {
+      font-weight: 800;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+
+    .code {
+      background: var(--slot);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 12px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .line {
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .line.hl {
+      background: rgba(255, 255, 255, .08);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .frame {
+      background: var(--slot);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .kv {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill {
+      background: var(--chip);
+      padding: 6px 10px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      border: 1px solid rgba(255, 255, 255, .06);
+      text-align: center;
+      width: 100%;
+      display: block;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="title">
+        <span class="badge">Binary Trees</span>
+        <h2 style="margin:0">🔄 Inorder Traversal (Left → Root → Right)</h2>
+      </div>
+      <div class="note">For a BST, inorder yields values in <b>sorted order</b>.</div>
+    </div>
+
+    <div class="grid">
+      <!-- LEFT: Visualization -->
+      <div class="card">
+        <div class="controls">
+          <button id="play" class="primary">▶ Play</button>
+          <button id="step" class="ghost">⏭ Step</button>
+          <button id="reset" class="ghost">⟲ Reset</button>
+          <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
+            <span class="note">Speed</span>
+            <input id="speed" type="range" min="200" max="1600" value="900" step="50" />
+          </div>
+        </div>
+        <div class="canvas">
+          <svg id="svg" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8"
+                orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
+            </defs>
+            <!-- injected -->
+          </svg>
+        </div>
+        <div class="trail" id="trail"></div>
+      </div>
+
+      <!-- RIGHT: Pseudocode + Stack -->
+      <div class="card panel">
+        <div class="section">
+          <div class="pc-title">Pseudocode</div>
+          <div class="code" id="code">
+            <div class="line" data-l="1">1&nbsp; INORDER(node):</div>
+            <div class="line" data-l="2">2&nbsp; &nbsp; if node == NULL:</div>
+            <div class="line" data-l="3">3&nbsp; &nbsp; &nbsp; &nbsp; return</div>
+            <div class="line" data-l="4">4&nbsp; &nbsp; INORDER(node.left)</div>
+            <div class="line" data-l="5">5&nbsp; &nbsp; visit(node)</div>
+            <div class="line" data-l="6">6&nbsp; &nbsp; INORDER(node.right)</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="pc-title">Call Stack (top last)</div>
+          <div id="stack" class="stack"></div>
+        </div>
+
+        <div class="section">
+          <span class="pill">Tip: watch the highlighted line move as recursion unfolds.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ======== Data: balanced BST to show sorted output ========
+    
+               4
+            /     \
+           2       6
+         /  \    /  \
+        1    3  5    7
+    */
+    const nodes = {
+      n1: { id: "n1", val: 4, left: "n2", right: "n3" },
+      n2: { id: "n2", val: 2, left: "n4", right: "n5" },
+      n3: { id: "n3", val: 6, left: "n6", right: "n7" },
+      n4: { id: "n4", val: 1, left: null, right: null },
+      n5: { id: "n5", val: 3, left: null, right: null },
+      n6: { id: "n6", val: 5, left: null, right: null },
+      n7: { id: "n7", val: 7, left: null, right: null },
+    };
+    const ROOT = "n1";
+
+    /* ======== Layout ======== */
+    const layout = {
+      n1: { x: 500, y: 80 }, n2: { x: 280, y: 200 }, n3: { x: 720, y: 200 },
+      n4: { x: 170, y: 340 }, n5: { x: 390, y: 340 }, n6: { x: 610, y: 340 }, n7: { x: 830, y: 340 }
+    };
+    const RADIUS = 26;
+
+    const svg = document.getElementById('svg');
+    const trail = document.getElementById('trail');
+    const code = document.getElementById('code');
+    const stackEl = document.getElementById('stack');
+    const playBtn = document.getElementById('play');
+    const stepBtn = document.getElementById('step');
+    const resetBtn = document.getElementById('reset');
+    const speedRange = document.getElementById('speed');
+
+    function mk(tag, attrs = {}) { const el = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v); return el; }
+
+    function drawTree() {
+      // clear except defs
+      while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+
+      // edges
+      for (const n of Object.values(nodes)) {
+        const p = layout[n.id];
+        if (n.left) addEdge(n.id, n.left, p, layout[n.left]);
+        if (n.right) addEdge(n.id, n.right, p, layout[n.right]);
+      }
+      // nodes
+      for (const n of Object.values(nodes)) addNode(n);
+    }
+
+    function addEdge(aId, bId, p1, p2) {
+      const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      const x1 = p1.x + Math.cos(ang) * RADIUS;
+      const y1 = p1.y + Math.sin(ang) * RADIUS;
+      const x2 = p2.x - Math.cos(ang) * RADIUS;
+      const y2 = p2.y - Math.sin(ang) * RADIUS;
+      const line = mk('line', { x1, y1, x2, y2, class: 'edge', 'data-a': aId, 'data-b': bId });
+      svg.appendChild(line);
+    }
+    function addNode(n) {
+      const g = mk('g', { class: 'node', id: n.id, transform: `translate(${layout[n.id].x},${layout[n.id].y})` });
+      const c = mk('circle', { r: RADIUS, class: 'dot' });
+      const t = mk('text', {}); t.textContent = n.val;
+      g.appendChild(c); g.appendChild(t);
+      svg.appendChild(g);
+    }
+
+    /* ======== Traversal engine (explicit stack to mirror recursion) ========
+    
+    We simulate:
+    
+    INORDER(node):
+      if node == NULL: return
+      INORDER(node.left)
+      visit(node)
+      INORDER(node.right)
+    
+    Each stack frame: { id, phase }
+    phase in { enter, leftDone, visited }
+    */
+    let frames = [];       // simulated recursion stack (top at end)
+    let output = [];       // visited node ids in order
+    let playing = false;
+    let timer = null;
+
+    function reset() {
+      clearTimeout(timer);
+      playing = false; playBtn.textContent = '▶ Play';
+      frames = [{ id: ROOT, phase: 'enter' }];
+      output = [];
+      trail.innerHTML = '';
+      // clear node states
+      [...svg.querySelectorAll('.node')].forEach(n => n.classList.remove('focus', 'visited'));
+      // clear edges
+      [...svg.querySelectorAll('.edge')].forEach(e => e.classList.remove('active'));
+      // code highlight
+      highlightLine(null);
+      // stack render
+      renderStack();
+    }
+
+    function step() {
+      if (frames.length === 0) { // finished
+        playing = false; playBtn.textContent = '▶ Play';
+        return;
+      }
+
+      const top = frames.pop();      // pop current frame
+      const node = nodes[top.id];    // may be undefined if null frame
+
+      if (top.id === null) {
+        // null node -> lines 2-3 (return)
+        highlightLine(2);
+        setTimeout(() => highlightLine(3), 80);
+        renderStack();
+        return;
+      }
+
+      if (top.phase === 'enter') {
+        // Equivalent to: if node == NULL then return; INORDER(node.left)
+        highlightLine(2); // check null
+        // push rest in reverse order of execution
+        frames.push({ id: top.id, phase: 'leftDone' });
+        frames.push({ id: node.left ?? null, phase: 'enter' });
+        renderStack();
+        // edge glow to left child if exists
+        if (node.left) flashEdge(top.id, node.left);
+        // focus current node (about to go left)
+        focusNode(top.id);
+        highlightLine(4);
+        return;
+      }
+
+      if (top.phase === 'leftDone') {
+        // visit(node)
+        highlightLine(5);
+        visitNode(top.id);
+        // after visit -> go right
+        frames.push({ id: top.id, phase: 'visited' });
+        renderStack();
+        return;
+      }
+
+      if (top.phase === 'visited') {
+        // INORDER(node.right)
+        highlightLine(6);
+        if (node.right) flashEdge(top.id, node.right);
+        frames.push({ id: node.right ?? null, phase: 'enter' });
+        renderStack();
+        return;
+      }
+    }
+
+    function focusNode(id) {
+      // set focus style to current
+      [...svg.querySelectorAll('.node')].forEach(n => n.classList.remove('focus'));
+      document.getElementById(id)?.classList.add('focus');
+    }
+    function visitNode(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.remove('focus');
+      el.classList.add('visited');
+      output.push(id);
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = nodes[id].val;
+      trail.appendChild(chip);
+    }
+
+    function flashEdge(aId, bId) {
+      const edge = [...svg.querySelectorAll('.edge')].find(e => e.getAttribute('data-a') === aId && e.getAttribute('data-b') === bId);
+      if (!edge) return;
+      edge.classList.add('active');
+      setTimeout(() => edge.classList.remove('active'), Math.min(1200, Number(speedRange.value) + 200));
+    }
+
+    function renderStack() {
+      // Show frames (bottom at top, top at bottom)
+      stackEl.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      frames.forEach((f, i) => {
+        const div = document.createElement('div');
+        div.className = 'frame';
+        const name = (f.id === null) ? 'null' : nodes[f.id].val;
+        div.innerHTML = `<span>#${i + 1}</span><span class="kv">node=<b>${name}</b></span><span class="kv">phase=<b>${f.phase}</b></span>`;
+        frag.appendChild(div);
+      });
+      stackEl.appendChild(frag);
+    }
+
+    function highlightLine(n) {
+      [...code.querySelectorAll('.line')].forEach(l => l.classList.remove('hl'));
+      if (n == null) return;
+      const line = code.querySelector(`.line[data-l="${n}"]`);
+      if (line) line.classList.add('hl');
+    }
+
+    /* ======== Playback ======== */
+    function loop() {
+      if (!playing) return;
+      step();
+      if (playing) {
+        timer = setTimeout(loop, Number(speedRange.value));
+      } else if (frames.length > 0) {
+        // ended by user pause; do nothing
+      }
+    }
+
+    /* ======== Wire up ======== */
+    drawTree();
+    reset();
+
+    playBtn.addEventListener('click', () => {
+      if (!playing) {
+        playing = true; playBtn.textContent = '⏸ Pause';
+        loop();
+      } else {
+        playing = false; playBtn.textContent = '▶ Play';
+        clearTimeout(timer);
+      }
+    });
+    stepBtn.addEventListener('click', () => { if (!playing) step(); });
+    resetBtn.addEventListener('click', reset);
+
+    // Click node to jump focus (advanced learners like to poke!)
+    svg.addEventListener('click', (e) => {
+      const g = e.target.closest('.node'); if (!g) return;
+      // rebuild frames as if we called INORDER on that node
+      const id = g.id;
+      frames = [{ id, phase: 'enter' }]; renderStack();
+      highlightLine(1);
+      // focus immediately
+      focusNode(id);
+    });
+  </script>
+</body>
+
+</html>
