@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Linked List Visualizer — Singly, Doubly, Circular</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:radial-gradient(1200px 700px at 20% -10%, #1a1f3b55, transparent 60%), var(--bg);
+    color:var(--text); font:15px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji;
+  }
+
+  /* Top controls */
+  header{position:sticky; top:0; z-index:50; background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-bottom:1px solid #20264a; box-shadow:var(--shadow);}
+  .bar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px clamp(12px,2.2vw,28px)}
+  .title{font-weight:900; letter-spacing:.3px; margin-right:10px; font-size:clamp(16px,2.4vw,20px)}
+  .spacer{flex:1}
+  select,input[type="text"],input[type="number"]{
+    background:#101534; color:var(--text); border:1px solid #28306a; border-radius:12px; padding:9px 12px; outline:none}
+  .btn{background:linear-gradient(180deg,#1a2043,#141a38); border:1px solid #2a336d; color:var(--text);
+    padding:9px 12px; border-radius:12px; cursor:pointer; font-weight:700; transition:transform .08s ease, border-color var(--speed)}
+  .btn:hover{border-color:var(--accent)} .btn:active{transform:translateY(1px)}
+  .btn--accent{background:linear-gradient(180deg,#0f2b33,#0c2329); border-color:#1f8a99; color:#c9fbff}
+  .btn--ghost{background:transparent; border-style:dashed; color:var(--muted)}
+  .group{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .check{display:flex; align-items:center; gap:6px; color:var(--muted); font-weight:700; font-size:13px}
+
+  /* main area */
+  .wrap{padding:16px clamp(12px,2.2vw,28px) 28px}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border-radius:var(--radius); border:1px solid #20264a; box-shadow:var(--shadow)}
+  .canvas{position:relative; min-height:380px; padding:16px; overflow:hidden}
+  .legend{display:flex; flex-wrap:wrap; gap:10px; padding:10px 14px; border-top:1px solid #232a55; color:var(--muted)}
+  .chip{display:inline-flex; gap:8px; align-items:center; background:var(--chip); border:1px solid #49529a; color:var(--text); padding:6px 10px; border-radius:999px; font-weight:700}
+  .chip small{color:var(--muted); font-weight:600}
+
+  /* nodes */
+  .node{position:absolute; display:grid; place-items:center; min-width:92px; height:60px; padding:0 16px; border-radius:12px;
+    background:linear-gradient(180deg,#232a55,#1b224b 60%,#191f45); border:1px solid #3a4386; box-shadow:0 10px 24px rgba(0,0,0,.25);
+    transition:transform var(--speed), border-color var(--speed), box-shadow var(--speed)}
+  .node .label{font-weight:800; letter-spacing:.3px}
+  .node .meta{font-size:11px; color:var(--muted); margin-top:2px}
+  .node--new{outline:2px dashed var(--new)}
+  .node--head{border-color:var(--pair); box-shadow:0 0 0 2px #ffd16633, 0 16px 28px rgba(0,0,0,.28)}
+  .node--tail{border-color:var(--accent-2)}
+  .node:hover{transform:translateY(-2px)}
+
+  .null{position:absolute; display:flex; align-items:center; justify-content:center; width:64px; height:28px; border-radius:999px;
+    background:#22285a; border:1px dashed #4750a2; color:#9aa4d5; font-weight:800; font-size:12px}
+
+  /* SVG arrows — small heads & slimmer lines */
+  svg.links{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible}
+  .arrow{filter:drop-shadow(0 3px 6px rgba(0,0,0,.45))}
+  .shaft{stroke:#6cf3ff; stroke-width:2.4; fill:none}
+  .shaft.back{stroke:#8ae9c1; stroke-dasharray:6 4}
+  .head{fill:#6cf3ff}
+  .head.back{fill:#8ae9c1}
+  .arrow.label text{font-size:11px; fill:var(--muted); font-weight:700; letter-spacing:.2px}
+
+  @media (max-width:900px){ .canvas{min-height:330px} }
+  @media (max-width:560px){ .node{min-width:82px; height:56px} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="title">Linked List Visualizer</div>
+
+    <div class="group">
+      <label for="type" style="color:var(--muted); font-weight:700; font-size:13px;">Type</label>
+      <select id="type">
+        <option value="singly">Singly</option>
+        <option value="doubly">Doubly</option>
+        <option value="circular-singly">Circular (Singly)</option>
+        <option value="circular-doubly">Circular (Doubly)</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <input id="value" placeholder="value (e.g. 7, A, cat)" maxlength="8" />
+      <button class="btn btn--accent" id="addHead">Push Front</button>
+      <button class="btn btn--accent" id="addTail">Push Back</button>
+      <button class="btn" id="popHead" title="Remove head">Pop Front</button>
+      <button class="btn" id="popTail" title="Remove tail">Pop Back</button>
+    </div>
+
+    <div class="group">
+      <input type="number" id="index" min="0" step="1" placeholder="index" style="width:110px" />
+      <button class="btn" id="insertAt">Insert @ index</button>
+      <button class="btn" id="removeAt">Remove @ index</button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <label class="check"><input type="checkbox" id="showLabels"> Show all arrow labels</label>
+
+    <div class="group">
+      <button class="btn btn--ghost" id="shuffle">Shuffle</button>
+      <button class="btn btn--ghost" id="reset">Reset</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="panel">
+    <div id="stage" class="canvas">
+      <!-- pixel units; no viewBox -->
+      <svg class="links" aria-hidden="true">
+        <defs>
+          <marker id="arrowHead" markerWidth="7" markerHeight="7" refX="5.6" refY="3.5"
+                  orient="auto" markerUnits="strokeWidth">
+            <path d="M0 0 L7 3.5 L0 7 Z" class="head"/>
+          </marker>
+          <marker id="arrowHeadBack" markerWidth="7" markerHeight="7" refX="5.6" refY="3.5"
+                  orient="auto" markerUnits="strokeWidth">
+            <path d="M0 0 L7 3.5 L0 7 Z" class="head back"/>
+          </marker>
+        </defs>
+        <g id="arrows"></g>
+        <g id="labels"></g>
+      </svg>
+    </div>
+
+    <div class="legend">
+      <span class="chip"><svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10 H16" stroke="#6cf3ff" stroke-width="2.4"/></svg> next <small>(top lane)</small></span>
+      <span class="chip"><svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10 H16" stroke="#8ae9c1" stroke-width="2.4" stroke-dasharray="6 4"/></svg> prev <small>(bottom lane)</small></span>
+      <span class="chip" style="background:#2b314f;border-color:#5a65b3"><span style="width:10px;height:10px;border-radius:50%;background:var(--pair);display:inline-block"></span> head</span>
+      <span class="chip" style="background:#2b314f;border-color:#5a65b3"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent-2);display:inline-block"></span> tail</span>
+      <span class="chip">∅ <small>(null)</small></span>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ----- State -----
+  const state = { type:'singly', nodes:[], showAllLabels:false };
+  let idSeq = 1;
+  state.nodes = ['A','B','C','D'].map(v => ({id:idSeq++, value:v}));
+
+  // ----- DOM -----
+  const stage  = document.getElementById('stage');
+  const svg    = stage.querySelector('svg.links');
+  const arrows = document.getElementById('arrows');
+  const labels = document.getElementById('labels');
+  const typeSel= document.getElementById('type');
+  const input  = document.getElementById('value');
+  const idxInp = document.getElementById('index');
+  const showLabels = document.getElementById('showLabels');
+
+  // ----- Helpers -----
+  const escapeHtml = (s='') => s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const clamp = (n,min,max)=> Math.max(min, Math.min(max, n));
+  const el = (tag, attrs={}, parent) => {
+    const isSvg = tag.startsWith('svg:'); const t = isSvg ? tag.replace('svg:','') : tag;
+    const node = document.createElementNS(isSvg?'http://www.w3.org/2000/svg':'http://www.w3.org/1999/xhtml', t);
+    for (const [k,v] of Object.entries(attrs)) { if (k==='text') node.textContent=v; else node.setAttribute(k,v); }
+    parent && parent.appendChild(node); return node;
+  };
+
+  function stageSize(){ const r = stage.getBoundingClientRect(); return {w:r.width, h:r.height}; }
+
+  // Layout — generous gaps; wraps on small screens.
+  function layoutNodes(){
+    const { w } = stageSize();
+    const padX = 40, padY = 70;
+    const xGap = Math.max(180, Math.min(240, w * 0.26));  // more horizontal spacing
+    const yGap = 140;                                      // more vertical spacing
+    let x = padX, y = padY, i = 0;
+
+    for(const node of state.nodes){
+      const dom = document.getElementById('node-'+node.id);
+      if(!dom) continue;
+      if (x + 150 > w) { x = padX; y += yGap; }
+      dom.style.transform = `translate(${x}px,${y}px)`;
+      dom.dataset.cx = x + 60;
+      dom.dataset.cy = y + 30;
+      dom.dataset.i = i++;
+      x += xGap;
+    }
+  }
+
+  function clearLinks(){ arrows.innerHTML=''; labels.innerHTML=''; [...stage.querySelectorAll('.null')].forEach(n=>n.remove()); }
+  const pathQ    = (x1,y1,x2,y2,lift=44)=>`M ${x1} ${y1} Q ${(x1+x2)/2} ${Math.min(y1,y2)-lift} ${x2} ${y2}`;
+  const pathQBtm = (x1,y1,x2,y2,drop=44)=>`M ${x1} ${y1} Q ${(x1+x2)/2} ${Math.max(y1,y2)+drop} ${x2} ${y2}`;
+
+  function drawPath(d,{back=false,label='' }={}){
+    const g = el('svg:g',{class:'arrow'},arrows);
+    el('svg:path',{d, class: back?'shaft back':'shaft','marker-end': back?'url(#arrowHeadBack)':'url(#arrowHead)'}, g);
+    if(label){
+      const m=d.match(/M\s([\d.]+)\s([\d.]+)\sQ\s([\d.]+)\s([\d.]+)\s([\d.]+)\s([\d.]+)/);
+      if(m){
+        const [ ,x1,y1,cx,cy,x2,y2]=m.map(Number);
+        const t=.5, mx=(1-t)*(1-t)*x1+2*(1-t)*t*cx+t*t*x2, my=(1-t)*(1-t)*y1+2*(1-t)*t*cy+t*t*y2-6;
+        const lab = el('svg:g',{class:'arrow label'},labels);
+        el('svg:text',{x:mx,y:my,text:label,'text-anchor':'middle'},lab);
+      }
+    }
+  }
+
+  function renderNodes(){
+    [...stage.querySelectorAll('.node')].forEach(n=>n.remove());
+    for (let i=0;i<state.nodes.length;i++){
+      const n = state.nodes[i];
+      const div = document.createElement('div');
+      div.className = 'node' + (i===0?' node--head':'') + (i===state.nodes.length-1?' node--tail':'');
+      div.id = 'node-'+n.id;
+      div.innerHTML = `<div class="label">${escapeHtml(n.value)}</div><div class="meta">index ${i}</div>`;
+      div.addEventListener('click', ()=> focusNode(i));
+      stage.appendChild(div);
+    }
+    layoutNodes();
+  }
+
+  function placeNull(x,y){
+    const d = document.createElement('div');
+    d.className = 'null';
+    d.style.transform = `translate(${x}px,${y}px)`;
+    d.textContent = '∅';
+    stage.appendChild(d);
+  }
+
+  function renderLinks(){
+    clearLinks();
+    const nodes = state.nodes.map(n => document.getElementById('node-'+n.id)).filter(Boolean);
+    if(nodes.length===0) return;
+
+    const isSingly   = state.type==='singly' || state.type==='circular-singly';
+    const isDoubly   = state.type==='doubly' || state.type==='circular-doubly';
+    const isCircular = state.type.startsWith('circular');
+
+    for (let i=0;i<nodes.length;i++){
+      const a = nodes[i], b = nodes[i+1];
+      const ax = +a.dataset.cx, ay = +a.dataset.cy;
+
+      if (b){
+        const bx = +b.dataset.cx, by = +b.dataset.cy;
+        const sameRow = Math.abs(ay - by) < 2;
+
+        // NEXT lane (top)
+        const dNext = sameRow ? pathQ(ax+76, ay, bx-76, by, 46) : pathQBtm(ax+76, ay, bx-76, by, 52);
+        drawPath(dNext, {label: state.showAllLabels ? 'next' : ''});
+
+        // PREV lane (bottom), for doubly
+        if (isDoubly){
+          const dPrev = sameRow ? pathQBtm(bx-76, by+18, ax+76, ay+18, 46) : pathQ(bx-76, by+18, ax+76, ay+18, 52);
+          drawPath(dPrev, {back:true, label: state.showAllLabels ? 'prev' : ''});
+        }
+      }
+    }
+
+    const head = nodes[0], tail = nodes[nodes.length-1];
+    if (!isCircular){
+      if (tail){
+        const tx = +tail.dataset.cx, ty = +tail.dataset.cy;
+        const nullX = tx + 120;
+        placeNull(nullX - 20, ty - 26);
+        drawPath(pathQ(tx+76, ty, nullX, ty-10, 40), {label: state.showAllLabels ? 'next' : ''});
+      }
+      if (isDoubly && head){
+        const hx = +head.dataset.cx, hy = +head.dataset.cy;
+        const nullX = hx - 120;
+        placeNull(nullX - 20, hy + 12);
+        drawPath(pathQBtm(hx-76, hy+18, nullX, hy+24, 38), {back:true, label: state.showAllLabels ? 'prev' : ''});
+      }
+    } else {
+      const hx = +head.dataset.cx, hy = +head.dataset.cy;
+      const tx = +tail.dataset.cx, ty = +tail.dataset.cy;
+      drawPath(pathQ(tx+76, ty, hx-76, hy, 90), {label:'next (wrap)'});               // only wrap labeled
+      if (isDoubly){
+        drawPath(pathQBtm(hx-76, hy+18, tx+76, ty+18, 90), {back:true, label:'prev (wrap)'}); // only wrap labeled
+      }
+    }
+  }
+
+  function renderAll(){
+    renderNodes();
+    renderLinks();
+    const nodes = state.nodes.map(n => document.getElementById('node-'+n.id));
+    nodes.forEach((dom,i)=>{
+      dom?.classList.toggle('node--head', i===0);
+      dom?.classList.toggle('node--tail', i===nodes.length-1);
+    });
+  }
+
+  function focusNode(i){
+    const nodes = state.nodes.map(n => document.getElementById('node-'+n.id));
+    nodes.forEach((dom,idx)=>{
+      dom?.classList.toggle('node--head', idx===i);
+      dom?.classList.toggle('node--tail', idx===i);
+    });
+  }
+
+  // ----- Mutations -----
+  const makeValue = () => {
+    const pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return pool[Math.floor(Math.random()*pool.length)];
+  };
+  function addHead(val){ state.nodes.unshift({id:idSeq++, value: val || makeValue()}); pulse(0); }
+  function addTail(val){ state.nodes.push({id:idSeq++, value: val || makeValue()}); pulse(state.nodes.length-1); }
+  function popHead(){ if(state.nodes.length) state.nodes.shift(); }
+  function popTail(){ if(state.nodes.length) state.nodes.pop(); }
+  function insertAt(i,val){ i = clamp(i,0,state.nodes.length); state.nodes.splice(i,0,{id:idSeq++, value:val||makeValue()}); pulse(i); }
+  function removeAt(i){ if(!state.nodes.length) return; i = clamp(i,0,state.nodes.length-1); state.nodes.splice(i,1); }
+  function reset(){ state.nodes = ['A','B','C','D'].map(v => ({id:idSeq++, value:v})); }
+  function shuffle(){ for(let i=state.nodes.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [state.nodes[i],state.nodes[j]]=[state.nodes[j],state.nodes[i]]; } }
+  function pulse(i){ requestAnimationFrame(()=>{ const dom=document.getElementById('node-'+state.nodes[i]?.id); if(dom){ dom.classList.add('node--new'); setTimeout(()=>dom.classList.remove('node--new'), 700); } }); }
+
+  // ----- Events -----
+  typeSel.addEventListener('change', ()=>{ state.type = typeSel.value; renderAll(); });
+  document.getElementById('addHead').addEventListener('click', ()=>{ addHead(input.value.trim()||undefined); input.value=''; renderAll(); });
+  document.getElementById('addTail').addEventListener('click', ()=>{ addTail(input.value.trim()||undefined); input.value=''; renderAll(); });
+  document.getElementById('popHead').addEventListener('click', ()=>{ popHead(); renderAll(); });
+  document.getElementById('popTail').addEventListener('click', ()=>{ popTail(); renderAll(); });
+  document.getElementById('insertAt').addEventListener('click', ()=>{ const i = Number(idxInp.value); insertAt(Number.isFinite(i)?i:state.nodes.length, input.value.trim()||undefined); input.value=''; renderAll(); });
+  document.getElementById('removeAt').addEventListener('click', ()=>{ const i = Number(idxInp.value); removeAt(Number.isFinite(i)?i:state.nodes.length-1); renderAll(); });
+  document.getElementById('reset').addEventListener('click', ()=>{ reset(); renderAll(); });
+  document.getElementById('shuffle').addEventListener('click', ()=>{ shuffle(); renderAll(); });
+  showLabels.addEventListener('change', ()=>{ state.showAllLabels = showLabels.checked; renderLinks(); });
+
+  window.addEventListener('resize', ()=>{ layoutNodes(); renderLinks(); });
+
+  // Init
+  renderAll();
+})();
+</script>
+</body>
+</html>
