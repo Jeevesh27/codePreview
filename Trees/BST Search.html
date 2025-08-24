@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BST Search — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  html, body { height:100%; background:var(--bg); color:var(--text); }
+  body { margin:0; font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; }
+  .wrap { max-width:1100px; margin:28px auto; padding:0 18px; display:grid; gap:18px; }
+
+  .header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; }
+  .title h2 { margin:0; font-size:clamp(1.2rem, 3vw, 1.5rem); line-height:1.3; }
+  .badge { background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b1320; font-weight:800; padding:6px 10px; border-radius:999px; font-size:12px; letter-spacing:.5px; text-transform:uppercase; flex-shrink:0; }
+  .note { color:var(--muted); font-size:clamp(12px, 2.5vw, 13px); line-height:1.4; max-width:400px; margin-top:8px; }
+  
+  @media (max-width: 768px) {
+    .header { flex-direction:column; align-items:flex-start; gap:12px; }
+    .note { max-width:100%; margin-top:4px; }
+  }
+  
+  @media (max-width: 480px) {
+    .title { flex-direction:column; align-items:flex-start; gap:8px; }
+    .title h2 { font-size:1.1rem; }
+  }
+
+  .grid { display:grid; grid-template-columns: 1.4fr .6fr; gap:18px; }
+  @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
+
+  .card {
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+
+  /* Controls */
+  .controls { display:flex; flex-wrap:wrap; gap:10px; padding:14px; border-bottom:1px solid rgba(255,255,255,.06); align-items:center; }
+  .controls input[type="number"]{
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px; width:120px;
+  }
+  select, button, input[type="range"] {
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px;
+  }
+  button { cursor:pointer; font-weight:800; letter-spacing:.2px; }
+  .primary { background:var(--accent); color:#0b1320; }
+  .ghost { background:var(--chip); }
+
+  /* Canvas */
+  .canvas { height: clamp(380px, 58vh, 640px); }
+  svg { width:100%; height:100%; display:block; }
+
+  defs marker#arrow path { fill: var(--muted); }
+  .edge { stroke: var(--muted); stroke-width:2; marker-end:url(#arrow); opacity:.9; transition: stroke var(--speed), opacity var(--speed); }
+  .edge.active { stroke: var(--pair); opacity:1; }
+
+  .node { transition: transform var(--speed); cursor:pointer; }
+  .node .dot { fill:var(--chip); stroke:rgba(255,255,255,.12); stroke-width:1.5; filter: drop-shadow(0 10px 18px rgba(0,0,0,.45)); }
+  .node text { fill:var(--text); font-weight:800; font-size:14px; dominant-baseline: middle; text-anchor: middle; }
+  .node:hover { transform: scale(1.05); }
+  .node.focus .dot { fill: var(--pair); }
+  .node.found .dot { fill: var(--ok); }
+
+  /* Right column */
+  .panel { display:grid; grid-template-rows:auto auto 1fr auto; height:100%; }
+  .section { padding:14px; border-bottom:1px solid rgba(255,255,255,.06); }
+  .section:last-child { border-bottom:none; }
+  .pc-title { font-weight:800; margin-bottom:10px; color:var(--accent); }
+  .code { background:var(--slot); border-radius:12px; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:13px; }
+  .line { padding:4px 8px; border-radius:6px; }
+  .line.hl { background:rgba(255,255,255,.08); }
+
+  .stack, .pointer { display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto; }
+  .frame, .prow { background:var(--slot); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; display:flex; justify-content:space-between; align-items:center; }
+  .pill { background:var(--chip); padding:6px 10px; border-radius:999px; color:var(--muted); font-size:12px; border:1px solid rgba(255,255,255,.06); }
+  
+  /* Enhanced tip section */
+  .tip-section { border-bottom:none !important; }
+  .tip-container {
+    display:flex; align-items:flex-start; gap:12px;
+    background:linear-gradient(135deg, rgba(108,243,255,0.08), rgba(138,233,193,0.08));
+    border:1px solid rgba(108,243,255,0.15);
+    border-radius:12px; padding:14px;
+  }
+  .tip-icon { font-size:18px; flex-shrink:0; margin-top:2px; }
+  .tip-content { flex:1; min-width:0; }
+  .tip-title {
+    font-weight:800; font-size:13px; color:var(--accent);
+    margin-bottom:4px; letter-spacing:0.3px;
+  }
+  .tip-text {
+    color:var(--text); font-size:13px; line-height:1.5;
+    opacity:0.9;
+  }
+  
+  @media (max-width: 480px) {
+    .tip-container { flex-direction:column; gap:8px; text-align:center; }
+    .tip-icon { align-self:center; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">
+      <span class="badge">Binary Trees</span>
+      <h2 style="margin:0">🔍 BST Search</h2>
+    </div>
+    <div class="note">Compare down the tree. Average <b>O(log n)</b>, worst <b>O(n)</b>.</div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card">
+      <div class="controls">
+        <input id="valueInput" type="number" placeholder="target e.g. 5"/>
+        <select id="mode">
+          <option value="recursive" selected>Recursive</option>
+          <option value="iterative">Iterative</option>
+        </select>
+        <button id="searchBtn" class="primary">Search</button>
+        <button id="play" class="ghost">▶ Play</button>
+        <button id="step" class="ghost">⏭ Step</button>
+        <button id="reset" class="ghost">⟲ Reset</button>
+        <button id="pickBtn" class="ghost">🎯 Pick existing</button>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+          <span class="note">Speed</span>
+          <input id="speed" type="range" min="200" max="1600" value="850" step="50"/>
+        </div>
+      </div>
+      <div class="canvas">
+        <svg id="svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="card panel">
+      <div class="section">
+        <div class="pc-title">Pseudocode</div>
+        <!-- Recursive -->
+        <div class="code" id="code-rec">
+          <div class="line" data-l="1">1&nbsp; searchBST(root, target):</div>
+          <div class="line" data-l="2">2&nbsp; &nbsp; if root is NULL: return NULL</div>
+          <div class="line" data-l="3">3&nbsp; &nbsp; if root.value == target: return root</div>
+          <div class="line" data-l="4">4&nbsp; &nbsp; else if target &lt; root.value:</div>
+          <div class="line" data-l="5">5&nbsp; &nbsp; &nbsp; &nbsp; return searchBST(root.left, target)</div>
+          <div class="line" data-l="6">6&nbsp; &nbsp; else:</div>
+          <div class="line" data-l="7">7&nbsp; &nbsp; &nbsp; &nbsp; return searchBST(root.right, target)</div>
+        </div>
+        <!-- Iterative -->
+        <div class="code" id="code-it" style="display:none;">
+          <div class="line" data-i="1">1&nbsp; searchBST(root, target):</div>
+          <div class="line" data-i="2">2&nbsp; &nbsp; cur = root</div>
+          <div class="line" data-i="3">3&nbsp; &nbsp; while cur != NULL:</div>
+          <div class="line" data-i="4">4&nbsp; &nbsp; &nbsp; if cur.value == target: return cur</div>
+          <div class="line" data-i="5">5&nbsp; &nbsp; &nbsp; else if target &lt; cur.value: cur = cur.left</div>
+          <div class="line" data-i="6">6&nbsp; &nbsp; &nbsp; else: cur = cur.right</div>
+          <div class="line" data-i="7">7&nbsp; &nbsp; return NULL</div>
+        </div>
+      </div>
+
+      <div class="section" id="stackSection">
+        <div class="pc-title">Call Stack (recursive)</div>
+        <div class="stack" id="stack"></div>
+      </div>
+      <div class="section" id="ptrSection" style="display:none;">
+        <div class="pc-title">Pointer (iterative)</div>
+        <div class="pointer" id="ptr"></div>
+      </div>
+
+      <div class="section tip-section">
+        <div class="tip-container">
+          <div class="tip-icon">🔍</div>
+          <div class="tip-content">
+            <div class="tip-title">Pro Tip</div>
+            <div class="tip-text">Yellow = comparing / moving. Green = found. Watch the algorithm navigate the tree structure!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Data model ===== */
+let idCounter = 0;
+function makeNode(value){ return { id:"n"+(++idCounter), value, left:null, right:null }; }
+let root = null;
+
+/* Seed with a simple BST */
+[8,4,12,2,6,10,14,1,3,5,7,9,11,13,15].forEach(v => root = insertReal(root, v));
+
+function insertReal(n, v){
+  if (!n) return makeNode(v);
+  if (v < n.value) n.left = insertReal(n.left, v);
+  else if (v > n.value) n.right = insertReal(n.right, v);
+  return n;
+}
+
+/* ===== Layout (inorder positioning) ===== */
+const svg = document.getElementById('svg');
+const RADIUS = 26, LEVEL_GAP = 90, H_MARGIN = 50, V_TOP = 60;
+
+function computePositions(){
+  const pos = new Map();
+  let xCounter = 0;
+  (function inorder(n, depth){
+    if(!n) return;
+    inorder(n.left, depth+1);
+    pos.set(n.id, { x: ++xCounter, y: depth });
+    inorder(n.right, depth+1);
+  })(root, 0);
+  const width = 1000 - 2*H_MARGIN;
+  const xScale = width / (Math.max(xCounter,1)+1);
+  for (const [id, p] of pos){
+    p.X = H_MARGIN + p.x * xScale;
+    p.Y = V_TOP + p.y * LEVEL_GAP;
+  }
+  return pos;
+}
+
+function mk(tag, attrs={}){ const el=document.createElementNS('http://www.w3.org/2000/svg', tag); for(const[k,v] of Object.entries(attrs)) el.setAttribute(k,v); return el; }
+
+function drawTree({flashEdge=null} = {}){
+  while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+  const pos = computePositions();
+
+  (function drawEdges(n){
+    if(!n) return;
+    if(n.left) addEdge(n.id, n.left.id, pos);
+    if(n.right) addEdge(n.id, n.right.id, pos);
+    drawEdges(n.left); drawEdges(n.right);
+  })(root);
+
+  (function drawNodes(n){
+    if(!n) return;
+    addNode(n, pos.get(n.id));
+    drawNodes(n.left); drawNodes(n.right);
+  })(root);
+
+  if (flashEdge){
+    const line = [...svg.querySelectorAll('.edge')]
+      .find(e=>e.getAttribute('data-a')===flashEdge.a && e.getAttribute('data-b')===flashEdge.b);
+    if (line){ line.classList.add('active'); setTimeout(()=>line.classList.remove('active'), 900); }
+  }
+}
+function addEdge(aId,bId,pos){
+  const p1 = pos.get(aId), p2 = pos.get(bId);
+  const ang = Math.atan2(p2.Y-p1.Y, p2.X-p1.X);
+  const x1 = p1.X + Math.cos(ang)*RADIUS, y1 = p1.Y + Math.sin(ang)*RADIUS;
+  const x2 = p2.X - Math.cos(ang)*RADIUS, y2 = p2.Y - Math.sin(ang)*RADIUS;
+  const line = mk('line', {x1,y1,x2,y2, class:'edge','data-a':aId,'data-b':bId});
+  svg.appendChild(line);
+}
+function addNode(n,p){
+  const g = mk('g', {class:'node', id:n.id, transform:`translate(${p.X},${p.Y})`});
+  const c = mk('circle', {r:RADIUS, class:'dot'});
+  const t = mk('text', {}); t.textContent = n.value;
+  g.appendChild(c); g.appendChild(t);
+  svg.appendChild(g);
+}
+
+/* ===== UI refs ===== */
+const valueInput = document.getElementById('valueInput');
+const modeSel = document.getElementById('mode');
+const searchBtn = document.getElementById('searchBtn');
+const playBtn = document.getElementById('play');
+const stepBtn = document.getElementById('step');
+const resetBtn = document.getElementById('reset');
+const pickBtn = document.getElementById('pickBtn');
+const speedRange = document.getElementById('speed');
+
+const codeRec = document.getElementById('code-rec');
+const codeIt  = document.getElementById('code-it');
+const stackSection = document.getElementById('stackSection');
+const ptrSection   = document.getElementById('ptrSection');
+const stackEl = document.getElementById('stack');
+const ptrEl   = document.getElementById('ptr');
+
+/* ===== Mode switching ===== */
+modeSel.addEventListener('change', ()=>{
+  const recursive = modeSel.value === 'recursive';
+  codeRec.style.display = recursive ? '' : 'none';
+  codeIt.style.display  = recursive ? 'none' : '';
+  stackSection.style.display = recursive ? '' : 'none';
+  ptrSection.style.display   = recursive ? 'none' : '';
+  clearHighlights();
+});
+
+/* ===== Pseudocode highlighting ===== */
+function clearHighlights(){
+  [...codeRec.querySelectorAll('.line')].forEach(l=>l.classList.remove('hl'));
+  [...codeIt.querySelectorAll('.line')].forEach(l=>l.classList.remove('hl'));
+}
+function hlRec(n){ clearHighlights(); codeRec.querySelector(`[data-l="${n}"]`)?.classList.add('hl'); }
+function hlIt(n){ clearHighlights(); codeIt.querySelector(`[data-i="${n}"]`)?.classList.add('hl'); }
+
+/* ===== Plan builders ===== */
+let plan = [];     // steps queue
+let playing=false, timer=null;
+
+function buildPlanRecursive(target){
+  plan = [];
+  const stack = []; // track call stack values for panel
+  function pushFrame(n){ stack.push(n?.value ?? 'NULL'); renderStack(stack); }
+  function popFrame(){ stack.pop(); renderStack(stack); }
+
+  // manual simulation creates a sequence of steps (compare/descend/found/notfound)
+  let cur = root, parent = null;
+  while (true){
+    plan.push({kind:'push', node: cur ? cur.id : null, stack: true}); // ENTER
+    if (!cur){ plan.push({kind:'hl', line:2, mode:'rec'}); plan.push({kind:'notfound'}); plan.push({kind:'pop'}); break; }
+    plan.push({kind:'focus', id:cur.id});
+    plan.push({kind:'hl', line:3, mode:'rec'});
+    if (cur.value === target){ plan.push({kind:'found', id:cur.id}); plan.push({kind:'pop'}); break; }
+    plan.push({kind:'hl', line:4, mode:'rec'});
+    if (target < cur.value){
+      plan.push({kind:'descend', from:cur.id, to:cur.left?.id || null});
+      cur = cur.left; parent = cur; continue;
+    } else {
+      plan.push({kind:'hl', line:6, mode:'rec'});
+      plan.push({kind:'descend', from: (parent ? parent.id : (cur?cur.id:null)) || cur.id, to:cur.right?.id || null}); // from cur to right
+      cur = cur.right; parent = cur; continue;
+    }
+  }
+}
+
+function buildPlanIterative(target){
+  plan = [];
+  let cur = root;
+  plan.push({kind:'hl', line:2, mode:'it'});
+  plan.push({kind:'ptr', val: cur ? cur.value : 'NULL'});
+  plan.push({kind:'hl', line:3, mode:'it'});
+  while (cur){
+    plan.push({kind:'focus', id:cur.id});
+    plan.push({kind:'hl', line:4, mode:'it'});
+    if (cur.value === target){ plan.push({kind:'found', id:cur.id}); return; }
+    if (target < cur.value){
+      plan.push({kind:'hl', line:5, mode:'it'});
+      plan.push({kind:'descend', from:cur.id, to:cur.left?.id || null});
+      cur = cur.left;
+    } else {
+      plan.push({kind:'hl', line:6, mode:'it'});
+      plan.push({kind:'descend', from:cur.id, to:cur.right?.id || null});
+      cur = cur.right;
+    }
+    plan.push({kind:'ptr', val: cur ? cur.value : 'NULL'});
+    plan.push({kind:'hl', line:3, mode:'it'});
+  }
+  plan.push({kind:'hl', line:7, mode:'it'});
+  plan.push({kind:'notfound'});
+}
+
+/* ===== Render helpers ===== */
+function renderStack(stackVals){
+  stackEl.innerHTML = '';
+  stackVals.forEach((v,i)=>{
+    const div = document.createElement('div');
+    div.className = 'frame';
+    div.innerHTML = `<span>#${i+1}</span><span>node=<b>${v}</b></span>`;
+    stackEl.appendChild(div);
+  });
+}
+function renderPtr(val){
+  const row = document.createElement('div');
+  row.className = 'prow';
+  row.textContent = `cur → ${val}`;
+  ptrEl.appendChild(row);
+  ptrEl.scrollTop = ptrEl.scrollHeight;
+}
+
+function focusNode(id){
+  [...svg.querySelectorAll('.node')].forEach(n=>n.classList.remove('focus','found'));
+  if (id) document.getElementById(id)?.classList.add('focus');
+}
+
+function flashEdge(a,b){
+  if (!a || !b) return;
+  drawTree({flashEdge:{a,b}});
+}
+
+/* ===== Step engine ===== */
+function resetUI(){
+  clearTimeout(timer); playing=false; playBtn.textContent='▶ Play';
+  plan=[]; clearHighlights();
+  stackEl.innerHTML=''; ptrEl.innerHTML='';
+  [...svg.querySelectorAll('.node')].forEach(n=>n.classList.remove('focus','found'));
+  drawTree();
+}
+
+function step(){
+  if (plan.length===0){ playing=false; playBtn.textContent='▶ Play'; return; }
+  const s = plan.shift();
+
+  switch(s.kind){
+    case 'push': /* call stack entry (recursive) */ break;
+    case 'pop':  /* pop frame */ break;
+
+    case 'hl':
+      if (s.mode === 'rec') hlRec(s.line);
+      else hlIt(s.line);
+      break;
+
+    case 'focus':
+      focusNode(s.id);
+      break;
+
+    case 'descend':
+      flashEdge(s.from, s.to);
+      focusNode(s.to);
+      break;
+
+    case 'found':
+      clearHighlights();
+      const el = document.getElementById(s.id);
+      if (el){ el.classList.remove('focus'); el.classList.add('found'); }
+      break;
+
+    case 'notfound':
+      // nothing special; highlight already shows return NULL
+      break;
+
+    case 'ptr':
+      renderPtr(s.val);
+      break;
+  }
+}
+
+function loop(){ if(!playing) return; step(); if(playing){ timer=setTimeout(loop, Number(speedRange.value)); } }
+
+/* ===== Utilities ===== */
+function existsValue(n, v){ while(n){ if(v===n.value) return true; n = v<n.value ? n.left : n.right; } return false; }
+
+/* ===== Wiring ===== */
+const pickBtnEl = document.getElementById('pickBtn');
+
+document.getElementById('searchBtn').addEventListener('click', ()=>{
+  const target = Number(valueInput.value);
+  if (Number.isNaN(target)){ valueInput.focus(); return; }
+
+  // reset panels
+  stackEl.innerHTML=''; ptrEl.innerHTML='';
+
+  const recursive = modeSel.value === 'recursive';
+  if (recursive) buildPlanRecursive(target);
+  else buildPlanIterative(target);
+
+  playing = true; playBtn.textContent='⏸ Pause'; loop();
+});
+
+playBtn.addEventListener('click', ()=>{
+  if (plan.length===0) return;
+  if (!playing){ playing=true; playBtn.textContent='⏸ Pause'; loop(); }
+  else { playing=false; playBtn.textContent='▶ Play'; clearTimeout(timer); }
+});
+
+stepBtn.addEventListener('click', ()=>{ if(!playing) step(); });
+
+resetBtn.addEventListener('click', ()=>{
+  idCounter=0; root=null; [8,4,12,2,6,10,14,1,3,5,7,9,11,13,15].forEach(v=>root = insertReal(root, v));
+  valueInput.value=''; resetUI();
+});
+
+pickBtn.addEventListener('click', ()=>{
+  // choose an existing value (or a missing one ~20% of the time to see not-found)
+  const vals=[]; (function walk(n){ if(!n) return; vals.push(n.value); walk(n.left); walk(n.right); })(root);
+  let v;
+  if (Math.random()<0.8) v = vals[Math.floor(Math.random()*vals.length)];
+  else {
+    // pick a hole value near range
+    const min = Math.min(...vals), max = Math.max(...vals);
+    v = Math.random()<0.5 ? min-1 : max+1;
+  }
+  valueInput.value = v;
+  document.getElementById('searchBtn').click();
+});
+
+/* Init */
+drawTree();
+</script>
+</body>
+</html>
