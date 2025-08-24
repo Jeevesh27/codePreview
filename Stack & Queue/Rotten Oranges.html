@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>🧟 Rotten Oranges — Multi-source BFS</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+    --empty:#262b52; --fresh:#48c774; --rotten:#ff6b6b; --wall:#1c2143;
+  }
+
+  body { margin:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+  .wrap { max-width:1180px; margin:40px auto; padding:0 18px; display:grid; gap:var(--gap); }
+
+  header { display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; justify-content:space-between; }
+  h1 { margin:0; font-size:clamp(20px,2.4vw,28px); }
+  .subtitle { color:var(--muted); font-size:14px; margin-top:6px; max-width:80ch; }
+  .badge { font-size:11px; color:#0b1220; background:var(--accent); padding:4px 8px; border-radius:999px; font-weight:800; letter-spacing:.4px; }
+
+  .panel { background:linear-gradient(180deg,var(--panel),var(--panel-2)); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .btn{ appearance:none; border:none; border-radius:12px; padding:12px 14px; font-weight:600; background:var(--chip); color:var(--text); cursor:pointer; transition:transform .06s ease, filter .2s ease; }
+  .btn:hover{ filter:brightness(1.06); }
+  .btn:active{ transform:translateY(1px) scale(.995); }
+  .btn.primary{ background:linear-gradient(180deg,var(--accent),var(--accent-2)); color:#0b1220; }
+  .btn.warning{ background:linear-gradient(180deg,#ff8a8a,#ffa3a3); color:#230000; }
+  .btn.ghost{ background:transparent; border:1px solid var(--chip); }
+  .btn.small{ padding:8px 10px; font-size:13px; }
+
+  label { color:var(--muted); font-size:13px; }
+  input[type="number"], input[type="range"]{
+    background:var(--slot); border:1px solid transparent; color:var(--text);
+    border-radius:12px; padding:10px 12px; width:82px; font-size:14px;
+  }
+  input[type="number"]:focus{ outline:none; border-color:var(--accent); }
+  input[type="range"]{ width:140px; }
+
+  .gridWrap { display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; }
+  .grid { display:grid; gap:6px; background:rgba(255,255,255,.05); padding:10px; border-radius:12px; }
+  .cell{
+    width:34px; height:34px; border-radius:8px; display:grid; place-items:center; font-weight:800;
+    border:1px solid rgba(255,255,255,.06); transition:filter var(--speed) ease, outline var(--speed) ease, background var(--speed) ease;
+    user-select:none; cursor:pointer;
+  }
+  .E{ background:var(--empty); color:#536; }        /* empty */
+  .F{ background:var(--fresh); color:#062; }        /* fresh */
+  .R{ background:var(--rotten); color:#310; }       /* rotten */
+  .W{ background:var(--wall); color:#334; }         /* optional blocked cell */
+  .newRot{ outline:2px solid var(--pair); }
+  .srcRot{ outline:2px solid var(--accent); }
+
+  .legend { display:flex; gap:10px; flex-wrap:wrap; }
+  .tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.06); }
+  .sw{ width:10px; height:10px; border-radius:2px; }
+  .sw.e{ background:var(--empty); }
+  .sw.f{ background:var(--fresh); }
+  .sw.r{ background:var(--rotten); }
+  .sw.w{ background:var(--wall); }
+  .sw.n{ background:var(--pair); }
+  .sw.s{ background:var(--accent); }
+
+  .cols { display:grid; gap:var(--gap); grid-template-columns: 1fr .9fr; }
+  @media (max-width:980px){ .cols{ grid-template-columns:1fr; } }
+
+  .queue{ display:flex; gap:8px; flex-wrap:wrap; min-height:66px; }
+  .chip{
+    padding:8px 10px; border-radius:10px; background:var(--chip); border:1px solid rgba(255,255,255,.08);
+    font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.3); transition:transform var(--speed) ease, opacity var(--speed) ease, outline var(--speed) ease;
+  }
+  .chip.lvl{ outline:2px dashed rgba(255,255,255,.18); }
+  .toast { margin-left:auto; background:rgba(255,255,255,.06); padding:8px 10px; border-radius:10px; font-size:13px; color:var(--muted); }
+  .status { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--muted); font-size:14px; }
+  .status strong { color:var(--text); }
+  .history { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; color:var(--muted); line-height:1.5; max-height:180px; overflow:auto; background:rgba(255,255,255,.05); padding:10px 12px; border-radius:10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>🧟 Rotten Oranges <span class="badge">Multi-source BFS • O(R×C)</span></h1>
+      <div class="subtitle">
+        All initially rotten oranges start together in the queue (multi-source). Each minute, they rot their 4-neighbors.
+        We track minutes until no fresh remain — or conclude it's impossible if some are unreachable.
+      </div>
+    </div>
+    <div class="panel controls">
+      <label>Rows <input id="rows" type="number" min="2" max="20" value="8"></label>
+      <label>Cols <input id="cols" type="number" min="2" max="26" value="12"></label>
+      <label>Fresh % <input id="pf" type="range" min="0" max="100" value="55"><span id="pfv" class="tag">55%</span></label>
+      <label>Rotten % <input id="pr" type="range" min="0" max="100" value="8"><span id="prv" class="tag">8%</span></label>
+      <button class="btn primary" id="newBtn">New Grid</button>
+      <button class="btn" id="stepBtn">Step (1 min) ▶</button>
+      <button class="btn" id="autoBtn">Auto</button>
+      <button class="btn warning" id="stopBtn">Stop</button>
+      <button class="btn ghost" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="legend" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div class="legend">
+        <span class="tag"><span class="sw e"></span>empty</span>
+        <span class="tag"><span class="sw f"></span>fresh</span>
+        <span class="tag"><span class="sw r"></span>rotten</span>
+        <span class="tag"><span class="sw w"></span>wall (optional)</span>
+        <span class="tag"><span class="sw n"></span>newly rotten this minute</span>
+        <span class="tag"><span class="sw s"></span>initial rotten (minute 0)</span>
+      </div>
+      <div class="toast" id="toast">Ready.</div>
+    </div>
+    <div class="gridWrap">
+      <div id="grid" class="grid"></div>
+      <div style="min-width:280px; flex:1;">
+        <div class="status">
+          <div>Minutes: <strong id="mins">0</strong></div>
+          <div>Fresh left: <strong id="freshLeft">0</strong></div>
+          <div>Queue size: <strong id="qsize">0</strong></div>
+          <div>State: <strong id="state">Idle</strong></div>
+        </div>
+        <div style="margin-top:10px;">
+          <h3 style="margin:0 0 8px;">Queue (front → back)</h3>
+          <div id="queue" class="queue panel" style="padding:10px;"></div>
+        </div>
+        <div class="history" id="history" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <strong>Pseudocode:</strong>
+<pre style="white-space:pre-wrap; color:var(--muted); margin-top:8px;">
+q = all initially rotten cells
+fresh = count of fresh oranges
+minutes = 0
+while q not empty and fresh > 0:
+  for each item in current level:
+    for each 4-neighbor:
+      if neighbor is fresh:
+        mark rotten, push to q
+        fresh--
+  minutes++
+if fresh == 0: return minutes
+else: return -1 (impossible)
+</pre>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ====== State & DOM ======
+  const el = q => document.querySelector(q);
+  const gridEl = el('#grid'), queueEl = el('#queue'), toastEl = el('#toast'), histEl = el('#history');
+  const minsEl = el('#mins'), freshEl = el('#freshLeft'), qsizeEl = el('#qsize'), stateEl = el('#state');
+  const rowsInput = el('#rows'), colsInput = el('#cols'), pfRange = el('#pf'), prRange = el('#pr'), pfv = el('#pfv'), prv = el('#prv');
+
+  let R = Number(rowsInput.value), C = Number(colsInput.value);
+  let grid = [];    // 'E' empty, 'F' fresh, 'R' rotten, 'W' wall
+  let q = [];       // queue of [r,c]
+  let fresh = 0;
+  let minutes = 0;
+  let running = false, finished = false;
+  let autoTimer = null;
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  // ====== Helpers ======
+  const notify = m => { toastEl.textContent = m; toastEl.animate([{opacity:.65},{opacity:1}],{duration:200}); };
+  const log = s => { const t=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); histEl.textContent += `[${t}] ${s}\n`; histEl.scrollTop = histEl.scrollHeight; };
+
+  function sample(p) { return Math.random() < p; } // probability
+
+  // ====== Grid generation & rendering ======
+  function newGrid() {
+    R = Math.max(2, Math.min(20, Number(rowsInput.value)||8));
+    C = Math.max(2, Math.min(26, Number(colsInput.value)||12));
+    gridEl.style.gridTemplateColumns = `repeat(${C}, 34px)`;
+    grid = Array.from({length:R}, () => Array.from({length:C}, () => 'E'));
+
+    const pf = Number(pfRange.value)/100;
+    const pr = Number(prRange.value)/100;
+
+    fresh = 0; q = [];
+    for (let r=0;r<R;r++){
+      for (let c=0;c<C;c++){
+        const roll = Math.random();
+        let val = 'E';
+        if (roll < pr) val = 'R';
+        else if (roll < pr + pf) val = 'F';
+        else val = 'E';
+        grid[r][c] = val;
+        if (val === 'F') fresh++;
+        if (val === 'R') q.push([r,c,'src']);
+      }
+    }
+    minutes = 0; running = false; finished = false;
+    renderAll({seed:true});
+    stateEl.textContent = 'Ready';
+    notify('New grid generated.');
+    log('New grid.');
+  }
+
+  function renderAll({highlightNew=[], seed=false}={}) {
+    // grid
+    gridEl.innerHTML = '';
+    for (let r=0;r<R;r++){
+      for (let c=0;c<C;c++){
+        const d = document.createElement('div');
+        const v = grid[r][c];
+        d.className = `cell ${v}`;
+        d.title = `(${r},${c})`;
+        if (seed && v==='R') d.classList.add('srcRot');
+        if (highlightNew.some(([rr,cc])=>rr===r&&cc===c)) d.classList.add('newRot');
+        d.addEventListener('click', () => toggleCell(r,c));
+        gridEl.appendChild(d);
+      }
+    }
+    // queue
+    queueEl.innerHTML = '';
+    q.forEach((p,i) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (p[2]==='lvl' ? ' lvl' : '');
+      const mark = p[2]==='lvl' ? '⏱' : 'R';
+      chip.textContent = `${mark}(${p[0]},${p[1]})`;
+      queueEl.appendChild(chip);
+    });
+
+    // stats
+    minsEl.textContent = minutes;
+    freshEl.textContent = fresh;
+    qsizeEl.textContent = q.filter(e=>e[2]!=='lvl').length;
+  }
+
+  function toggleCell(r,c){
+    // cycle: E -> F -> R -> W -> E
+    const cur = grid[r][c];
+    const next = cur==='E'?'F':cur==='F'?'R':cur==='R'?'W':'E';
+    // adjust counts/queue
+    if (cur==='F') fresh--;
+    if (cur==='R') q = q.filter(([rr,cc]) => !(rr===r && cc===c)); // remove from queue if present
+    grid[r][c] = next;
+    if (next==='F') fresh++;
+    if (next==='R') q.push([r,c,'src']);
+    renderAll();
+  }
+
+  // ====== BFS step (1 minute) ======
+  function step() {
+    if (finished) { notify('Already finished.'); return; }
+    if (fresh === 0) { finished = true; stateEl.textContent='Done'; notify(`All oranges rotten in ${minutes} minute(s).`); log('All rotten.'); return; }
+    if (q.length === 0) { finished = true; stateEl.textContent='Impossible'; notify('Impossible — fresh unreachable.'); log('Impossible.'); return; }
+
+    // process current level (all items currently in queue that are not level markers)
+    // We'll mark level boundaries using a sentinel 'lvl'
+    // If there is no level marker at end, add one now for this level
+    if (!q.some(x=>x[2]==='lvl')) q.push([-1,-1,'lvl']);
+
+    const newly = [];
+    while (q.length && q[0][2] !== 'lvl') {
+      const [r,c] = q.shift();
+      for (const [dr,dc] of dirs){
+        const nr = r+dr, nc = c+dc;
+        if (nr<0||nc<0||nr>=R||nc>=C) continue;
+        if (grid[nr][nc]==='F'){
+          grid[nr][nc]='R';
+          fresh--;
+          newly.push([nr,nc]);
+          q.push([nr,nc]); // will be processed next minute
+        }
+      }
+    }
+    // pop the level marker
+    if (q.length && q[0][2]==='lvl') q.shift();
+
+    minutes++;
+    renderAll({highlightNew:newly});
+    stateEl.textContent = 'Running';
+
+    if (fresh === 0) { finished = true; stateEl.textContent='Done'; notify(`All oranges rotten in ${minutes} minute(s).`); log(`Minute ${minutes}: all rotten.`); }
+    else if (q.length === 0) { finished = true; stateEl.textContent='Impossible'; notify('Impossible — fresh unreachable.'); log(`Minute ${minutes}: queue empty but fresh remain.`); }
+    else { notify(`Minute ${minutes}: rotted ${newly.length}.`); log(`Minute ${minutes}: rotted ${newly.length}. Fresh left: ${fresh}.`); }
+  }
+
+  // ====== Controls ======
+  function autoPlay(){
+    if (autoTimer) return;
+    autoTimer = setInterval(() => {
+      if (finished) { clearInterval(autoTimer); autoTimer=null; return; }
+      step();
+    }, 520);
+  }
+  function stopAuto(){ clearInterval(autoTimer); autoTimer=null; notify('Stopped.'); }
+  function resetAll(){
+    stopAuto();
+    minutes = 0; finished = false; running = false;
+    renderAll({seed:true});
+    stateEl.textContent = 'Idle';
+    notify('Reset (kept grid).');
+  }
+
+  // Hook up buttons
+  el('#newBtn').addEventListener('click', newGrid);
+  el('#stepBtn').addEventListener('click', step);
+  el('#autoBtn').addEventListener('click', autoPlay);
+  el('#stopBtn').addEventListener('click', stopAuto);
+  el('#resetBtn').addEventListener('click', resetAll);
+
+  // live labels
+  pfRange.addEventListener('input', () => { pfv.textContent = pfRange.value + '%'; });
+  prRange.addEventListener('input', () => { prv.textContent = prRange.value + '%'; });
+
+  // seed grid initially
+  newGrid();
+})();
+</script>
+</body>
+</html>
