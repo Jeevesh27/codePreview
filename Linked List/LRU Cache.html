@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>🗃️ LRU Cache — Interactive Visualization</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  body{ margin:0; background:var(--bg); color:var(--text);
+        font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
+  .app{ max-width:1100px; margin:24px auto; padding:0 16px; }
+  header{ display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  header h1{ font-size:clamp(20px,3vw,28px); margin:0; }
+  .badge{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b132b; font-weight:700;
+          padding:6px 10px; border-radius:999px; box-shadow:var(--shadow); font-size:12px; letter-spacing:.2px; }
+
+  .grid{ display:grid; gap:18px; grid-template-columns: 1.2fr .8fr; }
+  @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+
+  .panel{ background:linear-gradient(180deg,var(--panel),var(--panel-2));
+          border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; position:relative; }
+
+  /* Controls */
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+             background:var(--panel-2); border-radius:12px; padding:10px; border:1px solid rgba(255,255,255,.06); }
+  .group{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.03); padding:8px 10px; border-radius:10px; }
+  label{ color:var(--muted); font-size:13px; }
+  input[type="number"], input[type="text"]{
+    width:90px; background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.08);
+    border-radius:8px; padding:6px 8px; outline:none;
+  }
+  input[type="range"]{ width:160px; }
+  button{
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#0b132b; border:none; border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer; box-shadow:var(--shadow);
+    transition:transform .06s ease, filter .2s ease;
+  }
+  button:active{ transform:translateY(1px) scale(.99); }
+  button.secondary{
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.08); box-shadow:none; font-weight:600;
+  }
+
+  .pill{ background:var(--chip); border:1px solid rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; font-weight:600; color:var(--text); }
+  .pill.ok{ background:rgba(132,250,176,.15); border-color:rgba(132,250,176,.35); color:var(--ok); }
+  .pill.warn{ background:rgba(255,209,102,.12); border-color:rgba(255,209,102,.35); color:var(--pair); }
+  .pill.muted{ background:rgba(255,255,255,.06); color:var(--muted); }
+
+  /* Viz areas */
+  .canvas{ background: radial-gradient(1200px 600px at 10% 10%, rgba(138,233,193,.06), transparent 60%),
+                       radial-gradient(1000px 500px at 90% 0%, rgba(108,243,255,.07), transparent 55%),
+                       var(--panel);
+           border-radius:12px; padding:14px; min-height:280px; border:1px solid rgba(255,255,255,.06); }
+
+  .row{ display:flex; align-items:center; gap:12px; margin:8px 0 14px; }
+  .row-label{ color:var(--muted); font-size:13px; width:90px; }
+  .dll{ display:flex; align-items:center; gap:10px; flex-wrap:nowrap; overflow:auto; padding-bottom:6px; }
+  .hash{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+  .node{
+    display:flex; align-items:center; gap:8px;
+    background:#1a2142; border:1px solid #2b356d; border-radius:12px; padding:8px 10px;
+    box-shadow:var(--shadow); min-width:120px;
+  }
+  .node.kv{ }
+  .node .k{ font-weight:800; color:var(--pair); }
+  .node .v{ font-weight:700; color:var(--text); opacity:.95; }
+  .node.head{ outline:2px solid var(--accent-2); }
+  .node.tail{ outline:2px dashed #5160b9; }
+
+  .arrow{
+    width:26px; height:2px; background:#5160b9; position:relative; flex:0 0 auto; opacity:.9;
+  }
+  .arrow::after{
+    content:""; position:absolute; right:-6px; top:-4px; border-left:8px solid #5160b9; border-top:5px solid transparent; border-bottom:5px solid transparent;
+  }
+
+  .chip{
+    background:var(--chip); border:1px solid rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; font-weight:600; color:var(--text);
+  }
+  .chip.key{ color:var(--pair); }
+  .chip.hit{ background:rgba(132,250,176,.15); border-color:rgba(132,250,176,.35); color:var(--ok); }
+  .chip.miss{ background:rgba(255,209,102,.12); border-color:rgba(255,209,102,.35); color:var(--pair); }
+
+  .log{
+    max-height:190px; overflow:auto; background:#0f142e; border:1px solid rgba(255,255,255,.06);
+    border-radius:12px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; color:#d6dcff; white-space:pre-wrap;
+  }
+  .code{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background:#0f142e; border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:10px; font-size:13px; color:#d6dcff; overflow:auto;
+  }
+
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <span class="badge">LRU Cache</span>
+    <h1>🗃️ LRU Cache — Doubly Linked List + Hash Map</h1>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: Interactive Viz -->
+    <section class="panel">
+      <div class="controls" role="group" aria-label="Controls">
+        <div class="group">
+          <label for="cap">Capacity</label>
+          <input id="cap" type="range" min="1" max="10" value="4"/>
+          <span id="capOut" class="pill muted">4</span>
+        </div>
+        <div class="group">
+          <label>Key</label><input id="keyIn" type="text" placeholder="e.g. A"/>
+          <label>Value</label><input id="valIn" type="text" placeholder="e.g. 100"/>
+        </div>
+        <div class="group">
+          <button id="btnPut">Put</button>
+          <button id="btnGet" class="secondary">Get</button>
+          <button id="btnRandom" class="secondary">Random Access</button>
+          <button id="btnReset" class="secondary">Reset</button>
+          <button id="btnClear" class="secondary">Clear</button>
+        </div>
+      </div>
+
+      <div class="canvas" id="canvas">
+        <div class="row">
+          <div class="row-label">Hash Map</div>
+          <div id="hash" class="hash" aria-live="polite"></div>
+        </div>
+        <div class="row">
+          <div class="row-label">DLL (MRU → LRU)</div>
+          <div id="dll" class="dll" aria-live="polite"></div>
+        </div>
+        <div class="status" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;">
+          <span id="sizePill" class="pill">Size: 0</span>
+          <span id="capPill" class="pill">Capacity: 4</span>
+          <span id="lastOp" class="pill warn">Ready</span>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div class="log" id="log" aria-label="Operation log">Log ready…</div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Explanation -->
+    <aside class="panel">
+      <h2 style="margin:0 0 10px;">How it works</h2>
+      <ul style="margin:0 0 12px 1.1em;">
+        <li><strong>Doubly Linked List:</strong> head = most recently used, tail = least recently used.</li>
+        <li><strong>Hash Map:</strong> key → node (for O(1) access).</li>
+        <li><strong>Get(k):</strong> move node to head, return value (hit/miss).</li>
+        <li><strong>Put(k,v):</strong> update if exists and move to head; otherwise insert at head; evict tail if size &gt; capacity.</li>
+        <li><strong>Time Complexity:</strong> All operations average O(1).</li>
+      </ul>
+
+      <div class="code" aria-label="Pseudocode">
+<pre><code>// Node: (key, value, prev, next)
+
+GET(key):
+  if key not in map: return -1
+  node = map[key]
+  remove(node)         // unlink from DLL
+  insertAtHead(node)   // mark recent
+  return node.value
+
+PUT(key, value):
+  if key in map:
+    node = map[key]
+    node.value = value
+    remove(node); insertAtHead(node)
+  else:
+    node = new Node(key, value)
+    insertAtHead(node)
+    map[key] = node
+    if size &gt; capacity:
+      lru = tail.prev
+      remove(lru)
+      delete map[lru.key]
+</code></pre>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ========= Core LRU implementation (JS) =========
+  class Node {
+    constructor(key, val){
+      this.key = key; this.val = val;
+      this.prev = null; this.next = null;
+    }
+  }
+
+  class LRUCache {
+    constructor(capacity){
+      this.capacity = Math.max(1, capacity|0);
+      this.map = new Map();
+      // Sentinel head/tail to simplify links
+      this.head = new Node('__HEAD__', null);
+      this.tail = new Node('__TAIL__', null);
+      this.head.next = this.tail; this.tail.prev = this.head;
+      this.size = 0;
+    }
+    _addAfterHead(node){
+      node.prev = this.head;
+      node.next = this.head.next;
+      this.head.next.prev = node;
+      this.head.next = node;
+    }
+    _remove(node){
+      node.prev.next = node.next;
+      node.next.prev = node.prev;
+      node.prev = node.next = null;
+    }
+    _moveToHead(node){
+      this._remove(node); this._addAfterHead(node);
+    }
+    _popTail(){ // removes and returns LRU (node before tail)
+      const lru = this.tail.prev;
+      if(lru === this.head) return null;
+      this._remove(lru);
+      return lru;
+    }
+    get(key){
+      if(!this.map.has(key)) return {hit:false, value:-1};
+      const node = this.map.get(key);
+      this._moveToHead(node);
+      return {hit:true, value:node.val};
+    }
+    put(key, value){
+      if(this.map.has(key)){
+        const node = this.map.get(key);
+        node.val = value;
+        this._moveToHead(node);
+        return {updated:true, evicted:null};
+      } else {
+        const node = new Node(key, value);
+        this._addAfterHead(node);
+        this.map.set(key, node);
+        this.size++;
+        let evicted = null;
+        if(this.size > this.capacity){
+          const lru = this._popTail();
+          if(lru){
+            this.map.delete(lru.key);
+            this.size--;
+            evicted = {key:lru.key, value:lru.val};
+          }
+        }
+        return {updated:false, evicted};
+      }
+    }
+    clear(){
+      // reset DLL
+      this.head.next = this.tail; this.tail.prev = this.head;
+      this.map.clear(); this.size = 0;
+    }
+    entriesMRUtoLRU(){
+      const arr = [];
+      let p = this.head.next;
+      while(p && p !== this.tail){ arr.push({key:p.key, val:p.val}); p = p.next; }
+      return arr; // head..tail (MRU..LRU)
+    }
+  }
+
+  // ========= DOM & Visualization =========
+  const capRange = document.getElementById('cap');
+  const capOut = document.getElementById('capOut');
+  const capPill = document.getElementById('capPill');
+  const sizePill = document.getElementById('sizePill');
+  const lastOp = document.getElementById('lastOp');
+  const keyIn = document.getElementById('keyIn');
+  const valIn = document.getElementById('valIn');
+  const btnPut = document.getElementById('btnPut');
+  const btnGet = document.getElementById('btnGet');
+  const btnRandom = document.getElementById('btnRandom');
+  const btnReset = document.getElementById('btnReset');
+  const btnClear = document.getElementById('btnClear');
+  const hashWrap = document.getElementById('hash');
+  const dllWrap = document.getElementById('dll');
+  const log = document.getElementById('log');
+
+  let cache = new LRUCache(Number(capRange.value));
+
+  function render(){
+    // Hash map chips
+    hashWrap.innerHTML = '';
+    for(const [k, node] of cache.map.entries()){
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.innerHTML = `<span class="chip key">${escapeHtml(String(k))}</span> → <strong>${escapeHtml(String(node.val))}</strong>`;
+      hashWrap.appendChild(chip);
+    }
+
+    // DLL nodes (MRU -> LRU)
+    dllWrap.innerHTML = '';
+    const arr = cache.entriesMRUtoLRU();
+    if(arr.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'chip muted';
+      empty.textContent = 'Empty';
+      dllWrap.appendChild(empty);
+    } else {
+      arr.forEach((it, idx) => {
+        const box = document.createElement('div');
+        box.className = 'node kv';
+        if(idx === 0) box.classList.add('head');
+        if(idx === arr.length - 1) box.classList.add('tail');
+        box.innerHTML = `<span class="k">${escapeHtml(String(it.key))}</span> = <span class="v">${escapeHtml(String(it.val))}</span>`;
+        dllWrap.appendChild(box);
+        if(idx < arr.length - 1){
+          const arrow = document.createElement('div');
+          arrow.className = 'arrow';
+          dllWrap.appendChild(arrow);
+        }
+      });
+    }
+
+    // Pills
+    sizePill.textContent = `Size: ${cache.size}`;
+    capPill.textContent = `Capacity: ${cache.capacity}`;
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+
+  function logLine(text){
+    const time = new Date().toLocaleTimeString();
+    log.textContent += `\n[${time}] ${text}`;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function setLastOp(text, ok=true){
+    lastOp.textContent = text;
+    lastOp.className = 'pill ' + (ok?'ok':'warn');
+  }
+
+  // ========= Actions =========
+  btnPut.addEventListener('click', ()=>{
+    const k = keyIn.value.trim();
+    const v = valIn.value.trim();
+    if(!k.length){ setLastOp('Put: key required', false); return; }
+    const res = cache.put(k, v.length ? v : null);
+    if(res.updated){
+      setLastOp(`Put: updated ${k}`, true);
+      logLine(`PUT ${k}=${v} (update) → move to head`);
+    } else {
+      setLastOp(`Put: inserted ${k}`, true);
+      logLine(`PUT ${k}=${v} (insert at head)`);
+      if(res.evicted){
+        logLine(`  capacity exceeded → evict LRU ${res.evicted.key}=${res.evicted.value}`);
+      }
+    }
+    render();
+  });
+
+  btnGet.addEventListener('click', ()=>{
+    const k = keyIn.value.trim();
+    if(!k.length){ setLastOp('Get: key required', false); return; }
+    const {hit, value} = cache.get(k);
+    if(hit){
+      setLastOp(`Get: hit ${k}=${value} (moved to head)`, true);
+      logLine(`GET ${k} → ${value} (move to head)`);
+    } else {
+      setLastOp(`Get: miss ${k}`, false);
+      logLine(`GET ${k} → MISS`);
+    }
+    render();
+  });
+
+  btnRandom.addEventListener('click', ()=>{
+    // create or touch a random key
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const k = alphabet[Math.floor(Math.random()*alphabet.length)];
+    const doPut = Math.random() < 0.6;
+    if(doPut){
+      const v = Math.floor(Math.random()*100);
+      const res = cache.put(k, v);
+      if(res.updated){
+        setLastOp(`Random Put: updated ${k}=${v}`, true);
+        logLine(`PUT ${k}=${v} (update)`);
+      } else {
+        setLastOp(`Random Put: inserted ${k}=${v}`, true);
+        logLine(`PUT ${k}=${v} (insert)`);
+        if(res.evicted){ logLine(`  evicted ${res.evicted.key}=${res.evicted.value}`); }
+      }
+    } else {
+      const {hit, value} = cache.get(k);
+      if(hit){ setLastOp(`Random Get: ${k}=${value}`, true); logLine(`GET ${k} → ${value}`); }
+      else { setLastOp(`Random Get: miss ${k}`, false); logLine(`GET ${k} → MISS`); }
+    }
+    render();
+  });
+
+  capRange.addEventListener('input', ()=>{
+    capOut.textContent = capRange.value;
+    capPill.textContent = `Capacity: ${capRange.value}`;
+  });
+
+  capRange.addEventListener('change', ()=>{
+    const newCap = Number(capRange.value);
+    cache.capacity = Math.max(1, newCap|0);
+    // if size > capacity, evict until fit
+    while(cache.size > cache.capacity){
+      const lru = cache._popTail();
+      if(lru){ cache.map.delete(lru.key); cache.size--; logLine(`capacity lowered → evict ${lru.key}=${lru.val}`); }
+    }
+    setLastOp(`Capacity set to ${cache.capacity}`, true);
+    render();
+  });
+
+  btnClear.addEventListener('click', ()=>{
+    cache.clear();
+    setLastOp('Cleared cache', true);
+    logLine('CLEAR all');
+    render();
+  });
+
+  btnReset.addEventListener('click', ()=>{
+    cache = new LRUCache(Number(capRange.value));
+    keyIn.value = ''; valIn.value = '';
+    log.textContent = 'Log ready…';
+    setLastOp('Reset cache', true);
+    render();
+  });
+
+  // Init
+  capOut.textContent = capRange.value;
+  render();
+})();
+</script>
+</body>
+</html>
