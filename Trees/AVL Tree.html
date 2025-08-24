@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AVL Tree — Insert & Rotations (Stable UI)</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1; --bad:#ff6b6b;
+  }
+
+  html, body { height:100%; background:var(--bg); color:var(--text); }
+  body { margin:0; font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; }
+  .wrap { max-width:1200px; margin:28px auto; padding:0 18px; display:grid; gap:18px; }
+
+  .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .title { display:flex; align-items:center; gap:10px; }
+  .badge { background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b1320; font-weight:800; padding:6px 10px; border-radius:999px; font-size:12px; letter-spacing:.5px; text-transform:uppercase; }
+  .note { color:var(--muted); font-size:13px; }
+
+  .grid { display:grid; grid-template-columns: 1.45fr .55fr; gap:18px; }
+  @media (max-width: 980px){ 
+    .grid{ grid-template-columns: 1fr; }
+    .panel { height: auto; }
+  }
+
+  .card {
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+
+  /* Controls */
+  .controls { display:flex; flex-wrap:wrap; gap:10px; padding:14px; border-bottom:1px solid rgba(255,255,255,.06); align-items:center; }
+  .controls input[type="number"]{
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px; width:130px;
+  }
+  button, input[type="range"] {
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px;
+  }
+  button { cursor:pointer; font-weight:800; letter-spacing:.2px; }
+  .primary { background:var(--accent); color:#0b1320; }
+  .ghost { background:var(--chip); }
+
+  /* Canvas */
+  .canvas { height: clamp(420px, 58vh, 680px); }
+  svg { width:100%; height:100%; display:block; }
+
+  /* ---- Edges & arrows ---- */
+  defs marker#arrow path { fill: var(--muted); }
+  .edge {
+    stroke: var(--muted); stroke-width: 2;
+    marker-end: url(#arrow); opacity: .9;
+    stroke-linecap: round; stroke-linejoin: round;
+    transition: stroke var(--speed), opacity var(--speed);
+  }
+  .edge.active { stroke: var(--pair); opacity: 1; }
+
+  /* ---- Nodes (no scale on hover => no jitter) ---- */
+  .node { transition: filter 180ms ease, opacity 180ms ease; transform-origin: 0 0; }
+  .node .dot{
+    fill: var(--chip);
+    stroke: rgba(255,255,255,.14);
+    stroke-width: 1.6;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,.45));
+    transition: stroke 160ms ease, fill 160ms ease, stroke-width 160ms ease;
+  }
+  /* subtle hover/focus ring without size change */
+  .node:hover .dot, .node.focus .dot{ stroke: var(--accent); stroke-width: 2.4; }
+  .node.new .dot{ fill: var(--new); }
+
+  .node text.value { fill:var(--text); font-weight:800; font-size:14px; dominant-baseline: middle; text-anchor: middle; }
+  .node .tag { font-size:11px; fill:var(--muted); dominant-baseline:middle; text-anchor:middle; }
+  .node .bf  { font-size:11px; font-weight:800; fill:#0b1320; dominant-baseline:middle; text-anchor:middle; }
+
+  /* Badges */
+  .h-badge { fill: var(--slot); stroke: rgba(255,255,255,.12); }
+  .bf-badge { fill: var(--accent); }
+  .bf-badge.bad { fill: var(--bad); }
+
+  /* Right column */
+  .panel { display:grid; grid-template-rows:auto auto 1fr auto; height:100%; }
+  .section { padding:14px; border-bottom:1px solid rgba(255,255,255,.06); }
+  @media (max-width: 640px){
+    .section { padding:12px; }
+  }
+  .section:last-child { border-bottom:none; }
+  .pc-title { font-weight:800; margin-bottom:10px; color:var(--accent); }
+  .code { background:var(--slot); border-radius:12px; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:13px; }
+  .line { padding:4px 8px; border-radius:6px; }
+  .line.hl { background:rgba(255,255,255,.08); }
+
+  .log { 
+    display:flex; flex-direction:column; gap:8px; 
+    max-height:260px; overflow:auto; 
+    min-height:120px;
+  }
+  @media (max-width: 980px){
+    .log { 
+      max-height:200px; 
+      min-height:100px;
+    }
+  }
+  @media (max-width: 640px){
+    .log { 
+      max-height:150px; 
+      min-height:80px;
+      gap:6px;
+    }
+  }
+  .log .row { 
+    background:var(--slot); 
+    border:1px solid rgba(255,255,255,.08); 
+    border-radius:10px; 
+    padding:8px 10px; 
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+    font-size:13px;
+    line-height:1.4;
+    word-break: break-word;
+  }
+  @media (max-width: 640px){
+    .log .row { 
+      padding:6px 8px;
+      font-size:12px;
+      border-radius:8px;
+    }
+  }
+
+  .pill { 
+    background:var(--chip); 
+    padding:8px 12px; 
+    border-radius:12px; 
+    color:var(--muted); 
+    font-size:12px; 
+    border:1px solid rgba(255,255,255,.06);
+    line-height:1.4;
+    word-wrap: break-word;
+    hyphens: auto;
+  }
+  @media (max-width: 980px){
+    .pill { 
+      font-size:11px;
+      padding:6px 10px;
+      line-height:1.5;
+    }
+  }
+  @media (max-width: 640px){
+    .pill { 
+      font-size:10px;
+      padding:6px 8px;
+      border-radius:8px;
+      line-height:1.6;
+    }
+  }
+  @media (max-width: 480px){
+    .pill { 
+      font-size:9px;
+      padding:4px 6px;
+      text-align: center;
+    }
+  }
+  .case { background:var(--pair); color:#0b1320; border-radius:8px; padding:2px 6px; font-weight:800; font-size:11px; margin-left:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">
+      <span class="badge">AVL Tree</span>
+      <h2 style="margin:0">⚖️ Self-Balancing BST — Insert</h2>
+    </div>
+    <div class="note">BF = height(left) − height(right). Keep <b>−1 ≤ BF ≤ 1</b>. Rotations: LL, RR, LR, RL.</div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT: Canvas & controls -->
+    <div class="card">
+      <div class="controls">
+        <input id="valueInput" type="number" placeholder="value e.g. 30"/>
+        <button id="insertBtn" class="primary">Insert</button>
+        <button id="play" class="ghost">▶ Play</button>
+        <button id="step" class="ghost">⏭ Step</button>
+        <button id="reset" class="ghost">⟲ Reset</button>
+        <button id="randomBtn" class="ghost">🎲 Random</button>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+          <span class="note">Speed</span>
+          <input id="speed" type="range" min="200" max="1600" value="850" step="50"/>
+        </div>
+      </div>
+      <div class="canvas">
+        <svg id="svg" viewBox="0 0 1100 680" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z"/>
+            </marker>
+          </defs>
+          <!-- drawn via JS -->
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: Pseudocode & Log -->
+    <div class="card panel">
+      <div class="section">
+        <div class="pc-title">Pseudocode (Insert with Rebalance)</div>
+        <div class="code" id="code">
+          <div class="line" data-l="1">1&nbsp; insert(node, key):</div>
+          <div class="line" data-l="2">2&nbsp; &nbsp; if node is NULL: return new Node(key)</div>
+          <div class="line" data-l="3">3&nbsp; &nbsp; if key &lt; node.value: node.left = insert(node.left, key)</div>
+          <div class="line" data-l="4">4&nbsp; &nbsp; else if key &gt; node.value: node.right = insert(node.right, key)</div>
+          <div class="line" data-l="5">5&nbsp; &nbsp; else: return node</div>
+          <div class="line" data-l="6">6&nbsp; &nbsp; update height(node)</div>
+          <div class="line" data-l="7">7&nbsp; &nbsp; balance = getBalance(node)</div>
+          <div class="line" data-l="8">8&nbsp; &nbsp; if balance &gt; 1 and key &lt; node.left.value: return rightRotate(node)  <span class="case">LL</span></div>
+          <div class="line" data-l="9">9&nbsp; &nbsp; if balance &lt; -1 and key &gt; node.right.value: return leftRotate(node)  <span class="case">RR</span></div>
+          <div class="line" data-l="10">10&nbsp; &nbsp; if balance &gt; 1 and key &gt; node.left.value: node.left = leftRotate(node.left); return rightRotate(node)  <span class="case">LR</span></div>
+          <div class="line" data-l="11">11&nbsp; &nbsp; if balance &lt; -1 and key &lt; node.right.value: node.right = rightRotate(node.right); return leftRotate(node)  <span class="case">RL</span></div>
+          <div class="line" data-l="12">12&nbsp; &nbsp; return node</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="pc-title">Step Log</div>
+        <div class="log" id="log"></div>
+      </div>
+
+      <div class="section">
+        <div class="pill">Average O(log n), worst O(log n). Green BF badges are OK; red BF triggers rotations.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================== Data Model ================== */
+let idCounter = 0;
+function makeNode(value){ return { id:"n"+(++idCounter), value, left:null, right:null, h:1 }; }
+let root = null;
+
+/* Seed a small tree */
+[30,20,40,10,25,35].forEach(v => root = avlInsert(root, v));
+
+/* ================== AVL Core (real ops) ================== */
+function height(n){ return n ? n.h : 0; }
+function update(n){ n.h = 1 + Math.max(height(n.left), height(n.right)); return n; }
+function balance(n){ return n ? height(n.left) - height(n.right) : 0; }
+
+function rotateRight(y){
+  const x = y.left, T2 = x.right;
+  x.right = y; y.left = T2;
+  update(y); update(x);
+  return x;
+}
+function rotateLeft(x){
+  const y = x.right, T2 = y.left;
+  y.left = x; x.right = T2;
+  update(x); update(y);
+  return y;
+}
+
+function avlInsert(node, key){
+  if (!node) return makeNode(key);
+  if (key < node.value) node.left = avlInsert(node.left, key);
+  else if (key > node.value) node.right = avlInsert(node.right, key);
+  else return node; // no duplicates
+  update(node);
+
+  const bf = balance(node);
+  if (bf > 1 && key < node.left.value) return rotateRight(node);          // LL
+  if (bf < -1 && key > node.right.value) return rotateLeft(node);         // RR
+  if (bf > 1 && key > node.left.value){ node.left = rotateLeft(node.left); return rotateRight(node); } // LR
+  if (bf < -1 && key < node.right.value){ node.right = rotateRight(node.right); return rotateLeft(node); } // RL
+  return node;
+}
+
+/* ================== Layout & Drawing ================== */
+const svg = document.getElementById('svg');
+const R = 26, LEVEL_GAP = 110, H_MARGIN = 70, V_TOP = 70;
+
+function computePositions(){
+  const pos = new Map();
+  let xCounter = 0;
+  (function inorder(n, depth){
+    if(!n) return;
+    inorder(n.left, depth+1);
+    pos.set(n.id, { x: ++xCounter, y: depth });
+    inorder(n.right, depth+1);
+  })(root,0);
+  const width = 1100 - 2*H_MARGIN;
+  const xScale = width / (Math.max(xCounter,1)+1);
+  for (const [id,p] of pos){
+    p.X = H_MARGIN + p.x * xScale;
+    p.Y = V_TOP + p.y * LEVEL_GAP;
+  }
+  return pos;
+}
+
+function mk(tag, attrs={}){ const el=document.createElementNS('http://www.w3.org/2000/svg', tag); for(const[k,v] of Object.entries(attrs)) el.setAttribute(k,v); return el; }
+
+function drawTree({flashEdge=null, focusId=null, newId=null} = {}){
+  while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+  const pos = computePositions();
+
+  (function drawEdges(n){
+    if(!n) return;
+    if(n.left) addEdge(n.id, n.left.id, pos);
+    if(n.right) addEdge(n.id, n.right.id, pos);
+    drawEdges(n.left); drawEdges(n.right);
+  })(root);
+
+  (function drawNodes(n){
+    if(!n) return;
+    addNode(n, pos.get(n.id), focusId === n.id, newId === n.id);
+    drawNodes(n.left); drawNodes(n.right);
+  })(root);
+
+  if (flashEdge){
+    const line = [...svg.querySelectorAll('.edge')].find(e=>e.getAttribute('data-a')===flashEdge.a && e.getAttribute('data-b')===flashEdge.b);
+    if (line){ line.classList.add('active'); setTimeout(()=>line.classList.remove('active'), 900); }
+  }
+}
+
+function addEdge(aId,bId,pos){
+  const p1 = pos.get(aId), p2 = pos.get(bId);
+  const ang = Math.atan2(p2.Y-p1.Y, p2.X-p1.X);
+  const x1 = p1.X + Math.cos(ang)*R, y1 = p1.Y + Math.sin(ang)*R;
+  const x2 = p2.X - Math.cos(ang)*R, y2 = p2.Y - Math.sin(ang)*R;
+  const line = mk('line', {x1,y1,x2,y2, class:'edge','data-a':aId,'data-b':bId});
+  svg.appendChild(line);
+}
+
+function addNode(n,p,focused=false,isNew=false){
+  const g = mk('g', { class:'node', id:n.id, transform:`translate(${p.X},${p.Y})` });
+
+  /* Larger invisible hit area to prevent pointer “fall off” on hover */
+  const hit = mk('circle', { r: R+10, fill: 'transparent', 'pointer-events': 'all' });
+
+  const c = mk('circle', { r:R, class:'dot' });
+  const t = mk('text', { class:'value' }); t.textContent = n.value;
+  if (focused) g.classList.add('focus');
+  if (isNew) g.classList.add('new');
+
+  // Height badge (bottom)
+  const hRect = mk('rect', { x:-16, y:R+6, rx:4, ry:4, width:32, height:18, class:'h-badge' });
+  const hText = mk('text', { x:0, y:R+16, class:'tag' }); hText.textContent = `h${n.h}`;
+
+  // BF badge (top-right)
+  const bf = balance(n);
+  const bfRect = mk('rect', { x:R-4, y:-R-8, rx:5, ry:5, width:32, height:18, class:`bf-badge ${Math.abs(bf)<=1?'':'bad'}` });
+  const bfText = mk('text', { x:R+12, y:-R+2, class:'bf' }); bfText.textContent = `${bf}`;
+
+  // Order matters: put hit behind everything else
+  g.appendChild(hit);
+  g.appendChild(c); g.appendChild(t);
+  g.appendChild(hRect); g.appendChild(hText);
+  g.appendChild(bfRect); g.appendChild(bfText);
+  svg.appendChild(g);
+}
+
+/* ================== Teaching Plan (animated steps) ================== */
+const codeEl = document.getElementById('code');
+const logEl  = document.getElementById('log');
+function hl(line){ [...codeEl.querySelectorAll('.line')].forEach(l=>l.classList.remove('hl')); if(line!=null) codeEl.querySelector(`[data-l="${line}"]`)?.classList.add('hl'); }
+function log(msg){ const row=document.createElement('div'); row.className='row'; row.textContent=msg; logEl.appendChild(row); logEl.scrollTop = logEl.scrollHeight; }
+
+let plan = []; // queue of steps
+let playing=false, timer=null;
+
+function buildInsertPlan(key){
+  plan = [];
+  if (!root){ // create root
+    plan.push({kind:'hl', line:2});
+    plan.push({kind:'createRoot', key});
+    plan.push({kind:'hl', line:12});
+    return;
+  }
+
+  // Descent to insertion point
+  let cur = root;
+  while (cur){
+    if (key === cur.value){ plan.push({kind:'hl', line:5}); plan.push({kind:'duplicate', id:cur.id, key}); return; }
+    if (key < cur.value){
+      plan.push({kind:'hl', line:3});
+      plan.push({kind:'focus', id:cur.id});
+      plan.push({kind:'descend', from:cur.id, to:cur.left?.id || null, dir:'left'});
+      if (!cur.left){ plan.push({kind:'createChild', parentId:cur.id, dir:'left', key}); break; }
+      cur = cur.left;
+    } else {
+      plan.push({kind:'hl', line:4});
+      plan.push({kind:'focus', id:cur.id});
+      plan.push({kind:'descend', from:cur.id, to:cur.right?.id || null, dir:'right'});
+      if (!cur.right){ plan.push({kind:'createChild', parentId:cur.id, dir:'right', key}); break; }
+      cur = cur.right;
+    }
+  }
+
+  // Recompute heights/BF and rebalance if needed
+  plan.push({kind:'recompute'});
+  const z = findImbalance(root);
+  if (z){
+    const bf = balance(z.node);
+    if (bf > 1 && key < z.node.left.value) { // LL
+      plan.push({kind:'hl', line:8});
+      plan.push({kind:'rotateRight', zId:z.node.id, label:'LL'});
+    } else if (bf < -1 && key > z.node.right.value) { // RR
+      plan.push({kind:'hl', line:9});
+      plan.push({kind:'rotateLeft', zId:z.node.id, label:'RR'});
+    } else if (bf > 1 && key > z.node.left.value) { // LR
+      plan.push({kind:'hl', line:10});
+      plan.push({kind:'rotateLeftChild', childId:z.node.left.id, label:'LR (left step)'});
+      plan.push({kind:'rotateRight', zId:z.node.id, label:'LR (right step)'});
+    } else if (bf < -1 && key < z.node.right.value) { // RL
+      plan.push({kind:'hl', line:11});
+      plan.push({kind:'rotateRightChild', childId:z.node.right.id, label:'RL (right step)'});
+      plan.push({kind:'rotateLeft', zId:z.node.id, label:'RL (left step)'});
+    }
+    plan.push({kind:'recompute'});
+  }
+  plan.push({kind:'hl', line:12});
+}
+
+function findImbalance(n){
+  let res = null;
+  (function post(x){
+    if(!x) return;
+    post(x.left); post(x.right);
+    if (!res && Math.abs(balance(x))>1) res = { node:x };
+  })(n);
+  return res;
+}
+
+/* ================== Step Engine ================== */
+function resetUI(){
+  clearTimeout(timer); playing=false; playBtn.textContent='▶ Play';
+  plan=[]; hl(null); logEl.innerHTML='';
+  drawTree();
+}
+
+function step(){
+  if (plan.length===0){ playing=false; playBtn.textContent='▶ Play'; return; }
+  const s = plan.shift();
+
+  switch(s.kind){
+    case 'hl': hl(s.line); break;
+
+    case 'focus': drawTree({focusId:s.id}); break;
+
+    case 'descend':
+      drawTree({flashEdge:{a:s.from, b:s.to || s.from}, focusId:s.to || s.from});
+      log(s.dir==='left' ? 'Go left' : 'Go right');
+      break;
+
+    case 'createRoot':
+      log(`Create root ${s.key}`);
+      root = makeNode(s.key);
+      drawTree({newId:root.id});
+      break;
+
+    case 'createChild': {
+      const {parentId, dir, key} = s;
+      const parent = findNodeById(root, parentId);
+      const nn = makeNode(key);
+      if (dir==='left') parent.left = nn; else parent.right = nn;
+      updateUpwards(root);
+      log(`Insert ${key} as ${dir} child of ${parent.value}`);
+      drawTree({newId:nn.id});
+      break;
+    }
+
+    case 'recompute':
+      updateUpwards(root);
+      drawTree();
+      break;
+
+    case 'duplicate':
+      log(`Value ${s.key} already exists — ignored.`);
+      drawTree({focusId:s.id});
+      break;
+
+    /* Rotations */
+    case 'rotateRight': {
+      const {zId,label} = s;
+      const parent = parentOf(root, zId);
+      const z = findNodeById(root, zId);
+      log(`Rotate Right at ${z.value}  [${label}]`);
+      if (!parent) root = rotateRight(z);
+      else if (parent.left && parent.left.id===zId) parent.left = rotateRight(z);
+      else parent.right = rotateRight(z);
+      updateUpwards(root); drawTree();
+      break;
+    }
+
+    case 'rotateLeft': {
+      const {zId,label} = s;
+      const parent = parentOf(root, zId);
+      const z = findNodeById(root, zId);
+      log(`Rotate Left at ${z.value}  [${label}]`);
+      if (!parent) root = rotateLeft(z);
+      else if (parent.left && parent.left.id===zId) parent.left = rotateLeft(z);
+      else parent.right = rotateLeft(z);
+      updateUpwards(root); drawTree();
+      break;
+    }
+
+    case 'rotateLeftChild': {
+      const child = findNodeById(root, s.childId);
+      const parent = parentOf(root, s.childId);
+      log(`Left Rotate child at ${child.value}  [${s.label}]`);
+      if (parent.left && parent.left.id===child.id) parent.left = rotateLeft(child);
+      else if (parent.right && parent.right.id===child.id) parent.right = rotateLeft(child);
+      updateUpwards(root); drawTree();
+      break;
+    }
+
+    case 'rotateRightChild': {
+      const child = findNodeById(root, s.childId);
+      const parent = parentOf(root, s.childId);
+      log(`Right Rotate child at ${child.value}  [${s.label}]`);
+      if (parent.left && parent.left.id===child.id) parent.left = rotateRight(child);
+      else if (parent.right && parent.right.id===child.id) parent.right = rotateRight(child);
+      updateUpwards(root); drawTree();
+      break;
+    }
+  }
+}
+
+function loop(){ if(!playing) return; step(); if(playing){ timer=setTimeout(loop, Number(speedRange.value)); } }
+
+/* ================== Utilities ================== */
+function findNodeById(n, id){ if(!n) return null; if(n.id===id) return n; return findNodeById(n.left,id)||findNodeById(n.right,id); }
+function parentOf(n, id, parent=null){ if(!n) return null; if(n.id===id) return parent; return parentOf(n.left,id,n)||parentOf(n.right,id,n); }
+function updateUpwards(n){
+  if(!n) return 0;
+  const lh = updateUpwards(n.left);
+  const rh = updateUpwards(n.right);
+  n.h = 1 + Math.max(lh, rh);
+  return n.h;
+}
+function existsValue(n, v){ while(n){ if(v===n.value) return true; n = v<n.value ? n.left : n.right; } return false; }
+
+/* ================== UI Wiring ================== */
+const valueInput = document.getElementById('valueInput');
+const insertBtn  = document.getElementById('insertBtn');
+const playBtn    = document.getElementById('play');
+const stepBtn    = document.getElementById('step');
+const resetBtn   = document.getElementById('reset');
+const randomBtn  = document.getElementById('randomBtn');
+const speedRange = document.getElementById('speed');
+
+insertBtn.addEventListener('click', ()=>{
+  const v = Number(valueInput.value);
+  if (Number.isNaN(v)) { valueInput.focus(); return; }
+  if (existsValue(root, v)){ log(`Value ${v} already exists — ignored.`); plan=[]; return; }
+  log(`Insert request: ${v}`);
+  buildInsertPlan(v);
+  playing = true; playBtn.textContent = '⏸ Pause'; loop();
+});
+
+playBtn.addEventListener('click', ()=>{
+  if (plan.length===0) return;
+  if (!playing){ playing = true; playBtn.textContent='⏸ Pause'; loop(); }
+  else { playing=false; playBtn.textContent='▶ Play'; clearTimeout(timer); }
+});
+stepBtn.addEventListener('click', ()=>{ if(!playing) step(); });
+
+resetBtn.addEventListener('click', ()=>{
+  idCounter = 0; root = null; [30,20,40,10,25,35].forEach(v=>root = avlInsert(root, v));
+  valueInput.value=''; resetUI();
+});
+
+randomBtn.addEventListener('click', ()=>{
+  const v = Math.floor(Math.random()*99)+1;
+  valueInput.value = v; insertBtn.click();
+});
+
+/* Init */
+drawTree();
+</script>
+</body>
+</html>
