@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Graph Visualizer — reveal by selection</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+  }
+
+  .app {
+    display: grid; grid-template-columns: 320px 1fr;
+    gap: var(--gap); padding: var(--gap); height: 100%;
+  }
+
+  .panel {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 16px; overflow: auto;
+  }
+  .panel h1 { font-size: 18px; margin: 0 0 8px; letter-spacing: .3px; }
+  .panel h2 { margin: 18px 0 6px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+  #menu p{margin:.6rem 0;}
+
+  .stage {
+    position: relative; overflow: hidden;
+    border-radius: var(--radius);
+    background: radial-gradient(1200px 600px at 40% 20%, #1b2040 0%, #12162c 50%, #0e1225 100%);
+    box-shadow: var(--shadow);
+  }
+  #svg { width: 100%; height: 100%; user-select: none; touch-action: none; }
+
+  /* nodes */
+  .node { cursor: grab; }
+  .node circle {
+    fill:#2a305a; stroke:#8a93c9; stroke-width:2;
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,.45));
+  }
+  .node text { fill:var(--text); font-weight:700; font-size:13px; pointer-events:none; }
+  .node.fixed circle { stroke: var(--accent-2); }
+  .node.selected circle { stroke: var(--pair); stroke-width: 3; }
+
+  /* edges + labels */
+  .edge { stroke: #5b6699; stroke-width: 2; opacity: 1; transition: opacity var(--speed) ease; }
+  .edge.cycleClose { stroke: var(--pair); }
+  .edge.loopEdge { stroke: var(--new); }
+  .weight {
+    font-size: 12px; fill: var(--text); pointer-events: none;
+    paint-order: stroke; stroke: #0b0e1d; stroke-width: 3px; transition: opacity var(--speed) ease;
+  }
+  .hidden { opacity: 0; pointer-events: none; }
+
+  .hud {
+    position: absolute; right: 14px; bottom: 14px;
+    background: rgba(0,0,0,.35); backdrop-filter: blur(6px);
+    padding: 8px 10px; border-radius: 12px; color: var(--muted); font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <h1>Graph Explorer</h1>
+      <div id="menu">
+        <p><label><input type="checkbox" id="chkConnected"> Connected</label></p>
+        <p><label><input type="checkbox" id="chkCyclic"> Cyclic</label></p>
+        <p><label><input type="checkbox" id="chkLoop"> Loop</label></p>
+        <p><label><input type="checkbox" id="chkDirected"> Directed</label></p>
+        <p><label><input type="checkbox" id="chkWeighted"> Weighted</label></p>
+      </div>
+
+      <h2>How it reveals</h2>
+      <ul style="margin:0 0 0 18px; padding:0; color:var(--muted); line-height:1.6;">
+        <li><b>Connected</b>: shows a base set of edges. (No cycle yet.)</li>
+        <li><b>Cyclic</b>: adds one extra edge that closes a directed cycle.</li>
+        <li><b>Loop</b>: shows a self-edge at C.</li>
+        <li><b>Directed</b>: turns arrowheads on/off.</li>
+        <li><b>Weighted</b>: shows edge weights.</li>
+      </ul>
+      <p style="color:var(--muted)">Tip: drag nodes to rearrange; double-click a node to pin/unpin.</p>
+    </aside>
+
+    <main class="stage">
+      <svg id="svg" viewBox="0 0 900 600" preserveAspectRatio="xMidYMid meet" aria-label="Graph canvas">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#8bd8ff" />
+          </marker>
+        </defs>
+        <g id="edges"></g>
+        <g id="weights"></g>
+        <g id="nodes"></g>
+      </svg>
+      <div class="hud" id="hud">Nodes: — • Edges: —</div>
+    </main>
+  </div>
+
+<script>
+/* ===== Setup ===== */
+const svg = document.getElementById('svg');
+const gEdges = document.getElementById('edges');
+const gWeights = document.getElementById('weights');
+const gNodes = document.getElementById('nodes');
+const hud = document.getElementById('hud');
+
+const toggles = {
+  connected: false,
+  cyclic: false,
+  loop: false,
+  directed: false,
+  weighted: false,
+};
+
+const nodes = [
+  { id:'A', x:150, y:150 },
+  { id:'B', x:360, y:120 },
+  { id:'C', x:560, y:180 },
+  { id:'D', x:500, y:360 },
+  { id:'E', x:280, y:380 },
+];
+
+// Feature-tagged edges:
+// - connected: base edges (no cycle yet)
+// - cycleClose: the extra edge that closes a cycle
+// - loop: self-edge at C
+const edges = [
+  { from:'A', to:'B', w:2, feature:'connected' },
+  { from:'B', to:'C', w:5, feature:'connected' },
+  { from:'C', to:'D', w:1, feature:'connected' },
+  { from:'D', to:'E', w:4, feature:'connected' },
+  { from:'A', to:'D', w:7, feature:'connected' }, // extra but doesn't close the cycle
+
+  { from:'E', to:'A', w:3, feature:'cycleClose' }, // this one *closes* the cycle
+  { from:'C', to:'C', w:6, feature:'loop' },       // self-loop
+];
+
+function byId(id){ return nodes.find(n => n.id === id); }
+function updateHUD(){ hud.textContent = `Nodes: ${nodes.length} • Edges: ${edges.length}`; }
+
+/* ===== Render ===== */
+function clearGroup(g){ while (g.firstChild) g.removeChild(g.firstChild); }
+
+function lineBetween(a, b){
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const R = 24;
+  const sx = a.x + dx * (R/dist);
+  const sy = a.y + dy * (R/dist);
+  const ex = b.x - dx * (R/dist);
+  const ey = b.y - dy * (R/dist);
+  return {sx, sy, ex, ey};
+}
+
+function render(){
+  clearGroup(gEdges); clearGroup(gWeights); clearGroup(gNodes);
+
+  // draw edges and weights
+  edges.forEach(e => {
+    const a = byId(e.from), b = byId(e.to);
+    let edgeEl;
+
+    if (e.from === e.to){
+      // self-loop
+      const r = 30, sweep = 1;
+      const x = a.x, y = a.y - 24;
+      const d = `M ${x} ${y} a ${r} ${r} 0 1 ${sweep} ${r*0.01} ${r*0.01}`;
+      edgeEl = document.createElementNS('http://www.w3.org/2000/svg','path');
+      edgeEl.setAttribute('d', d);
+      edgeEl.classList.add('edge', 'loopEdge');
+    } else {
+      const {sx, sy, ex, ey} = lineBetween(a,b);
+      edgeEl = document.createElementNS('http://www.w3.org/2000/svg','line');
+      edgeEl.setAttribute('x1', sx); edgeEl.setAttribute('y1', sy);
+      edgeEl.setAttribute('x2', ex); edgeEl.setAttribute('y2', ey);
+      edgeEl.classList.add('edge');
+      if (e.feature === 'cycleClose') edgeEl.classList.add('cycleClose');
+    }
+
+    edgeEl.dataset.feature = e.feature;
+    // visibility based on toggles
+    const visible = (
+      (e.feature === 'connected' && toggles.connected) ||
+      (e.feature === 'cycleClose' && toggles.cyclic) ||
+      (e.feature === 'loop' && toggles.loop)
+    );
+    if (!visible) edgeEl.classList.add('hidden');
+
+    // arrowheads based on 'directed'
+    if (toggles.directed) edgeEl.setAttribute('marker-end','url(#arrow)');
+
+    gEdges.appendChild(edgeEl);
+
+    // weight
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.classList.add('weight');
+    label.textContent = e.w;
+
+    if (e.from === e.to){
+      label.setAttribute('x', a.x + 18);
+      label.setAttribute('y', a.y - 48);
+    } else {
+      const mx = (a.x + b.x)/2, my = (a.y + b.y)/2;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx,dy) || 1;
+      const ox = -dy/len * 10, oy = dx/len * 10;
+      label.setAttribute('x', mx + ox);
+      label.setAttribute('y', my + oy);
+    }
+
+    // weights visible only if edge itself is visible *and* Weighted is on
+    if (!(visible && toggles.weighted)) label.classList.add('hidden');
+    gWeights.appendChild(label);
+  });
+
+  // draw nodes
+  nodes.forEach(n => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.classList.add('node');
+    if (state.pinned.has(n.id)) g.classList.add('fixed');
+
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('r', 24); c.setAttribute('cx', n.x); c.setAttribute('cy', n.y);
+
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', n.x); t.setAttribute('y', n.y + 4);
+    t.setAttribute('text-anchor','middle'); t.textContent = n.id;
+
+    // dragging
+    let dragging = false, offsetX=0, offsetY=0;
+    g.addEventListener('pointerdown', ev => {
+      dragging = true; g.setPointerCapture(ev.pointerId);
+      g.classList.add('selected'); state.selected = n.id;
+      offsetX = ev.clientX - n.x; offsetY = ev.clientY - n.y;
+    });
+    g.addEventListener('pointermove', ev => {
+      if (!dragging) return;
+      if (!state.pinned.has(n.id)) {
+        n.x = ev.clientX - offsetX; n.y = ev.clientY - offsetY;
+        render();
+      }
+    });
+    g.addEventListener('pointerup', ev => {
+      dragging = false; g.releasePointerCapture(ev.pointerId);
+      g.classList.remove('selected'); state.selected = null;
+    });
+    g.addEventListener('dblclick', () => {
+      if (state.pinned.has(n.id)) state.pinned.delete(n.id);
+      else state.pinned.add(n.id);
+      render();
+    });
+
+    g.appendChild(c); g.appendChild(t); gNodes.appendChild(g);
+  });
+
+  updateHUD();
+}
+
+const state = { pinned:new Set(), selected:null };
+
+/* ===== Toggle wiring ===== */
+function wireToggles(){
+  const $ = s => document.querySelector(s);
+  $('#chkConnected').addEventListener('change', e => { toggles.connected = e.target.checked; render(); });
+  $('#chkCyclic').addEventListener('change', e => { toggles.cyclic = e.target.checked; render(); });
+  $('#chkLoop').addEventListener('change', e => { toggles.loop = e.target.checked; render(); });
+  $('#chkDirected').addEventListener('change', e => {
+    toggles.directed = e.target.checked;
+    // re-render so marker-end is applied/removed
+    render();
+  });
+  $('#chkWeighted').addEventListener('change', e => { toggles.weighted = e.target.checked; render(); });
+}
+
+wireToggles();
+render(); // initial: only nodes
+
+</script>
+</body>
+</html>
