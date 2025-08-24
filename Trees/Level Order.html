@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Level Order Traversal — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  html, body { height:100%; background:var(--bg); color:var(--text); }
+  body { margin:0; font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; }
+  .wrap { max-width:1100px; margin:28px auto; padding:0 18px; display:grid; gap:18px; }
+
+  .header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; }
+  .title h2 { margin:0; font-size:clamp(1.2rem, 3vw, 1.5rem); line-height:1.3; }
+  .badge { background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b1320; font-weight:800; padding:6px 10px; border-radius:999px; font-size:12px; letter-spacing:.5px; text-transform:uppercase; flex-shrink:0; }
+  .note { color:var(--muted); font-size:clamp(12px, 2.5vw, 13px); line-height:1.4; max-width:400px; margin-top:8px; }
+  
+  @media (max-width: 768px) {
+    .header { flex-direction:column; align-items:flex-start; gap:12px; }
+    .note { max-width:100%; margin-top:4px; }
+  }
+  
+  @media (max-width: 480px) {
+    .title { flex-direction:column; align-items:flex-start; gap:8px; }
+    .title h2 { font-size:1.1rem; }
+  }
+
+  .grid { display:grid; grid-template-columns: 1.4fr .6fr; gap:18px; }
+  @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
+
+  .card {
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+
+  .controls { display:flex; gap:10px; padding:14px; border-bottom:1px solid rgba(255,255,255,.06); align-items:center; }
+  button, input[type="range"] {
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px;
+  }
+  button { cursor:pointer; font-weight:800; letter-spacing:.2px; }
+  .primary { background:var(--accent); color:#0b1320; }
+  .ghost { background:var(--chip); }
+
+  /* Canvas */
+  .canvas { height: clamp(380px, 58vh, 620px); }
+  svg { width:100%; height:100%; display:block; }
+
+  .edge { stroke: var(--muted); stroke-width:2; marker-end:url(#arrow); opacity:.9; }
+  .node { transition: transform var(--speed); cursor:pointer; }
+  .node .dot {
+    fill:var(--chip); stroke:rgba(255,255,255,.12); stroke-width:1.5;
+  }
+  .node text { fill:var(--text); font-weight:800; font-size:14px; dominant-baseline: middle; text-anchor: middle; }
+  .node.focus .dot { fill: var(--pair); }
+  .node.visited .dot { fill: var(--new); }
+
+  /* Output */
+  .trail { display:flex; flex-wrap:wrap; gap:8px; padding:12px 14px; border-top:1px solid rgba(255,255,255,.06); }
+  .chip { background:var(--chip); border:1px solid rgba(255,255,255,.06); border-radius:999px; padding:6px 10px; font-weight:800; min-width:34px; text-align:center; }
+
+  /* Right column */
+  .panel { display:grid; grid-template-rows:auto 1fr auto; height:100%; }
+  .section { padding:14px; border-bottom:1px solid rgba(255,255,255,.06); }
+  .section:last-child { border-bottom:none; }
+  .pc-title { font-weight:800; margin-bottom:10px; color:var(--accent); }
+  .code { background:var(--slot); border-radius:12px; padding:12px; font-family: monospace; font-size:13px; }
+  .line { padding:4px 8px; border-radius:6px; }
+  .line.hl { background:rgba(255,255,255,.08); }
+
+  .queue { display:flex; gap:8px; flex-wrap:wrap; }
+  .qitem { background:var(--slot); border:1px solid rgba(255,255,255,.08); padding:6px 10px; border-radius:8px; font-weight:700; }
+  .pill { background:var(--chip); padding:6px 10px; border-radius:999px; color:var(--muted); font-size:12px; border:1px solid rgba(255,255,255,.06); }
+  
+  /* Enhanced tip section */
+  .tip-section { border-bottom:none !important; }
+  .tip-container {
+    display:flex; align-items:flex-start; gap:12px;
+    background:linear-gradient(135deg, rgba(108,243,255,0.08), rgba(138,233,193,0.08));
+    border:1px solid rgba(108,243,255,0.15);
+    border-radius:12px; padding:14px;
+  }
+  .tip-icon { font-size:18px; flex-shrink:0; margin-top:2px; }
+  .tip-content { flex:1; min-width:0; }
+  .tip-title {
+    font-weight:800; font-size:13px; color:var(--accent);
+    margin-bottom:4px; letter-spacing:0.3px;
+  }
+  .tip-text {
+    color:var(--text); font-size:13px; line-height:1.5;
+    opacity:0.9;
+  }
+  
+  @media (max-width: 480px) {
+    .tip-container { flex-direction:column; gap:8px; text-align:center; }
+    .tip-icon { align-self:center; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">
+      <span class="badge">Binary Trees</span>
+      <h2 style="margin:0">📊 Level Order Traversal (Breadth-First)</h2>
+    </div>
+    <div class="note">Traverse nodes level by level using a <b>queue</b>.</div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card">
+      <div class="controls">
+        <button id="play" class="primary">▶ Play</button>
+        <button id="step" class="ghost">⏭ Step</button>
+        <button id="reset" class="ghost">⟲ Reset</button>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+          <span class="note">Speed</span>
+          <input id="speed" type="range" min="200" max="1600" value="900" step="50"/>
+        </div>
+      </div>
+      <div class="canvas">
+        <svg id="svg" viewBox="0 0 1000 560">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <div class="trail" id="trail"></div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="card panel">
+      <div class="section">
+        <div class="pc-title">Pseudocode</div>
+        <div class="code" id="code">
+          <div class="line" data-l="1">1&nbsp; LEVELORDER(root):</div>
+          <div class="line" data-l="2">2&nbsp; &nbsp; if root == NULL: return</div>
+          <div class="line" data-l="3">3&nbsp; &nbsp; create queue Q</div>
+          <div class="line" data-l="4">4&nbsp; &nbsp; enqueue(root)</div>
+          <div class="line" data-l="5">5&nbsp; &nbsp; while Q not empty:</div>
+          <div class="line" data-l="6">6&nbsp; &nbsp; &nbsp; node = dequeue(Q)</div>
+          <div class="line" data-l="7">7&nbsp; &nbsp; &nbsp; visit(node)</div>
+          <div class="line" data-l="8">8&nbsp; &nbsp; &nbsp; if node.left != NULL: enqueue(node.left)</div>
+          <div class="line" data-l="9">9&nbsp; &nbsp; &nbsp; if node.right != NULL: enqueue(node.right)</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="pc-title">Queue</div>
+        <div id="queue" class="queue"></div>
+      </div>
+      <div class="section tip-section">
+        <div class="tip-container">
+          <div class="tip-icon">📊</div>
+          <div class="tip-content">
+            <div class="tip-title">Pro Tip</div>
+            <div class="tip-text">In BFS, watch the queue grow and shrink as nodes are processed level by level!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==== Tree data ==== */
+const nodes = {
+  n1:{id:"n1", val:4, left:"n2", right:"n3"},
+  n2:{id:"n2", val:2, left:"n4", right:"n5"},
+  n3:{id:"n3", val:6, left:"n6", right:"n7"},
+  n4:{id:"n4", val:1, left:null, right:null},
+  n5:{id:"n5", val:3, left:null, right:null},
+  n6:{id:"n6", val:5, left:null, right:null},
+  n7:{id:"n7", val:7, left:null, right:null},
+};
+const ROOT = "n1";
+const layout = {
+  n1:{x:500,y:80}, n2:{x:280,y:200}, n3:{x:720,y:200},
+  n4:{x:170,y:340}, n5:{x:390,y:340}, n6:{x:610,y:340}, n7:{x:830,y:340}
+};
+const RADIUS=26;
+
+const svg=document.getElementById("svg");
+const trail=document.getElementById("trail");
+const code=document.getElementById("code");
+const qEl=document.getElementById("queue");
+const playBtn=document.getElementById("play"), stepBtn=document.getElementById("step"), resetBtn=document.getElementById("reset"), speedRange=document.getElementById("speed");
+
+function mk(tag,attrs={}){const el=document.createElementNS("http://www.w3.org/2000/svg",tag);for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);return el;}
+
+function drawTree(){
+  while(svg.lastChild && svg.lastChild.tagName!=="defs") svg.removeChild(svg.lastChild);
+  for(const n of Object.values(nodes)){
+    const p=layout[n.id];
+    if(n.left) addEdge(n.id,n.left,p,layout[n.left]);
+    if(n.right) addEdge(n.id,n.right,p,layout[n.right]);
+  }
+  for(const n of Object.values(nodes)) addNode(n);
+}
+function addEdge(aId,bId,p1,p2){
+  const ang=Math.atan2(p2.y-p1.y,p2.x-p1.x);
+  const x1=p1.x+Math.cos(ang)*RADIUS, y1=p1.y+Math.sin(ang)*RADIUS;
+  const x2=p2.x-Math.cos(ang)*RADIUS, y2=p2.y-Math.sin(ang)*RADIUS;
+  svg.appendChild(mk("line",{x1,y1,x2,y2,class:"edge","data-a":aId,"data-b":bId}));
+}
+function addNode(n){
+  const g=mk("g",{class:"node",id:n.id,transform:`translate(${layout[n.id].x},${layout[n.id].y})`});
+  const c=mk("circle",{r:RADIUS,class:"dot"}); const t=mk("text",{}); t.textContent=n.val;
+  g.appendChild(c); g.appendChild(t); svg.appendChild(g);
+}
+
+/* ==== Traversal ==== */
+let queue=[], playing=false, timer=null;
+
+function reset(){
+  clearTimeout(timer); playing=false; playBtn.textContent="▶ Play";
+  queue=[]; trail.innerHTML=""; qEl.innerHTML="";
+  [...svg.querySelectorAll(".node")].forEach(n=>n.classList.remove("focus","visited"));
+  highlightLine(null);
+  // start
+  queue.push(ROOT); renderQueue();
+  highlightLine(3); setTimeout(()=>highlightLine(4),200);
+}
+function step(){
+  if(queue.length===0){ playing=false; playBtn.textContent="▶ Play"; return; }
+  highlightLine(5);
+  const id=queue.shift(); renderQueue();
+  if(!id){ highlightLine(2); return; }
+  const n=nodes[id];
+  focusNode(id); highlightLine(6);
+  visitNode(id); highlightLine(7);
+  if(n.left){ queue.push(n.left); highlightLine(8); }
+  if(n.right){ queue.push(n.right); highlightLine(9); }
+  renderQueue();
+}
+function focusNode(id){ [...svg.querySelectorAll(".node")].forEach(n=>n.classList.remove("focus")); document.getElementById(id)?.classList.add("focus"); }
+function visitNode(id){
+  const el=document.getElementById(id); if(!el) return;
+  el.classList.remove("focus"); el.classList.add("visited");
+  const chip=document.createElement("span"); chip.className="chip"; chip.textContent=nodes[id].val; trail.appendChild(chip);
+}
+function renderQueue(){
+  qEl.innerHTML=""; queue.forEach(id=>{ const d=document.createElement("div"); d.className="qitem"; d.textContent=nodes[id].val; qEl.appendChild(d); });
+}
+function highlightLine(n){ [...code.querySelectorAll(".line")].forEach(l=>l.classList.remove("hl")); if(n==null) return; code.querySelector(`.line[data-l="${n}"]`)?.classList.add("hl"); }
+
+function loop(){ if(!playing) return; step(); if(playing){ timer=setTimeout(loop,Number(speedRange.value)); } }
+
+/* ==== Init ==== */
+drawTree(); reset();
+playBtn.onclick=()=>{ if(!playing){ playing=true; playBtn.textContent="⏸ Pause"; loop(); } else { playing=false; playBtn.textContent="▶ Play"; clearTimeout(timer);} };
+stepBtn.onclick=()=>{ if(!playing) step(); };
+resetBtn.onclick=reset;
+</script>
+</body>
+</html>
