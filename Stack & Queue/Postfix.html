@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>➕ Postfix (RPN) Evaluation — Stack Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* for paired operands */
+    --new:#8ae9c1;  /* for freshly pushed */
+  }
+
+  body { margin:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+  .wrap { max-width:1100px; margin:40px auto; padding:0 18px; display:grid; gap:var(--gap); }
+  header { display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; justify-content:space-between; }
+  h1 { margin:0; font-size:clamp(20px,2.4vw,28px); }
+  .subtitle { color:var(--muted); font-size:14px; margin-top:6px; max-width:72ch; }
+  .badge { font-size:11px; color:#0b1220; background:var(--accent); padding:4px 8px; border-radius:999px; font-weight:800; letter-spacing:.4px; }
+
+  .panel { background:linear-gradient(180deg,var(--panel),var(--panel-2)); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .btn{ appearance:none; border:none; border-radius:12px; padding:12px 14px; font-weight:600; background:var(--chip); color:var(--text); cursor:pointer; transition:transform .06s ease, filter .2s ease; }
+  .btn:hover{ filter:brightness(1.06); }
+  .btn:active{ transform:translateY(1px) scale(.995); }
+  .btn.primary{ background:linear-gradient(180deg,var(--accent),var(--accent-2)); color:#0b1220; }
+  .btn.warning{ background:linear-gradient(180deg,#ff8a8a,#ffa3a3); color:#230000; }
+  .btn.ghost{ background:transparent; border:1px solid var(--chip); }
+  .btn.small{ padding:8px 10px; font-size:13px; }
+
+  input[type="text"]{
+    background:var(--slot); border:1px solid transparent; color:var(--text);
+    border-radius:12px; padding:12px 14px; min-width:320px; font-size:15px;
+  }
+  input[type="text"]:focus{ outline:none; border-color:var(--accent); }
+
+  .cols { display:grid; gap:var(--gap); grid-template-columns: 1.05fr .95fr; }
+  @media (max-width:900px){ .cols { grid-template-columns:1fr; } }
+
+  /* Token stream */
+  .stream { display:flex; gap:8px; flex-wrap:wrap; align-items:center; min-height:64px; }
+  .cell {
+    padding:8px 10px; border-radius:10px; background:rgba(255,255,255,.07);
+    font-weight:700; border:1px solid rgba(255,255,255,.06); min-width:28px; text-align:center;
+    transition:filter var(--speed) ease, transform var(--speed) ease, outline var(--speed) ease, background var(--speed) ease;
+  }
+  .cell.cur { outline:2px solid var(--accent); transform:translateY(-2px); }
+  .cell.push { outline:2px solid var(--new); }
+  .cell.pop  { outline:2px solid var(--pair); }
+  .cell.err  { outline:2px solid #ff8a8a; background:linear-gradient(180deg, rgba(255,138,138,.18), rgba(255,255,255,.06)); }
+  .cell.ok   { outline:2px solid var(--ok); }
+
+  /* Stack view */
+  .stack {
+    min-height:240px; display:flex; flex-direction:column-reverse; gap:10px; padding:16px;
+    border-radius:12px; background:var(--slot); outline:1px solid rgba(255,255,255,.06);
+  }
+  .node {
+    display:inline-flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px;
+    background:var(--chip); border:1px solid rgba(255,255,255,.08); box-shadow:0 6px 18px rgba(0,0,0,.3);
+    transform:translateY(6px) scale(.96); opacity:0; transition:opacity var(--speed) ease, transform var(--speed) ease, outline var(--speed) ease, background var(--speed) ease;
+  }
+  .node.show{ opacity:1; transform:translateY(0) scale(1); }
+  .node.push { outline:2px solid var(--new); background:linear-gradient(180deg, rgba(138,233,193,.22), var(--chip)); }
+  .node.pop  { outline:2px dashed var(--pair); filter:grayscale(.15) brightness(.93); }
+
+  .status { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--muted); font-size:14px; }
+  .status strong { color:var(--text); }
+  .toast { margin-left:auto; background:rgba(255,255,255,.06); padding:8px 10px; border-radius:10px; font-size:13px; color:var(--muted); }
+  .history { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; color:var(--muted); line-height:1.5; max-height:180px; overflow:auto; background:rgba(255,255,255,.05); padding:10px 12px; border-radius:10px; white-space: pre-wrap; }
+
+  code { background:rgba(255,255,255,.06); padding:2px 6px; border-radius:6px; }
+  .legend { display:flex; gap:10px; flex-wrap:wrap; }
+  .tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.06); }
+  .sw{ width:10px; height:10px; border-radius:2px; background:var(--new); }
+  .sw.pair{ background:var(--pair); }
+  .sw.ok{ background:var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>➕ Postfix Evaluation <span class="badge">Stack • O(n)</span></h1>
+      <div class="subtitle">
+        Read tokens left→right. Push numbers. When you see an operator, <strong>pop two</strong> (right then left),
+        compute <code>left op right</code>, and push the result. Final answer is the single value on the stack.
+      </div>
+    </div>
+    <div class="panel controls">
+      <input id="expr" type="text" placeholder="e.g. 2 3 4 * + 5 -" />
+      <button class="btn primary" id="loadBtn">Load</button>
+      <button class="btn" id="stepBtn">Step ▶</button>
+      <button class="btn" id="autoBtn">Auto</button>
+      <button class="btn warning" id="stopBtn">Stop</button>
+      <button class="btn ghost" id="evalBtn">Evaluate All</button>
+      <button class="btn ghost" id="examplesBtn">Examples</button>
+      <button class="btn ghost" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <section class="cols">
+    <div class="panel">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div class="legend">
+          <span class="tag"><span class="sw"></span>push number</span>
+          <span class="tag"><span class="sw pair"></span>pop operands</span>
+          <span class="tag"><span class="sw ok"></span>final result</span>
+        </div>
+        <div class="toast" id="toast">Ready.</div>
+      </div>
+      <div id="stream" class="stream"></div>
+      <div class="status" style="margin-top:10px;">
+        <div>Index: <strong id="idx">—</strong></div>
+        <div>Top of stack: <strong id="top">—</strong></div>
+        <div>Stack size: <strong id="size">0</strong></div>
+        <div>Last op: <strong id="last">—</strong></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin:0 0 10px;">Stack (bottom → top)</h3>
+      <div id="stack" class="stack" aria-live="polite"></div>
+      <div class="history" id="history" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <strong>Supported tokens:</strong>
+    <div style="margin-top:6px;color:var(--muted);">
+      Numbers (int/float, negative ok) and operators <code>+</code> <code>-</code> <code>*</code> <code>/</code>
+      <code>^</code> (power) <code>%</code> (mod). Tokens are separated by spaces.
+      Example: <code>3 4 2 * 1 5 - 2 3 ^ ^ / +</code>
+    </div>
+    <div style="margin-top:8px;color:var(--muted);">
+      Errors: insufficient operands, division by zero, or leftover values after evaluation.
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ====== State & DOM ======
+  const el = q => document.querySelector(q);
+  const streamEl = el('#stream');
+  const stackEl  = el('#stack');
+  const toastEl  = el('#toast');
+  const idxEl    = el('#idx');
+  const topEl    = el('#top');
+  const sizeEl   = el('#size');
+  const lastEl   = el('#last');
+  const historyEl= el('#history');
+  const input    = el('#expr');
+
+  let tokens = [];
+  let ptr = -1;
+  let stack = [];
+  let autoTimer = null;
+  let finished = false;
+
+  const ops = new Set(['+','-','*','/','^','%']);
+
+  // ====== Utilities ======
+  const fmt = (x) => {
+    if (!Number.isFinite(x)) return String(x);
+    // avoid tiny float errors; keep up to 6 decimals
+    let s = Math.round((x + Number.EPSILON) * 1e6) / 1e6;
+    return (Math.abs(s) >= 1e10 || (Math.abs(s) > 0 && Math.abs(s) < 1e-4)) ? s.toExponential(4) : String(s);
+  };
+  const isNumber = (t) => /^-?(?:\d+\.?\d*|\.\d+)$/.test(t); // -10, 3.5, .25, -0.3
+  const notify = m => { toastEl.textContent = m; toastEl.animate([{opacity:.65},{opacity:1}],{duration:200}); };
+  const log = s => { const t=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); historyEl.textContent += `[${t}] ${s}\n`; historyEl.scrollTop = historyEl.scrollHeight; };
+
+  // ====== Render ======
+  function drawStream() {
+    streamEl.innerHTML = '';
+    tokens.forEach((tk, i) => {
+      const d = document.createElement('div');
+      d.className = 'cell';
+      d.textContent = tk;
+      if (i === ptr) d.classList.add('cur');
+      streamEl.appendChild(d);
+    });
+  }
+
+  function drawStack({pushTop=false, popped=false}={}) {
+    stackEl.innerHTML = '';
+    stack.forEach((v, i) => {
+      const n = document.createElement('div');
+      n.className = 'node';
+      n.textContent = fmt(v);
+      if (i === stack.length-1 && pushTop) n.classList.add('push');
+      stackEl.appendChild(n);
+      requestAnimationFrame(()=>n.classList.add('show'));
+    });
+    if (popped) {
+      const ghost = document.createElement('div');
+      ghost.className = 'node pop show';
+      ghost.textContent = 'pop';
+      stackEl.appendChild(ghost);
+      setTimeout(()=>ghost.remove(), 700);
+    }
+    topEl.textContent = stack.length ? fmt(stack[stack.length-1]) : '—';
+    sizeEl.textContent = stack.length;
+  }
+
+  function mark(i, cls) {
+    const cell = streamEl.children[i];
+    if (cell) cell.classList.add(cls);
+  }
+  function clearMarks() {
+    [...streamEl.children].forEach(c => c.classList.remove('cur','push','pop','ok','err'));
+  }
+
+  // ====== Core evaluation step ======
+  function applyOp(op, a, b) {
+    // left = a, right = b (since we popped b then a)
+    switch(op){
+      case '+': return a + b;
+      case '-': return a - b;
+      case '*': return a * b;
+      case '/': {
+        if (b === 0) throw new Error('Division by zero');
+        return a / b;
+      }
+      case '^': return Math.pow(a, b);
+      case '%': {
+        if (b === 0) throw new Error('Modulo by zero');
+        return a % b;
+      }
+      default: throw new Error('Unknown operator ' + op);
+    }
+  }
+
+  function step() {
+    if (finished) { notify('Already finished.'); return; }
+    if (ptr >= tokens.length - 1) { finish(); return; }
+
+    ptr++;
+    clearMarks();
+    drawStream();
+    mark(ptr, 'cur');
+
+    const tk = tokens[ptr];
+
+    if (isNumber(tk)) {
+      const val = Number(tk);
+      stack.push(val);
+      drawStack({pushTop:true});
+      mark(ptr, 'push');
+      lastEl.textContent = `push ${fmt(val)}`;
+      log(`push ${fmt(val)}`);
+      return;
+    }
+
+    if (!ops.has(tk)) {
+      mark(ptr, 'err');
+      return fail(`Unknown token '${tk}'`);
+    }
+
+    // operator: need 2 operands
+    if (stack.length < 2) {
+      mark(ptr, 'err');
+      return fail(`Operator '${tk}' needs 2 operands (have ${stack.length}).`);
+    }
+
+    // pop right then left (order matters!)
+    const right = stack.pop();
+    const left  = stack.pop();
+    drawStack({popped:true});
+    mark(ptr, 'pop');
+
+    try {
+      const res = applyOp(tk, left, right);
+      stack.push(res);
+      drawStack({pushTop:true});
+      lastEl.textContent = `${fmt(left)} ${tk} ${fmt(right)} = ${fmt(res)}`;
+      log(lastEl.textContent);
+    } catch(e) {
+      mark(ptr, 'err');
+      return fail(e.message);
+    }
+
+    if (ptr === tokens.length - 1) finish();
+  }
+
+  // ====== Finish/Fail ======
+  function finish() {
+    finished = true;
+    if (tokens.length === 0) { notify('Nothing to evaluate.'); return; }
+
+    if (stack.length === 1) {
+      mark(ptr, 'ok');
+      const ans = fmt(stack[0]);
+      notify(`Result = ${ans}`);
+      log(`Result = ${ans}`);
+      lastEl.textContent = `Result = ${ans}`;
+      // tint last token(s) green
+      [...streamEl.children].forEach(c => { if (!c.classList.contains('err')) c.classList.add('ok'); });
+    } else if (stack.length > 1) {
+      fail(`Leftover ${stack.length} values on stack — invalid postfix.`);
+    } else {
+      fail('Empty stack at end — invalid postfix.');
+    }
+  }
+
+  function fail(msg) {
+    finished = true;
+    notify('Error: ' + msg);
+    log('Error: ' + msg);
+  }
+
+  // ====== Controls ======
+  function loadExpr(text) {
+    clearInterval(autoTimer); autoTimer=null;
+    stack = []; ptr = -1; finished = false;
+    tokens = (text || '').trim().split(/\s+/).filter(t => t.length);
+    streamEl.innerHTML = '';
+    drawStream(); drawStack();
+    idxEl.textContent = '—';
+    lastEl.textContent = '—';
+    historyEl.textContent = '';
+    notify('Expression loaded.');
+  }
+
+  function autoPlay() {
+    if (autoTimer) return;
+    autoTimer = setInterval(() => {
+      if (finished || ptr >= tokens.length - 1) {
+        clearInterval(autoTimer); autoTimer=null; finish(); return;
+      }
+      step();
+      idxEl.textContent = ptr;
+    }, 420);
+  }
+
+  function evalAll() {
+    // fast pass (no animation); then show final state
+    clearInterval(autoTimer); autoTimer=null;
+    stack = []; ptr = -1; finished = false;
+    drawStack(); drawStream();
+    try {
+      for (let i = 0; i < tokens.length; i++) {
+        const tk = tokens[i];
+        ptr = i;
+        if (isNumber(tk)) stack.push(Number(tk));
+        else if (ops.has(tk)) {
+          if (stack.length < 2) throw new Error(`'${tk}' needs 2 operands at token #${i}`);
+          const r = stack.pop(), l = stack.pop();
+          if ((tk === '/' || tk === '%') && r === 0) throw new Error((tk === '/' ? 'Division' : 'Modulo') + ' by zero at token #'+i);
+          stack.push(applyOp(tk, l, r));
+        } else throw new Error(`Unknown token '${tk}' at #${i}`);
+      }
+      if (stack.length !== 1) throw new Error(`Invalid postfix: stack has ${stack.length} values at end.`);
+      drawStack({pushTop:true});
+      drawStream(); [...streamEl.children].forEach(c => c.classList.add('ok'));
+      const ans = fmt(stack[0]);
+      lastEl.textContent = `Result = ${ans}`;
+      notify(`Result = ${ans}`);
+      log(`Result = ${ans}`);
+      finished = true;
+    } catch (e) {
+      drawStream(); if (ptr >= 0) mark(ptr, 'err');
+      notify('Error: ' + e.message);
+      log('Error: ' + e.message);
+      finished = true;
+    }
+  }
+
+  function resetAll() {
+    clearInterval(autoTimer); autoTimer=null;
+    input.value = '';
+    loadExpr('');
+    notify('Reset.');
+  }
+
+  function examples() {
+    const samples = [
+      // result shown in comments
+      '2 3 4 * + 5 -',            // 2 + (3*4) - 5 = 9
+      '5 1 2 + 4 * + 3 -',        // 14
+      '3 4 2 * 1 5 - 2 3 ^ ^ / +',// classic complex
+      '10 2 8 * + 3 -',           // 23
+      '15 7 1 1 + - / 3 * 2 1 1 + + -', // 5
+      '2 3 ^ 4 5 * +',            // 8 + 20 = 28
+      '7 2 / 3 - 4 2 * +',        // 3.5 - 3 + 8 = 8.5
+      '5 0 /',                    // error (division by zero)
+      '1 2 + 3',                  // error (leftover)
+      '-3 -2 * 4 +'               // 10
+    ];
+    const pick = samples[Math.floor(Math.random()*samples.length)];
+    input.value = pick;
+    loadExpr(pick);
+  }
+
+  // Buttons
+  el('#loadBtn').addEventListener('click', () => loadExpr(input.value));
+  el('#stepBtn').addEventListener('click', () => { step(); idxEl.textContent = ptr; });
+  el('#autoBtn').addEventListener('click', autoPlay);
+  el('#stopBtn').addEventListener('click', () => { clearInterval(autoTimer); autoTimer=null; notify('Stopped.'); });
+  el('#evalBtn').addEventListener('click', evalAll);
+  el('#resetBtn').addEventListener('click', resetAll);
+  el('#examplesBtn').addEventListener('click', examples);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') el('#loadBtn').click(); });
+
+  // Seed a friendly default
+  const seed = '2 3 4 * + 5 -';
+  input.value = seed;
+  loadExpr(seed);
+})();
+</script>
+</body>
+</html>
