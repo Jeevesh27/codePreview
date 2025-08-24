@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Floyd–Warshall Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for selected terms */
+    --new:#8ae9c1;  /* green for newly added term */
+  }
+
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    line-height:1.35;
+  }
+
+  .wrap {
+    max-width:1100px; margin:40px auto; padding:0 20px;
+    display:grid; grid-template-columns: 1.1fr 1fr; gap:var(--gap);
+  }
+  @media (max-width: 960px){ .wrap { grid-template-columns: 1fr; } }
+
+  .card {
+    background:linear-gradient(160deg,var(--panel),var(--panel-2));
+    border-radius:var(--radius); box-shadow:var(--shadow); padding:20px;
+    border:1px solid #262b50;
+  }
+
+  h1 { margin:0 0 6px; font-size:clamp(22px,3.2vw,32px); letter-spacing:.2px; }
+  .subtle { color:var(--muted); font-size:14px; margin:0 0 18px; }
+
+  .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 14px; }
+  button, .pill {
+    background:var(--chip); color:var(--text); border:1px solid #4a5399;
+    padding:10px 14px; border-radius:12px; font-weight:600; cursor:pointer;
+    transition:transform .08s ease, background .2s ease, border-color .2s ease;
+  }
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  button[disabled] { opacity:.5; cursor:not-allowed; }
+
+  .matrix-area { overflow:auto; border-radius:12px; border:1px solid #2a2f5e; }
+  table {
+    border-collapse:separate; border-spacing:0; width:100%;
+    min-width:520px; background:#11152b;
+  }
+  th, td {
+    border:1px solid #2b346b; text-align:center; position:relative;
+  }
+  th {
+    background:#121733; color:var(--muted); padding:8px 10px;
+    font-size:13px; font-weight:700;
+  }
+  td {
+    padding:0;
+    background: #0f1430;
+  }
+  td .cell {
+    width:100%; padding:12px 10px; min-width:62px;
+    outline:none; background:transparent; color:var(--text);
+    font-variant-numeric: tabular-nums; font-weight:600;
+  }
+  td .cell[contenteditable="true"]:focus {
+    background:#131a3f;
+    box-shadow: inset 0 0 0 2px #2d3577;
+  }
+  .diag { background: #121945; color:var(--muted); }
+
+  /* Highlights */
+  .sel-ik { box-shadow: inset 0 0 0 3px var(--pair); }
+  .sel-kj { box-shadow: inset 0 0 0 3px var(--pair); }
+  .sel-ij { box-shadow: inset 0 0 0 3px var(--accent); }
+  .updating { animation: pulse var(--speed) linear 0s 3; }
+  .just-updated { background: linear-gradient(0deg, rgba(138,233,193,.25), transparent); }
+  @keyframes pulse {
+    0% { filter:brightness(1); }
+    50% { filter:brightness(1.25); }
+    100% { filter:brightness(1); }
+  }
+
+  .legend { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+  .chip {
+    display:inline-flex; align-items:center; gap:8px;
+    background:var(--slot); border:1px dashed #3d468e; padding:8px 10px; border-radius:10px;
+  }
+  .dot { width:14px; height:14px; border-radius:50%; display:inline-block; }
+  .dot.ij { background:var(--accent); }
+  .dot.path { background:var(--pair); }
+  .dot.new { background:var(--new); }
+
+  .stack { display:grid; gap:10px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+
+  .narration {
+    background:#0e1330; border:1px solid #2a2f5e; padding:14px;
+    border-radius:12px; min-height:88px;
+  }
+  .narration b { color:var(--accent-2); }
+  .statline {
+    display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; color:var(--muted); font-size:13px;
+  }
+  .statline .pill { background:#0e1639; border-color:#2a2f5e; color:var(--muted); }
+
+  .aside .card { height:100%; display:flex; flex-direction:column; gap:14px; }
+  .aside .panel { background:#101633; border:1px solid #2a2f5e; border-radius:12px; padding:12px; }
+
+  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:var(--gap); }
+  @media (max-width: 520px){ .grid-2 { grid-template-columns: 1fr; } }
+
+  .number-input {
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  }
+  input[type="number"]{
+    background:#0e1433; color:var(--text); border:1px solid #2a2f5e;
+    border-radius:10px; padding:10px; width:100px; font-weight:700;
+  }
+  a.inline { color:var(--accent); text-decoration:none; border-bottom:1px dashed #2e9eb0; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>Floyd-Warshall Algorithm</h1>
+      <p class="subtle">All-pairs shortest paths via dynamic programming. Time complexity: <b>O(V³)</b>.</p>
+
+      <div class="controls">
+        <button id="btnPlay" title="Play / Pause [Space]">▶ Play</button>
+        <button id="btnStep" title="Step [.]">Step</button>
+        <button id="btnNextK" title="Jump to next k">Next k</button>
+        <button id="btnReset">Reset</button>
+        <span class="pill mono" id="status">k=0, i=0, j=0</span>
+        <span class="pill">Speed
+          <input id="speed" type="range" min="120" max="1200" value="450" style="vertical-align:middle; margin-left:10px">
+        </span>
+      </div>
+
+      <div class="matrix-area" id="matrixWrap"></div>
+
+      <div class="legend">
+        <span class="chip"><span class="dot ij"></span> Target <span class="mono">d[i][j]</span></span>
+        <span class="chip"><span class="dot path"></span> Candidate path <span class="mono">d[i][k]+d[k][j]</span></span>
+        <span class="chip"><span class="dot new"></span> Updated this step</span>
+      </div>
+
+      <div class="stack" style="margin-top:14px">
+        <div class="narration mono" id="narration">
+          Load a graph (or edit cells), then press <b>Play</b> or <b>Step</b>.
+        </div>
+        <div class="statline">
+          <span class="pill mono" id="ops">Operations: 0</span>
+          <span class="pill mono" id="updates">Updates: 0</span>
+          <span class="pill mono" id="size">V = 5</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="aside">
+      <div class="card">
+        <div class="grid-2">
+          <div class="panel">
+            <h3 style="margin:6px 0 8px">Graph Setup</h3>
+            <div class="number-input" style="margin-bottom:10px">
+              <label for="n">Vertices:</label>
+              <input id="n" type="number" min="2" max="10" value="5" />
+              <button id="btnResize">Resize</button>
+            </div>
+            <div class="number-input" style="margin-bottom:10px">
+              <button id="btnSample">Load Sample</button>
+              <button id="btnRandom">Random Graph</button>
+            </div>
+            <p class="subtle">Edit any cell (use numbers, blank, or <span class="mono">∞</span>). Diagonal is fixed to 0.</p>
+          </div>
+          <div class="panel">
+            <h3 style="margin:6px 0 8px">How it works</h3>
+            <p class="subtle">
+              Triple loops over vertices: for each <span class="mono">k</span> (as an intermediate),
+              we test whether going <span class="mono">i → k → j</span> improves
+              <span class="mono">d[i][j]</span>. If <span class="mono">d[i][k]+d[k][j] &lt; d[i][j]</span>,
+              we update.
+            </p>
+            <pre class="mono" style="margin:0; font-size:12.5px; background:#0b1130; border:1px solid #2a2f5e; border-radius:10px; padding:10px; overflow:auto;">
+function FloydWarshall(V, dist):
+  for k in 0..V-1:
+    for i in 0..V-1:
+      for j in 0..V-1:
+        if dist[i][k] + dist[k][j] &lt; dist[i][j]:
+          dist[i][j] = dist[i][k] + dist[k][j]</pre>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 style="margin:6px 0 8px">Tips</h3>
+          <ul class="subtle" style="margin:0 0 6px 18px">
+            <li>Press <span class="mono">Space</span> to Play/Pause; <span class="mono">.</span> to Step.</li>
+            <li>Use <span class="mono">Next k</span> to jump to the next intermediate node.</li>
+            <li>Try negative edges (no negative cycles).</li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+(() => {
+  // Utilities
+  const INF = Number.POSITIVE_INFINITY;
+  const toNum = (v) => {
+    if (v == null) return INF;
+    const s = String(v).trim();
+    if (s === "" || s === "∞" || s.toLowerCase() === "inf") return INF;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : INF;
+  };
+  const fmt = (x) => x === INF ? "∞" : (Math.round((x + Number.EPSILON)*1000)/1000).toString();
+
+  // State
+  let V = 5;
+  let D0 = []; // initial matrix
+  let D  = []; // working matrix
+  let k = 0, i = 0, j = 0;
+  let playing = false;
+  let timer = null;
+  let ops = 0, updates = 0;
+
+  const els = {
+    matrixWrap: document.getElementById("matrixWrap"),
+    status: document.getElementById("status"),
+    narration: document.getElementById("narration"),
+    ops: document.getElementById("ops"),
+    updates: document.getElementById("updates"),
+    size: document.getElementById("size"),
+    play: document.getElementById("btnPlay"),
+    step: document.getElementById("btnStep"),
+    reset: document.getElementById("btnReset"),
+    nextk: document.getElementById("btnNextK"),
+    resize: document.getElementById("btnResize"),
+    n: document.getElementById("n"),
+    sample: document.getElementById("btnSample"),
+    random: document.getElementById("btnRandom"),
+    speed: document.getElementById("speed"),
+  };
+
+  // Sample graph (5 nodes)
+  const sample5 = [
+    [0,   3,   8,  INF, -4],
+    [INF, 0,   INF, 1,   7],
+    [INF, 4,   0,   INF, INF],
+    [2,   INF, -5,  0,   INF],
+    [INF, INF, INF, 6,   0],
+  ];
+
+  function clone(m){ return m.map(r => r.slice()); }
+
+  function ensureSizes(){
+    els.size.textContent = `V = ${V}`;
+  }
+
+  function buildEmpty(n){
+    const m = Array.from({length:n}, (_,r)=>
+      Array.from({length:n}, (_,c)=> r===c ? 0 : INF)
+    );
+    return m;
+  }
+
+  function loadMatrix(m){
+    V = m.length;
+    D0 = clone(m);
+    D  = clone(m);
+    k = i = j = 0;
+    ops = 0; updates = 0;
+    renderMatrix();
+    updateUI();
+  }
+
+  function renderMatrix(){
+    const tbl = document.createElement("table");
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    trh.appendChild(document.createElement("th")); // corner
+    for(let c=0;c<V;c++){
+      const th = document.createElement("th");
+      th.textContent = `j=${c}`;
+      trh.appendChild(th);
+    }
+    thead.appendChild(trh);
+    tbl.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for(let r=0;r<V;r++){
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      th.textContent = `i=${r}`;
+      tr.appendChild(th);
+      for(let c=0;c<V;c++){
+        const td = document.createElement("td");
+        if (r===c) td.classList.add("diag");
+        const div = document.createElement("div");
+        div.className = "cell";
+        div.setAttribute("data-i", r);
+        div.setAttribute("data-j", c);
+        div.contentEditable = (r!==c); // diagonal locked to 0
+        div.textContent = fmt(D[r][c]);
+        div.addEventListener("blur", onEditCell);
+        td.appendChild(div);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    tbl.appendChild(tbody);
+
+    els.matrixWrap.innerHTML = "";
+    els.matrixWrap.appendChild(tbl);
+    highlight();
+  }
+
+  function onEditCell(e){
+    const el = e.currentTarget;
+    const r = Number(el.getAttribute("data-i"));
+    const c = Number(el.getAttribute("data-j"));
+    if (r===c){ el.textContent = "0"; return; }
+    const v = toNum(el.textContent);
+    D0[r][c] = v;
+    D[r][c] = v;
+    el.textContent = fmt(v);
+    k = i = j = 0;
+    ops = updates = 0;
+    updateUI();
+    highlight();
+  }
+
+  function highlight(lastUpdated=null){
+    // remove all highlight classes
+    document.querySelectorAll("td").forEach(td => {
+      td.classList.remove("sel-ij","sel-ik","sel-kj","updating","just-updated");
+    });
+    // add current selections
+    const sel = (ii,jj,cls) => {
+      const td = cellTD(ii,jj);
+      if (td) td.classList.add(cls);
+    };
+    sel(i,j,"sel-ij");
+    sel(i,k,"sel-ik");
+    sel(k,j,"sel-kj");
+    if (lastUpdated){
+      const td = cellTD(lastUpdated[0], lastUpdated[1]);
+      if (td){ td.classList.add("just-updated","updating"); }
+    }
+    // narration
+    narrate();
+  }
+
+  function cellTD(ii,jj){
+    // table structure: header col at index 0; so td is index jj+1 of row ii (tbody row ii)
+    const tbody = els.matrixWrap.querySelector("tbody");
+    if (!tbody) return null;
+    const row = tbody.children[ii];
+    if (!row) return null;
+    return row.children[jj+1];
+  }
+
+  function updateCell(ii,jj){
+    const div = cellTD(ii,jj)?.querySelector(".cell");
+    if (div) div.textContent = fmt(D[ii][jj]);
+  }
+
+  function stepOnce({jumpToNextK=false} = {}){
+    if (k>=V){ pause(); return; }
+
+    // Optional fast-forward to next k (finish remaining i,j for current k)
+    if (jumpToNextK){
+      for (; i<V; i++){
+        for (; j<V; j++){
+          doCoreUpdate(false);
+        }
+        j=0;
+      }
+      i=0; k++;
+      if (k>=V){ updateUI(); highlight(); pause(); return; }
+      updateUI(); highlight(); return;
+    }
+
+    // Normal single step
+    doCoreUpdate(true);
+    j++;
+    if (j>=V){ j=0; i++; }
+    if (i>=V){ i=0; k++; }
+    updateUI();
+    highlight();
+    if (k>=V){ pause(); }
+  }
+
+  function doCoreUpdate(animate){
+    // read candidate and possibly update
+    const dik = D[i][k];
+    const dkj = D[k][j];
+    const dij = D[i][j];
+    ops++;
+    if (dik !== INF && dkj !== INF && (dik + dkj) < dij){
+      D[i][j] = dik + dkj;
+      updates++;
+      updateCell(i,j);
+      if (animate) highlight([i,j]);
+    }
+  }
+
+  function play(){
+    if (k>=V){ resetToInitial(); }
+    playing = true;
+    els.play.textContent = "❚❚ Pause";
+    tick();
+  }
+  function pause(){
+    playing = false;
+    els.play.textContent = "▶ Play";
+    if (timer) { clearTimeout(timer); timer = null; }
+  }
+  function tick(){
+    if (!playing) return;
+    const delay = Number(els.speed.value);
+    stepOnce();
+    timer = setTimeout(tick, delay);
+  }
+
+  function resetToInitial(){
+    D = clone(D0);
+    k = i = j = 0;
+    ops = 0; updates = 0;
+    for(let r=0;r<V;r++) for(let c=0;c<V;c++) updateCell(r,c);
+    updateUI(); highlight();
+  }
+
+  function updateUI(){
+    els.status.textContent = (k<V) ? `k=${k}, i=${i}, j=${j}` : `Done ✔`;
+    els.ops.textContent = `Operations: ${ops}`;
+    els.updates.textContent = `Updates: ${updates}`;
+    els.step.disabled = (k>=V);
+    els.nextk.disabled = (k>=V);
+  }
+
+  // Controls
+  els.play.addEventListener("click", () => {
+    playing ? pause() : play();
+  });
+  els.step.addEventListener("click", () => stepOnce());
+  els.nextk.addEventListener("click", () => stepOnce({jumpToNextK:true}));
+  els.reset.addEventListener("click", resetToInitial);
+  els.resize.addEventListener("click", () => {
+    const n = Math.max(2, Math.min(10, Number(els.n.value) || 5));
+    V = n;
+    loadMatrix(buildEmpty(n));
+  });
+  els.sample.addEventListener("click", () => loadMatrix(sample5));
+  els.random.addEventListener("click", () => {
+    const n = Math.max(2, Math.min(10, Number(els.n.value) || 5));
+    const m = buildEmpty(n);
+    // sparse-ish random directed graph with weights -5..9 (bias to positive)
+    for(let r=0;r<n;r++){
+      for(let c=0;c<n;c++){
+        if (r===c) continue;
+        if (Math.random() < 0.55){
+          const w = Math.random()<0.1 ? -(1+Math.floor(Math.random()*5)) : (1+Math.floor(Math.random()*9));
+          m[r][c] = w;
+        } else {
+          m[r][c] = INF;
+        }
+      }
+    }
+    loadMatrix(m);
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains("cell")) return; // don't hijack typing
+    if (e.code === "Space"){ e.preventDefault(); playing ? pause() : play(); }
+    else if (e.key === "."){ e.preventDefault(); stepOnce(); }
+  });
+
+  // Narration
+  function narrate(){
+    if (k>=V){
+      els.narration.innerHTML = `All done. Matrix now holds shortest-path distances for every pair (if no negative cycles).`;
+      return;
+    }
+    const dik = D[i][k], dkj = D[k][j], dij = D[i][j];
+    const lhs = fmt(dij), rhs = (dik===INF || dkj===INF) ? "∞" : fmt(dik + dkj);
+    const improves = (dik!==INF && dkj!==INF && (dik+dkj)<dij);
+    els.narration.innerHTML =
+      `Trying <b>k=${k}</b> as intermediate for <b>(i=${i}, j=${j})</b>:
+       compare <b>d[i][j] = ${lhs}</b> vs <span style="color:var(--pair)"><b>d[i][k] + d[k][j] = ${rhs}</b></span>.
+       ${improves ? `<br><b>Improvement!</b> Set <span style="color:var(--accent)">d[i][j] ← ${rhs}</span>.` : `<br>No improvement; keep <b>${lhs}</b>.`}`;
+  }
+
+  // Boot
+  loadMatrix(sample5);
+})();
+</script>
+</body>
+</html>
