@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BST Insert — Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  html, body { height:100%; background:var(--bg); color:var(--text); }
+  body { margin:0; font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; }
+  .wrap { max-width:1100px; margin:28px auto; padding:0 18px; display:grid; gap:18px; }
+
+  .header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; }
+  .title h2 { margin:0; font-size:clamp(1.2rem, 3vw, 1.5rem); line-height:1.3; }
+  .badge { background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b1320; font-weight:800; padding:6px 10px; border-radius:999px; font-size:12px; letter-spacing:.5px; text-transform:uppercase; flex-shrink:0; }
+  .note { color:var(--muted); font-size:clamp(12px, 2.5vw, 13px); line-height:1.4; max-width:400px; margin-top:8px; }
+  
+  @media (max-width: 768px) {
+    .header { flex-direction:column; align-items:flex-start; gap:12px; }
+    .note { max-width:100%; margin-top:4px; }
+  }
+  
+  @media (max-width: 480px) {
+    .title { flex-direction:column; align-items:flex-start; gap:8px; }
+    .title h2 { font-size:1.1rem; }
+  }
+
+  .grid { display:grid; grid-template-columns: 1.4fr .6fr; gap:18px; }
+  @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
+
+  .card {
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+
+  /* Controls */
+  .controls { display:flex; flex-wrap:wrap; gap:10px; padding:14px; border-bottom:1px solid rgba(255,255,255,.06); align-items:center; }
+  @media (max-width: 640px) {
+    .controls { gap:8px; }
+    .controls > div:last-child { margin-left:0 !important; margin-top:8px; width:100%; justify-content:center; }
+  }
+  .controls input[type="number"]{
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px; width:120px;
+  }
+  button, input[type="range"] {
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.1);
+    padding:10px 12px; border-radius:10px;
+  }
+  button { cursor:pointer; font-weight:800; letter-spacing:.2px; }
+  .primary { background:var(--accent); color:#0b1320; }
+  .ghost { background:var(--chip); }
+
+  /* Canvas */
+  .canvas { height: clamp(380px, 58vh, 640px); }
+  svg { width:100%; height:100%; display:block; }
+
+  defs marker#arrow path { fill: var(--muted); }
+  .edge { stroke: var(--muted); stroke-width:2; marker-end:url(#arrow); opacity:.9; transition: stroke var(--speed), opacity var(--speed); }
+  .edge.active { stroke: var(--pair); opacity:1; }
+
+  .node { transition: transform var(--speed); cursor:pointer; }
+  .node .dot { fill:var(--chip); stroke:rgba(255,255,255,.12); stroke-width:1.5; filter: drop-shadow(0 10px 18px rgba(0,0,0,.45)); }
+  .node text { fill:var(--text); font-weight:800; font-size:14px; dominant-baseline: middle; text-anchor: middle; }
+  .node.focus .dot { fill: var(--pair); }
+  .node.new .dot { fill: var(--new); }
+
+  /* Right column */
+  .panel { display:grid; grid-template-rows:auto auto 1fr auto; height:100%; }
+  .section { padding:14px; border-bottom:1px solid rgba(255,255,255,.06); }
+  .section:last-child { border-bottom:none; }
+  .pc-title { font-weight:800; margin-bottom:10px; color:var(--accent); }
+  .code { background:var(--slot); border-radius:12px; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:13px; }
+  .line { padding:4px 8px; border-radius:6px; }
+  .line.hl { background:rgba(255,255,255,.08); }
+
+  .log { display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; overflow-x:hidden; }
+  .log .row { 
+    background:var(--slot); border:1px solid rgba(255,255,255,.08); border-radius:8px; 
+    padding:10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; 
+    font-size:12px; line-height:1.4; word-wrap:break-word; 
+    transition: background-color 0.2s ease;
+  }
+  .log .row:hover { background:rgba(255,255,255,0.05); }
+  .log::-webkit-scrollbar { width:6px; }
+  .log::-webkit-scrollbar-track { background:var(--panel); border-radius:3px; }
+  .log::-webkit-scrollbar-thumb { background:var(--chip); border-radius:3px; }
+  .log::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+  
+  @media (max-width: 768px) {
+    .log { max-height:180px; }
+    .log .row { padding:8px 10px; font-size:11px; }
+  }
+  .pill { background:var(--chip); padding:6px 10px; border-radius:999px; color:var(--muted); font-size:12px; border:1px solid rgba(255,255,255,.06); }
+  
+  /* Enhanced tip section */
+  .tip-section { border-bottom:none !important; }
+  .tip-container {
+    display:flex; align-items:flex-start; gap:12px;
+    background:linear-gradient(135deg, rgba(108,243,255,0.08), rgba(138,233,193,0.08));
+    border:1px solid rgba(108,243,255,0.15);
+    border-radius:12px; padding:14px;
+  }
+  .tip-icon { font-size:18px; flex-shrink:0; margin-top:2px; }
+  .tip-content { flex:1; min-width:0; }
+  .tip-title {
+    font-weight:800; font-size:13px; color:var(--accent);
+    margin-bottom:4px; letter-spacing:0.3px;
+  }
+  .tip-text {
+    color:var(--text); font-size:13px; line-height:1.5;
+    opacity:0.9;
+  }
+  
+  @media (max-width: 480px) {
+    .tip-container { flex-direction:column; gap:8px; text-align:center; }
+    .tip-icon { align-self:center; }
+    .tip-text { font-size:12px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">
+      <span class="badge">Binary Trees</span>
+      <h2 style="margin:0">➕ BST Insert (as Leaf)</h2>
+    </div>
+    <div class="note">Compare at each node: smaller → left, larger → right. Insert where <b>NULL</b> is found.</div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card">
+      <div class="controls">
+        <input id="valueInput" type="number" placeholder="value e.g. 8"/>
+        <button id="insertBtn" class="primary">Insert</button>
+        <button id="play" class="ghost">▶ Play</button>
+        <button id="step" class="ghost">⏭ Step</button>
+        <button id="reset" class="ghost">⟲ Reset</button>
+        <button id="randomBtn" class="ghost">🎲 Random</button>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+          <span class="note">Speed</span>
+          <input id="speed" type="range" min="200" max="1600" value="850" step="50"/>
+        </div>
+      </div>
+      <div class="canvas">
+        <svg id="svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z"/>
+            </marker>
+          </defs>
+          <!-- drawn via JS -->
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="card panel">
+      <div class="section">
+        <div class="pc-title">Pseudocode</div>
+        <div class="code" id="code">
+          <div class="line" data-l="1">1&nbsp; insertBST(root, value):</div>
+          <div class="line" data-l="2">2&nbsp; &nbsp; if root is NULL:</div>
+          <div class="line" data-l="3">3&nbsp; &nbsp; &nbsp; &nbsp; return new Node(value)</div>
+          <div class="line" data-l="4">4&nbsp; &nbsp; if value &lt; root.value:</div>
+          <div class="line" data-l="5">5&nbsp; &nbsp; &nbsp; &nbsp; root.left  = insertBST(root.left, value)</div>
+          <div class="line" data-l="6">6&nbsp; &nbsp; else if value &gt; root.value:</div>
+          <div class="line" data-l="7">7&nbsp; &nbsp; &nbsp; &nbsp; root.right = insertBST(root.right, value)</div>
+          <div class="line" data-l="8">8&nbsp; &nbsp; return root</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="pc-title">Step Log</div>
+        <div class="log" id="log"></div>
+      </div>
+
+      <div class="section tip-section">
+        <div class="tip-container">
+          <div class="tip-icon">➕</div>
+          <div class="tip-content">
+            <div class="tip-title">Complexity & Notes</div>
+            <div class="tip-text">Time: average <strong>O(log n)</strong>, worst <strong>O(n)</strong>. Duplicates are ignored to maintain BST property.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Model ===== */
+let idCounter = 0;
+function makeNode(value){ return { id: "n"+(++idCounter), value, left:null, right:null }; }
+let root = null;
+
+/* Seed with a small BST for demo: 4,2,6,1,3,5,7 */
+[4,2,6,1,3,5,7].forEach(v=>root = realInsert(root, v));
+
+/* ===== Layout (inorder x-positioning) ===== */
+const svg = document.getElementById('svg');
+const RADIUS = 26, LEVEL_GAP = 110, X_GAP = 70, H_MARGIN = 50, V_TOP = 60;
+
+function computePositions(){
+  const pos = new Map(); // id -> {x,y}
+  let xCounter = 0;
+  function inorder(n, depth){
+    if(!n) return;
+    inorder(n.left, depth+1);
+    pos.set(n.id, { x: ++xCounter, y: depth });
+    inorder(n.right, depth+1);
+  }
+  inorder(root, 0);
+  if (xCounter === 0) return pos;
+  // scale to SVG coords
+  const width = 1000 - 2*H_MARGIN;
+  const xScale = width / (xCounter+1);
+  for (const [id, p] of pos){
+    p.X = H_MARGIN + p.x * xScale;
+    p.Y = V_TOP + p.y * LEVEL_GAP;
+  }
+  return pos;
+}
+
+function drawTree(highlightEdge=null){
+  // clear (keep defs)
+  while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+
+  const pos = computePositions();
+
+  // edges
+  function drawEdges(n){
+    if (!n) return;
+    if (n.left){
+      drawEdge(n.id, n.left.id, pos.get(n.id), pos.get(n.left.id));
+      drawEdges(n.left);
+    }
+    if (n.right){
+      drawEdge(n.id, n.right.id, pos.get(n.id), pos.get(n.right.id));
+      drawEdges(n.right);
+    }
+  }
+  drawEdges(root);
+
+  // nodes
+  function drawNodes(n){
+    if (!n) return;
+    addNode(n, pos.get(n.id));
+    drawNodes(n.left);
+    drawNodes(n.right);
+  }
+  drawNodes(root);
+
+  // optional edge highlight
+  if (highlightEdge){
+    const {a,b} = highlightEdge;
+    const line = [...svg.querySelectorAll('.edge')].find(e=>e.getAttribute('data-a')===a && e.getAttribute('data-b')===b);
+    if (line) { line.classList.add('active'); setTimeout(()=>line.classList.remove('active'), 900); }
+  }
+}
+
+function addNode(n, p){
+  const g = mk('g', { class:'node', id:n.id, transform:`translate(${p.X},${p.Y})` });
+  const c = mk('circle', { r:RADIUS, class:'dot' });
+  const t = mk('text', {}); t.textContent = n.value;
+  g.appendChild(c); g.appendChild(t);
+  svg.appendChild(g);
+}
+
+function drawEdge(aId, bId, p1, p2){
+  const ang = Math.atan2(p2.Y - p1.Y, p2.X - p1.X);
+  const x1 = p1.X + Math.cos(ang)*RADIUS, y1 = p1.Y + Math.sin(ang)*RADIUS;
+  const x2 = p2.X - Math.cos(ang)*RADIUS, y2 = p2.Y - Math.sin(ang)*RADIUS;
+  const line = mk('line', { x1, y1, x2, y2, class:'edge', 'data-a':aId, 'data-b':bId });
+  svg.appendChild(line);
+}
+
+/* ===== Pseudocode highlighting & log ===== */
+const code = document.getElementById('code');
+const logEl = document.getElementById('log');
+function highlightLine(n){
+  [...code.querySelectorAll('.line')].forEach(l=>l.classList.remove('hl'));
+  if (n==null) return;
+  code.querySelector(`.line[data-l="${n}"]`)?.classList.add('hl');
+}
+function log(text){
+  const row = document.createElement('div'); row.className='row'; row.textContent = text; logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ===== Insertion engine (plans + steps) =====
+   We simulate recursive insert by planning steps:
+   - compare at node
+   - descend left/right
+   - create node at null spot
+*/
+let plan = []; // sequence of {type,...}
+let playing=false, timer=null;
+
+function buildPlan(value){
+  plan = [];
+  if (!root){
+    plan.push({type:'createRoot', value});
+    return;
+  }
+  let cur = root;
+  while (cur){
+    plan.push({type:'compare', nodeId:cur.id, nodeVal:cur.value, value});
+    if (value === cur.value) { plan.push({type:'duplicate'}); break; }
+    if (value < cur.value){
+      plan.push({type:'descend', from:cur.id, side:'left', to:cur.left?.id || null});
+      if (!cur.left){ plan.push({type:'create', parent:cur.id, side:'left', value}); break; }
+      cur = cur.left;
+    } else {
+      plan.push({type:'descend', from:cur.id, side:'right', to:cur.right?.id || null});
+      if (!cur.right){ plan.push({type:'create', parent:cur.id, side:'right', value}); break; }
+      cur = cur.right;
+    }
+  }
+}
+
+function step(){
+  if (plan.length===0){ playing=false; playBtn.textContent='▶ Play'; return; }
+  const s = plan.shift();
+
+  // clear node focus
+  [...svg.querySelectorAll('.node')].forEach(n=>n.classList.remove('focus'));
+
+  switch(s.type){
+    case 'createRoot':
+      highlightLine(2);
+      log('root is NULL → create root');
+      highlightLine(3);
+      root = makeNode(s.value);
+      drawTree();
+      focusNew(root.id);
+      highlightLine(8);
+      break;
+
+    case 'compare':
+      highlightLine(4);
+      document.getElementById(s.nodeId)?.classList.add('focus');
+      if (s.value === s.nodeVal) {
+        log(`Compare ${s.value} == ${s.nodeVal} → duplicate`);
+      } else if (s.value < s.nodeVal) {
+        log(`Compare ${s.value} < ${s.nodeVal} → go left`);
+      } else {
+        log(`Compare ${s.value} > ${s.nodeVal} → go right`);
+      }
+      break;
+
+    case 'descend':
+      // glow the edge we follow
+      if (s.to){
+        drawTree({a:s.from, b:s.to});
+      } else {
+        // edge to a null spot: glow hypothetical edge direction
+        drawTree(); // redraw, then flash existing opposite side if any
+      }
+      highlightLine(s.side==='left' ? 5 : 7);
+      break;
+
+    case 'create':
+      // actual attachment
+      const parent = findNode(root, s.parent);
+      highlightLine(s.side==='left' ? 5 : 7);
+      log(`Insert ${s.value} as ${s.side} child of ${parent.value}`);
+      const newNode = makeNode(s.value);
+      if (s.side==='left') parent.left = newNode; else parent.right = newNode;
+      drawTree();
+      focusNew(newNode.id);
+      highlightLine(8);
+      break;
+
+    case 'duplicate':
+      highlightLine(6);
+      log('Duplicate value — insertion ignored.');
+      plan = []; // stop
+      break;
+  }
+}
+
+function loop(){ if(!playing) return; step(); if(playing){ timer=setTimeout(loop, Number(speedRange.value)); } }
+function focusNew(id){ const el=document.getElementById(id); if (el){ el.classList.add('new'); setTimeout(()=>el.classList.remove('new'), 1200); } }
+
+/* ===== Real insert (no animation) for seeding ===== */
+function realInsert(n, value){
+  if (!n) return makeNode(value);
+  if (value < n.value) n.left = realInsert(n.left, value);
+  else if (value > n.value) n.right = realInsert(n.right, value);
+  return n;
+}
+
+/* ===== Utilities & UI wiring ===== */
+function mk(tag, attrs={}){ const el=document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v); return el; }
+function findNode(n, id){ if(!n) return null; if(n.id===id) return n; return findNode(n.left,id) || findNode(n.right,id); }
+
+const valueInput = document.getElementById('valueInput');
+const insertBtn  = document.getElementById('insertBtn');
+const playBtn    = document.getElementById('play');
+const stepBtn    = document.getElementById('step');
+const resetBtn   = document.getElementById('reset');
+const randomBtn  = document.getElementById('randomBtn');
+const speedRange = document.getElementById('speed');
+
+function resetUI(){
+  clearTimeout(timer); playing=false; playBtn.textContent='▶ Play';
+  logEl.innerHTML = '';
+  highlightLine(null);
+  drawTree();
+}
+
+insertBtn.addEventListener('click', ()=>{
+  const v = Number(valueInput.value);
+  if (Number.isNaN(v)) { valueInput.focus(); return; }
+  // prevent duplicates at plan time
+  if (exists(root, v)) { log(`Value ${v} already exists — ignored.`); highlightLine(6); plan=[]; return; }
+  log(`Insert request: ${v}`);
+  buildPlan(v);
+  playing = true; playBtn.textContent='⏸ Pause'; loop();
+});
+
+playBtn.addEventListener('click', ()=>{
+  if (plan.length===0) return; // nothing to play
+  if(!playing){ playing=true; playBtn.textContent='⏸ Pause'; loop(); }
+  else { playing=false; playBtn.textContent='▶ Play'; clearTimeout(timer); }
+});
+
+stepBtn.addEventListener('click', ()=>{ if(!playing) step(); });
+
+resetBtn.addEventListener('click', ()=>{
+  // reset to initial seed tree
+  idCounter = 0; root = null; [4,2,6,1,3,5,7].forEach(v=>root = realInsert(root, v));
+  valueInput.value='';
+  plan=[]; resetUI();
+});
+
+randomBtn.addEventListener('click', ()=>{
+  const v = Math.floor(Math.random()*99)+1;
+  valueInput.value = v;
+  insertBtn.click();
+});
+
+function exists(n, v){
+  while(n){
+    if (v === n.value) return true;
+    n = v < n.value ? n.left : n.right;
+  }
+  return false;
+}
+
+/* Init */
+drawTree();
+log('Ready. Enter a value and press Insert.');
+
+</script>
+</body>
+</html>
