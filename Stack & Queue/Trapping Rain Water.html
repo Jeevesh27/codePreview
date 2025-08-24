@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>💧 Trapping Rain Water — Step by Step</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --bar:#6b72ff; --water:#3bb9ff; --lmax:#ffd166; --rmax:#8ae9c1;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:20px;
+  }
+  
+  * { box-sizing: border-box; }
+  
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+  }
+  
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+  
+  header {
+    text-align: center;
+    margin-bottom: var(--gap);
+  }
+  
+  h1 {
+    margin: 0 0 16px;
+    font-size: clamp(24px, 3vw, 36px);
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .subtitle {
+    color: var(--muted);
+    font-size: clamp(14px, 1.5vw, 18px);
+    margin-bottom: 20px;
+  }
+  
+  .panel {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin-bottom: var(--gap);
+  }
+  
+  .code-block {
+    background: rgba(0,0,0,.3);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px;
+    padding: 20px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  
+  .controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--gap);
+  }
+  
+  input[type="text"] {
+    background: rgba(255,255,255,.05);
+    border: 2px solid rgba(255,255,255,.1);
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 16px;
+    min-width: 300px;
+    transition: border-color .3s ease;
+  }
+  
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  
+  .btn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .2s ease;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,.3);
+  }
+  
+  .btn:active {
+    transform: translateY(0);
+  }
+  
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0a0f1a;
+  }
+  
+  .btn.secondary {
+    background: linear-gradient(135deg, var(--lmax), #ffdd44);
+    color: #1a1000;
+  }
+  
+  .btn.auto {
+    background: linear-gradient(135deg, var(--rmax), #66e6a3);
+    color: #001a0a;
+  }
+  
+  .btn.reset {
+    background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
+    color: #1a0000;
+  }
+  
+  .chart-container {
+    background: rgba(255,255,255,.02);
+    border: 1px solid rgba(255,255,255,.05);
+    border-radius: var(--radius);
+    padding: 30px;
+    margin-bottom: var(--gap);
+  }
+  
+  .chart {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 12px;
+    min-height: 320px;
+    padding: 20px 0;
+  }
+  
+  .bar {
+    position: relative;
+    width: 45px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    transition: all .3s ease;
+  }
+  
+  .bar:hover {
+    transform: translateY(-4px);
+  }
+  
+  .bar .height {
+    background: linear-gradient(180deg, var(--bar), #5865e8);
+    width: 100%;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid rgba(255,255,255,.1);
+    box-shadow: 0 4px 15px rgba(107,114,255,.3);
+  }
+  
+  .bar .water {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: linear-gradient(180deg, var(--water), #2a9fd9);
+    opacity: .85;
+    border-radius: 8px 8px 0 0;
+    box-shadow: inset 0 2px 10px rgba(59,185,255,.4);
+  }
+  
+  .bar .lcap, .bar .rcap {
+    position: absolute;
+    bottom: 0;
+    width: 6px;
+    opacity: .9;
+    border-radius: 3px 3px 0 0;
+  }
+  
+  .bar .lcap {
+    left: 6px;
+    background: linear-gradient(180deg, var(--lmax), #e6c555);
+  }
+  
+  .bar .rcap {
+    right: 6px;
+    background: linear-gradient(180deg, var(--rmax), #7ae0b8);
+  }
+  
+  .bar span {
+    position: absolute;
+    top: -25px;
+    width: 100%;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  
+  .status {
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  
+  .status strong {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  
+  .legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  
+  .legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+  }
+  
+  .legend-color.bar { background: var(--bar); }
+  .legend-color.water { background: var(--water); }
+  .legend-color.lmax { background: var(--lmax); }
+  .legend-color.rmax { background: var(--rmax); }
+  
+  @media (max-width: 768px) {
+    .container { padding: 20px 15px; }
+    .controls { flex-direction: column; align-items: stretch; }
+    input[type="text"] { min-width: auto; }
+    .chart { gap: 8px; }
+    .bar { width: 35px; }
+  }
+</style></head>
+<body>
+<div class="container">
+  <header>
+    <h1>💧 Trapping Rain Water — Step by Step</h1>
+    <div class="subtitle">
+      Watch the algorithm compute leftMax, rightMax, and trapped water step by step
+    </div>
+  </header>
+
+
+  <div class="controls">
+    <input id="arr" type="text" value="0,1,0,2,1,0,1,3,2,1,2,1" placeholder="Enter heights (comma separated)">
+    <button class="btn primary" id="loadBtn">Load Heights</button>
+    <button class="btn secondary" id="stepBtn">Step ▶</button>
+    <button class="btn auto" id="autoBtn">Auto Play</button>
+    <button class="btn reset" id="resetBtn">Reset</button>
+  </div>
+
+  <div class="chart-container">
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-color bar"></div>
+        <span>Height</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color water"></div>
+        <span>Trapped Water</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color lmax"></div>
+        <span>Left Max</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color rmax"></div>
+        <span>Right Max</span>
+      </div>
+    </div>
+    <div id="chart" class="chart"></div>
+  </div>
+
+  <div class="status">
+    <div>
+      Phase: <strong id="phase">—</strong> | 
+      Index: <strong id="idx">—</strong> | 
+      Water Total: <strong id="total">0</strong>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="code-block">
+// Phase 1: Compute left max
+for i=1..n-1: 
+  leftMax[i] = max(leftMax[i-1], height[i]);
+
+// Phase 2: Compute right max
+for i=n-2..0: 
+  rightMax[i] = max(rightMax[i+1], height[i]);
+
+// Phase 3: Compute water
+for i=0..n-1: 
+  water[i] = min(leftMax[i], rightMax[i]) - height[i];
+    </div>
+  </div>
+</div>
+
+<script>
+(()=>{
+  const arrInput=document.getElementById('arr');
+  const chart=document.getElementById('chart');
+  const phaseEl=document.getElementById('phase'),idxEl=document.getElementById('idx'),totalEl=document.getElementById('total');
+  let H=[],L=[],R=[],W=[],i=0,total=0,phase=0,timer=null;
+  
+  function draw(cur=-1){
+    chart.innerHTML='';
+    H.forEach((h,j)=>{
+      const bar=document.createElement('div');bar.className='bar';
+      const bh=document.createElement('div');bh.className='height';bh.style.height=h*20+'px';
+      bar.appendChild(bh);
+      if(W[j]>0){const w=document.createElement('div');w.className='water';w.style.height=W[j]*20+'px';bar.appendChild(w);}
+      if(L[j]!=null){const l=document.createElement('div');l.className='lcap';l.style.height=L[j]*20+'px';bar.appendChild(l);}
+      if(R[j]!=null){const r=document.createElement('div');r.className='rcap';r.style.height=R[j]*20+'px';bar.appendChild(r);}
+      const sp=document.createElement('span');sp.textContent=h;bar.appendChild(sp);
+      if(j===cur)bar.style.outline='2px solid #ffd166';
+      chart.appendChild(bar);
+    });
+  }
+  function reset(){
+    const nums=arrInput.value.split(/[\s,]+/).map(Number).filter(x=>x>=0);
+    H=nums;L=Array(H.length).fill(null);R=Array(H.length).fill(null);W=Array(H.length).fill(0);
+    i=0;phase=0;total=0;
+    updateStatus();draw();
+  }
+  function updateStatus(){phaseEl.textContent=phase===0?'Build leftMax':phase===1?'Build rightMax':phase===2?'Compute water':'Done';idxEl.textContent=i;totalEl.textContent=total;}
+  function step(){
+    if(phase===0){
+      if(i===0){L[0]=H[0];i++;} 
+      else if(i<H.length){L[i]=Math.max(L[i-1],H[i]);i++;} 
+      else {phase=1;i=H.length-1;}
+    } else if(phase===1){
+      if(i===H.length-1){R[i]=H[i];i--;}
+      else if(i>=0){R[i]=Math.max(R[i+1],H[i]);i--;}
+      else {phase=2;i=0;}
+    } else if(phase===2){
+      if(i<H.length){
+        W[i]=Math.max(0,Math.min(L[i],R[i])-H[i]);total+=W[i];i++;
+      } else phase=3;
+    }
+    draw(phase===2?i-1:i);
+    updateStatus();
+  }
+  function auto(){
+    if(timer)return;
+    timer=setInterval(()=>{
+      if(phase===3){clearInterval(timer);timer=null;return;}
+      step();
+    },600);
+  }
+  
+  document.getElementById('loadBtn').onclick=reset;
+  document.getElementById('stepBtn').onclick=step;
+  document.getElementById('autoBtn').onclick=auto;
+  document.getElementById('resetBtn').onclick=reset;
+  reset();
+})();
+</script>
+</body>
+</html>
