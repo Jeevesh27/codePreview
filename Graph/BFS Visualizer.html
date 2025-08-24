@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BFS Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for selected terms */
+    --new:#8ae9c1;  /* green for newly added term */
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 800px at 20% 10%, #151935 0%, var(--bg) 55%);
+    color: var(--text);
+    font: 15px/1.4 system-ui, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Noto Color Emoji, sans-serif;
+  }
+
+  .app {
+    max-width: 1200px;
+    margin: 24px auto;
+    padding: 0 var(--gap);
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    grid-template-rows: auto auto auto 1fr;
+    gap: var(--gap);
+  }
+
+  .title {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .controls-section {
+    grid-column: 1 / -1;
+  }
+  .queue-section {
+    grid-column: 1 / -1;
+  }
+  .graph-section {
+    grid-column: 1;
+  }
+  .code-section {
+    grid-column: 2;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0;
+    letter-spacing: .3px;
+  }
+  .badge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: linear-gradient(145deg, var(--panel-2), var(--panel));
+    border: 1px solid #2a2f59;
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: var(--shadow);
+  }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid #2a2f59;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card h2 {
+    margin: 0;
+    padding: 14px 16px 0 16px;
+    font-size: 15px;
+    color: var(--muted);
+    letter-spacing: .4px;
+  }
+  .card .content {
+    padding: 14px 16px 16px 16px;
+  }
+
+  .graph-wrap {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    min-height: 340px;
+    border-top-left-radius: var(--radius);
+    border-top-right-radius: var(--radius);
+    overflow: hidden;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background:
+      radial-gradient(600px 400px at 90% -10%, rgba(108,243,255,.08) 0%, rgba(108,243,255,0) 70%),
+      linear-gradient(0deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03));
+  }
+
+  /* Edges */
+  .edge {
+    stroke: #4c5286;
+    stroke-width: 2.5;
+    opacity: .8;
+    transition: stroke var(--speed);
+  }
+  .edge.edge-active { stroke: var(--pair); }
+  .edge.edge-traversed { stroke: var(--ok); }
+
+  /* Nodes */
+  .node {
+    cursor: pointer;
+    transition: transform var(--speed);
+  }
+  .node circle {
+    fill: var(--slot);
+    stroke: #2f3566;
+    stroke-width: 2;
+    filter: drop-shadow(0 6px 10px rgba(0,0,0,.35));
+    transition: fill var(--speed), stroke var(--speed), r var(--speed);
+  }
+  .node text {
+    fill: var(--text);
+    font-weight: 700;
+    pointer-events: none;
+  }
+  .node:hover { transform: translateY(-2px); }
+  .node.start circle { stroke: var(--pair); }
+  .node.in-queue circle { fill: var(--chip); stroke: var(--accent); }
+  .node.current circle { fill: #2c356f; stroke: var(--pair); r: 22; }
+  .node.visited circle { fill: #1e304b; stroke: var(--ok); }
+  .node.newly-added circle { stroke: var(--new); }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(5, auto);
+    gap: 10px 14px;
+    align-items: center;
+    padding: 12px 16px 16px 16px;
+    border-top: 1px solid #2a2f59;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+  }
+  .legend .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid transparent; display: inline-block; margin-right: 6px;
+  }
+  .l-start .dot { border-color: var(--pair); background: var(--slot); }
+  .l-queue .dot { border-color: var(--accent); background: var(--chip); }
+  .l-current .dot { border-color: var(--pair); background: #2c356f; }
+  .l-visited .dot { border-color: var(--ok); background: #1e304b; }
+  .l-new .dot { border-color: var(--new); background: var(--slot); }
+
+  .controls {
+    display: flex;
+    gap: var(--gap);
+    align-items: stretch;
+  }
+
+  .panel {
+    display: grid;
+    gap: var(--gap);
+  }
+
+  .queue {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    min-height: 52px;
+  }
+  .chip {
+    background: linear-gradient(180deg, var(--chip), #2f376e);
+    border: 1px solid #50589a;
+    color: var(--text);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-weight: 700;
+    min-width: 36px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    transform: translateY(0);
+    transition: transform var(--speed), box-shadow var(--speed);
+  }
+  .chip.new { outline: 2px solid var(--new); }
+  .chip:hover { transform: translateY(-2px); }
+
+  .btnbar {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+  button, .select, input[type="range"] {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid #2a2f59;
+    border-radius: 12px;
+    color: var(--text);
+    padding: 10px 12px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    box-shadow: var(--shadow);
+  }
+  button {
+    cursor: pointer;
+    transition: transform var(--speed), background var(--speed), border-color var(--speed), opacity var(--speed);
+  }
+  button:hover{ transform: translateY(-2px); }
+  button[disabled]{ opacity: .45; cursor: not-allowed; transform: none; }
+  .select { display: flex; align-items: center; justify-content: space-between; padding-right: 10px; }
+  select {
+    width: 100%;
+    background: transparent; border: none; color: var(--text);
+    font-weight: 700; outline: none; appearance: none; cursor: pointer;
+  }
+
+  .stacked {
+    display: grid;
+    gap: 8px;
+  }
+  label { color: var(--muted); font-size: 12px; letter-spacing: .3px; }
+  .range-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+  input[type="range"] { height: 40px; padding: 0 8px; }
+  .speed-val { font-variant-numeric: tabular-nums; }
+
+  pre.code {
+    background: #0f1433;
+    border: 1px solid #2a2f59;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 0;
+    overflow: auto;
+    line-height: 1.45;
+    font-size: 13px;
+    counter-reset: ln;
+  }
+  pre.code code { white-space: pre; display: block; }
+  .ln { display: block; padding-left: 34px; position: relative; }
+  .ln::before {
+    counter-increment: ln;
+    content: counter(ln);
+    position: absolute;
+    left: 8px; color: #5b6298;
+  }
+  .hl { background: linear-gradient(90deg, rgba(255,209,102,.18), transparent 60%); }
+  .note { color: var(--muted); margin-top: 8px; }
+
+  @media (max-width: 980px) {
+    .app { 
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto auto auto;
+    }
+    .controls-section,
+    .queue-section,
+    .graph-section,
+    .code-section {
+      grid-column: 1;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="app" aria-live="polite">
+    <div class="title">
+      <span class="badge">Graph Algorithms</span>
+      <h1>BFS (Breadth-First Search)</h1>
+    </div>
+
+    <!-- Controls section -->
+    <section class="card controls-section">
+      <h2>Controls</h2>
+      <div class="content controls">
+        <div class="btnbar" role="group" aria-label="Playback controls">
+          <button id="btnPlay" title="Play / Pause (Space)">▶ Play</button>
+          <button id="btnStep" title="Step (N)">Step</button>
+          <button id="btnReset" title="Reset (R)">Reset</button>
+          <div class="select" title="Choose start node">
+            <select id="startSelect" aria-label="Start node"></select>
+          </div>
+          <button id="btnShuffle" title="Shuffle layout">Shuffle</button>
+        </div>
+
+        <div class="stacked">
+          <div class="range-row">
+            <div class="stacked">
+              <label for="speed">Speed</label>
+              <input id="speed" type="range" min="0.2" max="2.5" step="0.1" value="1" />
+            </div>
+            <div class="speed-val"><span id="speedVal">1.0</span>×</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Queue section -->
+    <section class="card queue-section">
+      <h2>Queue</h2>
+      <div class="content">
+        <div id="queue" class="queue" aria-live="polite" aria-label="BFS queue"></div>
+        <div class="note">BFS explores level by level using a <span style="color: var(--pair); font-weight:700;">queue</span>.</div>
+      </div>
+    </section>
+
+    <!-- Graph section -->
+    <section class="card graph-section">
+      <h2>Graph</h2>
+      <div class="content">
+        <div class="graph-wrap" id="graphWrap" role="region" aria-label="Graph canvas. Click a node to set start.">
+          <!-- SVG graph -->
+          <svg id="graph" viewBox="0 0 800 500" aria-hidden="false"></svg>
+        </div>
+
+        <div class="legend" aria-hidden="false">
+          <div class="l-start"><span class="dot"></span>Start</div>
+          <div class="l-queue"><span class="dot"></span>In queue</div>
+          <div class="l-current"><span class="dot"></span>Current</div>
+          <div class="l-visited"><span class="dot"></span>Visited</div>
+          <div class="l-new"><span class="dot"></span>Newly enqueued</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Code section -->
+    <section class="card code-section">
+      <h2>Pseudocode</h2>
+      <div class="content">
+        <pre class="code" aria-label="BFS pseudocode">
+<code id="code">
+<span class="ln" data-ln="1">function <b>BFS</b>(<span style="color:var(--pair)">start</span>, V, adjList):</span>
+<span class="ln" data-ln="2">    visited = array[V] initialized to false</span>
+<span class="ln" data-ln="3">    queue = empty queue</span>
+<span class="ln" data-ln="4"></span>
+<span class="ln" data-ln="5">    visited[start] = true</span>
+<span class="ln" data-ln="6">    enqueue(queue, <span style="color:var(--pair)">start</span>)</span>
+<span class="ln" data-ln="7"></span>
+<span class="ln" data-ln="8">    while queue is not empty:</span>
+<span class="ln" data-ln="9">        node = dequeue(queue)</span>
+<span class="ln" data-ln="10">        print(node)</span>
+<span class="ln" data-ln="11"></span>
+<span class="ln" data-ln="12">        for each neighbor in adjList[node]:</span>
+<span class="ln" data-ln="13">            if not visited[neighbor]:</span>
+<span class="ln" data-ln="14">                visited[neighbor] = true</span>
+<span class="ln" data-ln="15">                enqueue(queue, <span style="color:var(--new)">neighbor</span>)</span>
+</code>
+</pre>
+        <div class="note">Time complexity: <code>O(V + E)</code>. In unweighted graphs, BFS finds shortest paths in terms of edges.</div>
+      </div>
+    </section>
+  </div>
+
+<script>
+/* ===========================
+   Graph data & layout
+=========================== */
+const G = {
+  // adjacency list (undirected)
+  adj: {
+    A:['B','C'],
+    B:['A','D','E'],
+    C:['A','F'],
+    D:['B','G'],
+    E:['B','G','H'],
+    F:['C','I'],
+    G:['D','E','J'],
+    H:['E'],
+    I:['F','J'],
+    J:['G','I']
+  },
+  // initial positions (will be jittered by "Shuffle")
+  pos: {
+    A:[120,80],  B:[250,90],  C:[210,200],
+    D:[370,80],  E:[360,200], F:[260,310],
+    G:[520,150], H:[460,260], I:[360,360],
+    J:[560,300]
+  }
+};
+
+const state = {
+  start: 'A',
+  playing: false,
+  speed: 1.0,
+  visited: new Set(),
+  inQueue: [],
+  steps: [],
+  stepIndex: 0,
+  current: null,
+  traversedEdges: new Set()
+};
+
+const svg = document.getElementById('graph');
+const queueEl = document.getElementById('queue');
+const startSelect = document.getElementById('startSelect');
+const btnPlay = document.getElementById('btnPlay');
+const btnStep = document.getElementById('btnStep');
+const btnReset = document.getElementById('btnReset');
+const btnShuffle = document.getElementById('btnShuffle');
+const speedRange = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+
+/* ===========================
+   Utilities
+=========================== */
+const nodeIds = Object.keys(G.adj);
+function edgeKey(u,v){ return [u,v].sort().join('-'); }
+function randomInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+function clearChildren(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+
+function setHighlight(lineNumbers){
+  document.querySelectorAll('.ln').forEach(ln => ln.classList.remove('hl'));
+  lineNumbers.forEach(n => {
+    const el = document.querySelector(`.ln[data-ln="${n}"]`);
+    if (el) el.classList.add('hl');
+  });
+}
+
+function resetState(){
+  state.visited.clear();
+  state.inQueue = [];
+  state.steps = [];
+  state.stepIndex = 0;
+  state.current = null;
+  state.traversedEdges.clear();
+  state.playing = false;
+  btnPlay.textContent = '▶ Play';
+  renderAll();
+  buildSteps();  // regenerate algorithm steps
+  renderAll();   // render initial
+}
+
+/* ===========================
+   Build SVG
+=========================== */
+function buildGraph(){
+  clearChildren(svg);
+  // edges (unique undirected)
+  const added = new Set();
+  nodeIds.forEach(u=>{
+    G.adj[u].forEach(v=>{
+      const k = edgeKey(u,v);
+      if (added.has(k)) return;
+      added.add(k);
+      const [x1,y1] = G.pos[u];
+      const [x2,y2] = G.pos[v];
+      const e = document.createElementNS('http://www.w3.org/2000/svg','line');
+      e.setAttribute('x1',x1); e.setAttribute('y1',y1);
+      e.setAttribute('x2',x2); e.setAttribute('y2',y2);
+      e.setAttribute('data-u',u); e.setAttribute('data-v',v);
+      e.classList.add('edge');
+      svg.appendChild(e);
+    });
+  });
+  // nodes
+  nodeIds.forEach(id=>{
+    const [x,y] = G.pos[id];
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.classList.add('node');
+    g.setAttribute('data-id', id);
+    g.setAttribute('tabindex','0');
+    g.setAttribute('role','button');
+    g.setAttribute('aria-label', `Node ${id}. Click to set as start.`);
+    g.addEventListener('click', ()=>{ state.start = id; resetState(); });
+    g.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); state.start = id; resetState(); }});
+
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', x);
+    c.setAttribute('cy', y);
+    c.setAttribute('r', 18);
+
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', x);
+    t.setAttribute('y', y+5);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-size','12');
+    t.textContent = id;
+
+    g.appendChild(c); g.appendChild(t);
+    svg.appendChild(g);
+  });
+}
+
+function renderGraphStates(){
+  // reset classes
+  document.querySelectorAll('.node').forEach(n=>{
+    n.classList.remove('start','in-queue','current','visited','newly-added');
+    if (n.getAttribute('data-id') === state.start) n.classList.add('start');
+    if (state.current === n.getAttribute('data-id')) n.classList.add('current');
+    if (state.visited.has(n.getAttribute('data-id'))) n.classList.add('visited');
+    if (state.inQueue.includes(n.getAttribute('data-id'))) n.classList.add('in-queue');
+  });
+
+  // edges
+  document.querySelectorAll('.edge').forEach(e=>{
+    e.classList.remove('edge-active','edge-traversed');
+    const u = e.getAttribute('data-u');
+    const v = e.getAttribute('data-v');
+    const k = edgeKey(u,v);
+    if (state.traversedEdges.has(k)) e.classList.add('edge-traversed');
+    if (state.current && (u===state.current || v===state.current)) e.classList.add('edge-active');
+  });
+}
+
+function renderQueue(){
+  clearChildren(queueEl);
+  state.inQueue.forEach((id, idx)=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.textContent = id;
+    // make the most recent enqueue pop visually
+    if (idx === state.inQueue.length - 1 && state.stepJustEnqueued) chip.classList.add('new');
+    queueEl.appendChild(chip);
+  });
+}
+
+function renderAll(){
+  renderGraphStates();
+  renderQueue();
+  // start line highlight defaults
+  if (state.stepIndex === 0) setHighlight([1,2,3]);
+}
+
+/* ===========================
+   BFS step builder
+=========================== */
+function buildSteps(){
+  // Steps are small actions with effects + code highlight
+  // action: type + payload. types: init, visitStart, enqueueStart, whileCheck, dequeue, neighborLoop, checkVisited, markVisited, enqueue
+  const steps = [];
+  // init
+  steps.push({type:'init', hl:[1,2,3]});
+  steps.push({type:'visitStart', node: state.start, hl:[5]});
+  steps.push({type:'enqueue', node: state.start, isStart:true, hl:[6]});
+
+  // We'll simulate BFS using a queue but emit granular steps.
+  const visited = new Set([state.start]);
+  let q = [state.start];
+
+  while(q.length){
+    steps.push({type:'whileCheck', queue:[...q], hl:[8]});
+    const node = q.shift();
+    steps.push({type:'dequeue', node, queue:[...q], hl:[9,10]});
+
+    // iterate neighbors in a consistent order
+    const neigh = [...G.adj[node]];
+    steps.push({type:'neighborLoop', node, neighbors:[...neigh], hl:[12]});
+    for (const nb of neigh){
+      steps.push({type:'checkVisited', node, nb, visited:new Set(visited), hl:[13]});
+      if(!visited.has(nb)){
+        visited.add(nb);
+        q.push(nb);
+        steps.push({type:'markVisited', nb, hl:[14]});
+        steps.push({type:'enqueue', node: nb, isStart:false, hl:[15]});
+      }
+    }
+  }
+  // final while check on empty
+  steps.push({type:'whileCheck', queue:[], final:true, hl:[8]});
+
+  state.steps = steps;
+}
+
+function applyStep(step){
+  state.stepJustEnqueued = false; // reset flag each step
+  switch(step.type){
+    case 'init':
+      state.visited.clear();
+      state.inQueue = [];
+      state.current = null;
+      state.traversedEdges.clear();
+      break;
+    case 'visitStart':
+      state.visited.add(step.node);
+      break;
+    case 'enqueue':
+      state.inQueue.push(step.node);
+      state.stepJustEnqueued = true;
+      break;
+    case 'whileCheck':
+      // nothing beyond highlight; stop later if queue empty
+      break;
+    case 'dequeue':
+      state.current = step.node;
+      if (state.inQueue[0] === step.node) state.inQueue.shift();
+      break;
+    case 'neighborLoop':
+      // visual nudge handled by edge-active/current node styles
+      break;
+    case 'checkVisited':
+      // temporarily pulse the edge between node and nb
+      const k = edgeKey(step.node, step.nb);
+      state.pulseEdge = k;
+      setTimeout(()=>{ state.pulseEdge = null; }, 250/state.speed);
+      break;
+    case 'markVisited':
+      state.visited.add(step.nb);
+      // mark the traversal edge as part of tree
+      state.traversedEdges.add(edgeKey(state.current, step.nb));
+      break;
+  }
+  setHighlight(step.hl || []);
+  renderAll();
+}
+
+/* ===========================
+   Playback controls
+=========================== */
+let timer = null;
+
+function stepOnce(){
+  if (state.stepIndex >= state.steps.length){
+    pause();
+    return;
+  }
+  const st = state.steps[state.stepIndex++];
+  applyStep(st);
+
+  // auto-stop if whileCheck on empty queue at the end
+  if (st.type === 'whileCheck' && st.final){
+    pause();
+  }
+}
+
+function play(){
+  state.playing = true;
+  btnPlay.textContent = '⏸ Pause';
+  tick();
+}
+function pause(){
+  state.playing = false;
+  btnPlay.textContent = '▶ Play';
+  if (timer){ clearTimeout(timer); timer = null; }
+}
+function tick(){
+  if (!state.playing) return;
+  stepOnce();
+  const base = 600; // ms
+  const delay = base / state.speed;
+  timer = setTimeout(tick, delay);
+}
+
+/* ===========================
+   UI wiring
+=========================== */
+function populateStartSelect(){
+  clearChildren(startSelect);
+  nodeIds.forEach(id=>{
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = `Start: ${id}`;
+    if (id === state.start) opt.selected = true;
+    startSelect.appendChild(opt);
+  });
+  startSelect.addEventListener('change', ()=>{
+    state.start = startSelect.value;
+    resetState();
+  });
+}
+
+btnPlay.addEventListener('click', ()=>{
+  if (state.playing) pause(); else play();
+});
+
+btnStep.addEventListener('click', ()=>{
+  pause();
+  stepOnce();
+});
+
+btnReset.addEventListener('click', ()=>{
+  pause();
+  resetState();
+});
+
+btnShuffle.addEventListener('click', ()=>{
+  // jitter positions and rebuild svg
+  nodeIds.forEach(id=>{
+    const [x0,y0] = G.pos[id];
+    const x = Math.max(60, Math.min(740, x0 + randomInt(-40,40)));
+    const y = Math.max(60, Math.min(440, y0 + randomInt(-40,40)));
+    G.pos[id] = [x,y];
+  });
+  buildGraph();
+  renderAll();
+});
+
+speedRange.addEventListener('input', ()=>{
+  state.speed = parseFloat(speedRange.value);
+  speedVal.textContent = state.speed.toFixed(1);
+});
+
+document.addEventListener('keydown', (e)=>{
+  if (e.key === ' '){ e.preventDefault(); btnPlay.click(); }
+  else if (e.key.toLowerCase() === 'n'){ e.preventDefault(); btnStep.click(); }
+  else if (e.key.toLowerCase() === 'r'){ e.preventDefault(); btnReset.click(); }
+});
+
+/* ===========================
+   Bootstrap
+=========================== */
+function init(){
+  // build select + graph
+  populateStartSelect();
+  buildGraph();
+  resetState();
+}
+init();
+</script>
+</body>
+</html>
