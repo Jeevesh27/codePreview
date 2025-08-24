@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>🔄 Detect Cycle — Floyd’s (Tortoise & Hare)</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for selected terms */
+    --new:#8ae9c1;  /* green for newly added term */
+  }
+
+  /* Layout */
+  body{
+    margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji", "Segoe UI Symbol";
+  }
+  .app{ max-width:1100px; margin:24px auto; padding:0 16px; }
+  header{ display:flex; align-items:center; gap:12px; margin-bottom:16px;}
+  header h1{ font-size:clamp(20px,3vw,28px); margin:0;}
+  .badge{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b132b; font-weight:700; padding:6px 10px; border-radius:999px; box-shadow:var(--shadow); font-size:12px; letter-spacing:.2px;}
+  .grid{
+    display:grid; gap:18px;
+    grid-template-columns: 1.2fr .8fr;
+  }
+  @media (max-width: 900px){ .grid{ grid-template-columns: 1fr; } }
+
+  /* Panels */
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:18px;
+    position:relative;
+    overflow:hidden;
+  }
+
+  /* Visualization container */
+  .viz-wrap{
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .canvas{
+    background: radial-gradient(1200px 600px at 10% 10%, rgba(138,233,193,.06), transparent 60%),
+                radial-gradient(1000px 500px at 90% 0%, rgba(108,243,255,.07), transparent 55%),
+                var(--panel);
+    border-radius:12px;
+    padding:14px;
+    overflow:auto;
+    min-height:260px;
+    border:1px solid rgba(255,255,255,.06);
+  }
+  .canvas svg{ display:block; width:max(900px, 100%); height:280px; }
+
+  /* Controls */
+  .controls{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    background:var(--panel-2); border-radius:12px; padding:10px; border:1px solid rgba(255,255,255,.06);
+  }
+  .controls .group{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.03); padding:8px 10px; border-radius:10px; }
+  label{ color:var(--muted); font-size:13px; }
+  input[type="range"]{ width:160px; }
+  select, input[type="number"]{
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.08);
+    border-radius:8px; padding:6px 8px; outline:none;
+  }
+  .switch{ display:inline-flex; align-items:center; gap:8px; user-select:none;}
+  .switch input{ appearance:none; width:42px; height:24px; background:var(--slot); border-radius:999px; position:relative; outline:none; cursor:pointer; border:1px solid rgba(255,255,255,.08); }
+  .switch input:checked{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); }
+  .switch input::after{
+    content:""; position:absolute; inset:3px; width:18px; height:18px; border-radius:50%; background:#0b132b; transform:translateX(0); transition:transform var(--speed);
+  }
+  .switch input:checked::after{ transform:translateX(18px); }
+
+  button{
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#0b132b; border:none; border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer;
+    box-shadow:var(--shadow); transition:transform .06s ease, filter .2s ease;
+  }
+  button:active{ transform:translateY(1px) scale(.99); }
+  button.secondary{
+    background:var(--slot); color:var(--text); border:1px solid rgba(255,255,255,.08); box-shadow:none; font-weight:600;
+  }
+
+  /* Status row */
+  .status{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center; color:var(--muted); font-size:14px;
+  }
+  .pill{
+    background:var(--chip); border:1px solid rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; font-weight:600; color:var(--text);
+  }
+  .pill.ok{ background:rgba(132,250,176,.15); border-color: rgba(132,250,176,.35); color:var(--ok);}
+  .pill.warn{ background:rgba(255,209,102,.12); border-color: rgba(255,209,102,.35); color:var(--pair);}
+  .pill.muted{ background:rgba(255,255,255,.06); color:var(--muted); }
+
+  /* SVG elements */
+  .node{ filter: drop-shadow(0 8px 14px rgba(0,0,0,.35)); }
+  .node rect{
+    fill:#1a2142; stroke:#2b356d; stroke-width:1.2; rx:10; ry:10;
+  }
+  .node.active rect{ stroke:var(--pair); }
+  .node.meet rect{ stroke:var(--ok); animation:pulse 1000ms ease-in-out infinite; }
+  .node text{ font-weight:700; font-size:14px; fill:var(--text); }
+  .null-chip rect{ fill:#243066; stroke:#3b4aa1; stroke-width:1.2; rx:10; ry:10; }
+  .null-chip text{ fill:var(--muted); font-weight:700; }
+
+  .edge{ stroke:#5160b9; stroke-width:2; }
+  .edge.cycle{ stroke:#5fcdb5; stroke-dasharray:4 4; }
+  .edge-null{ stroke:#5160b9; stroke-width:2; stroke-dasharray:2 4; }
+  marker#arrow > path{ fill:#5160b9; }
+  marker#arrowCycle > path{ fill:#5fcdb5; }
+
+  .pointer circle{
+    filter: drop-shadow(0 6px 10px rgba(0,0,0,.35));
+    stroke:#0b132b; stroke-width:2;
+  }
+  .pointer text{ font-weight:900; font-size:12px; fill:#0b132b; }
+  .pointer.slow circle{ fill:var(--pair); }
+  .pointer.fast circle{ fill:var(--accent); }
+
+  @keyframes pulse{
+    0%,100%{ filter: drop-shadow(0 8px 16px rgba(132,250,176,.15)); }
+    50%{ filter: drop-shadow(0 8px 20px rgba(132,250,176,.4)); }
+  }
+
+  /* Right column: explanation */
+  .explain h2{ margin:0 0 10px; font-size:18px;}
+  .explain ul{ margin:0 0 12px 1.1em; color:var(--text); }
+  .explain li{ margin:6px 0; }
+  .code{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    background:#0f142e; border:1px solid rgba(255,255,255,.06);
+    border-radius:12px; padding:10px; overflow:auto; font-size:13px; color:#d6dcff;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <span class="badge">Floyd’s Cycle Detection</span>
+      <h1>🔄 Detect Cycle (Tortoise &amp; Hare)</h1>
+    </header>
+
+    <div class="grid">
+      <!-- LEFT: Visualization -->
+      <section class="panel viz-wrap" aria-label="Visualization panel">
+        <div class="controls" role="group" aria-label="Controls">
+          <div class="group">
+            <label for="len">Length</label>
+            <input id="len" type="range" min="3" max="14" value="8" />
+            <span id="lenOut" class="pill muted">8</span>
+          </div>
+
+          <div class="group">
+            <label class="switch" title="Toggle whether the list has a cycle">
+              <input id="hasCycle" type="checkbox" />
+              <span>Cycle</span>
+            </label>
+            <label for="cycleTo">to index</label>
+            <select id="cycleTo" disabled title="Index to link the last node back to"></select>
+          </div>
+
+          <div class="group">
+            <label for="speed">Speed</label>
+            <input id="speed" type="range" min="200" max="1200" value="550" step="10" />
+            <span id="speedOut" class="pill muted">550 ms/step</span>
+          </div>
+
+          <div class="group">
+            <button id="btnBuild" class="secondary" title="Rebuild the list with current settings">Rebuild</button>
+            <button id="btnStep" title="Advance one iteration (slow+=1, fast+=2)">Step</button>
+            <button id="btnPlay" title="Auto-run until a result">Play</button>
+            <button id="btnReset" class="secondary" title="Reset pointers to start">Reset</button>
+          </div>
+        </div>
+
+        <div class="canvas" id="canvas" tabindex="0" aria-label="Linked list canvas (scrollable)">
+          <svg id="svg" role="img" aria-label="Linked list, pointers, and arrows">
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                <path d="M0,0 L10,3 L0,6 Z"></path>
+              </marker>
+              <marker id="arrowCycle" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                <path d="M0,0 L10,3 L0,6 Z"></path>
+              </marker>
+            </defs>
+            <!-- Edges go here -->
+            <g id="edges"></g>
+            <!-- Nodes go here -->
+            <g id="nodes"></g>
+            <!-- Null chip -->
+            <g id="nullChip" class="null-chip" aria-hidden="true">
+              <rect x="0" y="0" width="66" height="34" rx="10" ry="10"></rect>
+              <text x="33" y="22" text-anchor="middle">NULL</text>
+            </g>
+            <!-- Pointers -->
+            <g id="ptrSlow" class="pointer slow" role="img" aria-label="Slow pointer">
+              <circle cx="0" cy="0" r="12"></circle>
+              <text x="0" y="4" text-anchor="middle">S</text>
+            </g>
+            <g id="ptrFast" class="pointer fast" role="img" aria-label="Fast pointer">
+              <circle cx="0" cy="0" r="12"></circle>
+              <text x="0" y="4" text-anchor="middle">F</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="status" id="status">
+          <span class="pill" id="stepPill">Steps: 0</span>
+          <span class="pill muted" id="posPill">S@0, F@0</span>
+          <span class="pill warn" id="hintPill">Rule: move S by 1, F by 2.</span>
+          <span class="pill" id="resultPill" style="display:none;"></span>
+        </div>
+      </section>
+
+      <!-- RIGHT: Explanation -->
+      <aside class="panel explain" aria-label="Explanation panel">
+        <h2>How it works</h2>
+        <ul>
+          <li>Also known as <strong>Tortoise and Hare Algorithm</strong>.</li>
+          <li>Use two pointers:
+            <ul>
+              <li><em>Slow</em>: moves 1 step.</li>
+              <li><em>Fast</em>: moves 2 steps.</li>
+            </ul>
+          </li>
+          <li>If a cycle exists, slow and fast pointers will <strong>meet</strong>.</li>
+          <li>Otherwise, fast will reach <code>NULL</code> (no cycle).</li>
+          <li>Efficient: <strong>O(n)</strong> time, <strong>O(1)</strong> space.</li>
+        </ul>
+
+        <div class="code" aria-label="Pseudocode">
+<pre><code>// Floyd’s cycle detection
+slow = head
+fast = head
+while fast != null and fast.next != null:
+    slow = slow.next
+    fast = fast.next.next
+    if slow == fast:
+        return "cycle found"
+return "no cycle"
+</code></pre>
+        </div>
+
+        <p style="color:var(--muted); margin-top:12px;">
+          Tip: Toggle <strong>Cycle</strong> and choose an index to link the last node back to.
+          Use <strong>Play</strong> to auto-run, or <strong>Step</strong> to move once.
+        </p>
+      </aside>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const svg = document.getElementById('svg');
+  const gNodes = document.getElementById('nodes');
+  const gEdges = document.getElementById('edges');
+  const ptrSlow = document.getElementById('ptrSlow');
+  const ptrFast = document.getElementById('ptrFast');
+  const nullChip = document.getElementById('nullChip');
+
+  const lenRange = document.getElementById('len');
+  const lenOut = document.getElementById('lenOut');
+  const hasCycle = document.getElementById('hasCycle');
+  const cycleTo = document.getElementById('cycleTo');
+  const speed = document.getElementById('speed');
+  const speedOut = document.getElementById('speedOut');
+
+  const btnBuild = document.getElementById('btnBuild');
+  const btnStep  = document.getElementById('btnStep');
+  const btnPlay  = document.getElementById('btnPlay');
+  const btnReset = document.getElementById('btnReset');
+
+  const stepPill = document.getElementById('stepPill');
+  const posPill  = document.getElementById('posPill');
+  const hintPill = document.getElementById('hintPill');
+  const resultPill = document.getElementById('resultPill');
+
+  const nodeW = 84, nodeH = 44;
+  const spacing = 110;
+  const baseY = 160;
+  let positions = [];     // [{x,y}]
+  let nextPtr = [];       // next index or null
+  let nullPos = {x:0,y:0};
+  let state = {
+    n: 8,
+    cycleTo: null,
+    slow: 0,
+    fast: 0,
+    steps: 0,
+    playing: false,
+    done: false,
+    meet: false,
+    timer: null
+  };
+
+  // Setup initial UI
+  lenOut.textContent = String(state.n);
+  speedOut.textContent = speed.value + ' ms/step';
+  rebuildCycleOptions();
+  buildList();
+  resetPointers(true);
+
+  // Event listeners
+  lenRange.addEventListener('input', e=>{
+    state.n = Number(e.target.value);
+    lenOut.textContent = String(state.n);
+    rebuildCycleOptions();
+  });
+  hasCycle.addEventListener('change', ()=>{
+    cycleTo.disabled = !hasCycle.checked;
+    buildList();
+    resetPointers(true);
+  });
+  cycleTo.addEventListener('change', ()=>{
+    state.cycleTo = cycleTo.value === 'none' ? null : Number(cycleTo.value);
+    buildList();
+    resetPointers(true);
+  });
+  speed.addEventListener('input', ()=>{
+    speedOut.textContent = speed.value + ' ms/step';
+    if(state.playing){ play(false); play(true); }
+  });
+
+  btnBuild.addEventListener('click', ()=>{ buildList(); resetPointers(true); });
+  btnReset.addEventListener('click', ()=> resetPointers(true));
+  btnStep.addEventListener('click', ()=> stepOnce());
+  btnPlay.addEventListener('click', ()=> togglePlay());
+
+  // Keyboard shortcuts for accessibility
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === ' '){ e.preventDefault(); togglePlay(); }
+    if(e.key === 'ArrowRight'){ e.preventDefault(); stepOnce(); }
+    if(e.key === 'r' || e.key === 'R'){ resetPointers(true); }
+  });
+
+  function rebuildCycleOptions(){
+    const sel = cycleTo;
+    sel.innerHTML = '';
+    for(let i=0;i<state.n;i++){
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = String(i);
+      sel.appendChild(opt);
+    }
+    const defaultIndex = Math.min(2, state.n-1);
+    sel.value = String(defaultIndex);
+    state.cycleTo = hasCycle.checked ? defaultIndex : null;
+    sel.disabled = !hasCycle.checked;
+  }
+
+  function buildList(){
+    // Build next pointers
+    nextPtr = new Array(state.n).fill(null).map((_,i)=> (i < state.n-1 ? i+1 : null));
+    if(hasCycle.checked && state.n>0){
+      const linkTo = Number(cycleTo.value);
+      nextPtr[state.n-1] = linkTo; // last points back
+      state.cycleTo = linkTo;
+    } else {
+      state.cycleTo = null;
+    }
+
+    // Layout positions horizontally
+    positions = [];
+    for(let i=0;i<state.n;i++){
+      const x = 60 + i*spacing;
+      const y = baseY;
+      positions.push({x,y});
+    }
+    // SVG sizing
+    const widthNeeded = 60 + (state.n-1)*spacing + 220; // room for NULL / arc
+    svg.setAttribute('viewBox', `0 0 ${Math.max(widthNeeded, 900)} 280`);
+
+    // Render nodes
+    gNodes.innerHTML = '';
+    for(let i=0;i<state.n;i++){
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('class','node');
+      g.setAttribute('data-idx', String(i));
+
+      const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rect.setAttribute('x', positions[i].x);
+      rect.setAttribute('y', positions[i].y - nodeH/2);
+      rect.setAttribute('width', nodeW);
+      rect.setAttribute('height', nodeH);
+      g.appendChild(rect);
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+      label.setAttribute('x', positions[i].x + nodeW/2);
+      label.setAttribute('y', positions[i].y + 5);
+      label.setAttribute('text-anchor','middle');
+      label.textContent = `Node ${i}`;
+      g.appendChild(label);
+      gNodes.appendChild(g);
+    }
+
+    // NULL chip position (always to the right of last node)
+    const last = positions[state.n-1];
+    nullPos = { x: last.x + nodeW + 70, y: baseY - 2 };
+    nullChip.setAttribute('transform', `translate(${nullPos.x - 33}, ${nullPos.y - 17})`);
+
+    // Draw edges
+    gEdges.innerHTML = '';
+    for(let i=0;i<state.n-1;i++){
+      drawArrowRight(positions[i].x + nodeW, positions[i].y, positions[i+1].x, positions[i+1].y);
+    }
+    if(state.n>0){
+      if(state.cycleTo == null){
+        drawArrowToNull(positions[state.n-1].x + nodeW, positions[state.n-1].y, nullPos.x - 33, nullPos.y);
+      } else {
+        const t = positions[state.cycleTo];
+        const s = positions[state.n-1];
+        drawCycleArc(s.x + nodeW, s.y, t.x + nodeW/2, t.y - nodeH/2 - 30);
+      }
+    }
+    updateActiveClasses();
+    updateStatus();
+    placePointers();
+  }
+
+  function drawArrowRight(x1,y1,x2,y2){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', x1 + 4);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2 - 4);
+    line.setAttribute('y2', y2);
+    line.setAttribute('class','edge');
+    line.setAttribute('marker-end','url(#arrow)');
+    gEdges.appendChild(line);
+  }
+
+  function drawArrowToNull(x1,y1,x2,y2){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', x1 + 4);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2);
+    line.setAttribute('y2', y2);
+    line.setAttribute('class','edge-null');
+    line.setAttribute('marker-end','url(#arrow)');
+    gEdges.appendChild(line);
+  }
+
+  function drawCycleArc(x1,y1,x2,y2){
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    const dx = Math.max(60, Math.abs(x2 - x1) / 2);
+    const dy = 80; // arc height
+    const d = `M ${x1} ${y1}
+               C ${x1 + dx} ${y1 - dy},
+                 ${x2 - dx} ${y2 - dy},
+                 ${x2} ${y2}`;
+    path.setAttribute('d', d);
+    path.setAttribute('class','edge cycle');
+    path.setAttribute('fill','none');
+    path.setAttribute('marker-end','url(#arrowCycle)');
+    gEdges.appendChild(path);
+  }
+
+  function resetPointers(full){
+    if(state.timer) { clearInterval(state.timer); state.timer = null; }
+    state.playing = false;
+    btnPlay.textContent = 'Play';
+
+    state.slow = 0;
+    state.fast = 0;
+    state.steps = 0;
+    state.done = false;
+    state.meet = false;
+
+    if(full){
+      // remove any "meet" highlighting
+      for (const g of gNodes.children) g.classList.remove('meet');
+    }
+    placePointers(true);
+    updateStatus('reset');
+  }
+
+  function placePointers(immediate=false){
+    const dur = Number(getComputedStyle(document.documentElement).getPropertyValue('--speed').replace('ms','')) || 300;
+    const animateMs = immediate ? 0 : Math.min(500, dur + 120);
+
+    // slow
+    const sPos = state.slow === null ? nullPos : nodeTop(state.slow);
+    ptrSlow.style.transition = `transform ${animateMs}ms ease`;
+    ptrSlow.setAttribute('transform', `translate(${sPos.x}, ${sPos.y})`);
+
+    // fast
+    const fPos = state.fast === null ? nullPos : nodeTop(state.fast);
+    ptrFast.style.transition = `transform ${animateMs}ms ease`;
+    ptrFast.setAttribute('transform', `translate(${fPos.x}, ${fPos.y})`);
+
+    updateActiveClasses();
+  }
+
+  function nodeTop(i){
+    // position above the node
+    const p = positions[i];
+    return { x: p.x + nodeW/2, y: p.y - nodeH/2 - 22 };
+  }
+
+  function updateActiveClasses(){
+    // Highlight current nodes
+    for (const g of gNodes.children) g.classList.remove('active');
+    if(state.slow !== null){ const g = gNodes.querySelector(`[data-idx="${state.slow}"]`); if(g) g.classList.add('active'); }
+    if(state.fast !== null){ const g = gNodes.querySelector(`[data-idx="${state.fast}"]`); if(g) g.classList.add('active'); }
+  }
+
+  function stepOnce(){
+    if(state.done) return;
+
+    // If fast can't move two steps, it will reach NULL -> no cycle.
+    if(state.fast === null){
+      // Already at NULL
+      finish(false, 'Fast already at NULL.');
+      return;
+    }
+
+    const nextFast1 = nextPtr[state.fast];
+    if(nextFast1 === null){
+      // Show that fast attempts to move and reaches NULL
+      state.fast = null;
+      state.steps++;
+      placePointers();
+      finish(false, 'Fast reached NULL.');
+      return;
+    }
+    const nextFast2 = nextPtr[nextFast1]; // may be null
+
+    state.slow = nextPtr[state.slow];     // slow moves 1
+    state.fast = nextFast2;               // fast moves 2 (possibly null)
+    state.steps++;
+
+    placePointers();
+
+    // Meeting?
+    if(state.fast !== null && state.slow === state.fast){
+      // Mark meeting node
+      const meeting = gNodes.querySelector(`[data-idx="${state.slow}"]`);
+      if(meeting) meeting.classList.add('meet');
+      finish(true, 'Slow and Fast met.');
+      return;
+    }
+
+    // If fast fell off after two steps (became null), no cycle.
+    if(state.fast === null){
+      finish(false, 'Fast reached NULL.');
+      return;
+    }
+
+    updateStatus();
+  }
+
+  function finish(hasCycle, msg){
+    state.done = true;
+    state.meet = !!hasCycle;
+    updateStatus(msg);
+    if(state.playing) togglePlay(false);
+  }
+
+  function togglePlay(forceOn){
+    if(typeof forceOn === 'boolean'){
+      if(forceOn) play(true); else play(false);
+      return;
+    }
+    if(state.playing){ play(false); } else { play(true); }
+  }
+
+  function play(on){
+    if(on){
+      if(state.done) resetPointers(false);
+      state.playing = true;
+      btnPlay.textContent = 'Pause';
+      const interval = Math.max(120, Number(speed.value));
+      state.timer = setInterval(()=>{
+        if(state.done){ play(false); return; }
+        stepOnce();
+      }, interval);
+    } else {
+      state.playing = false;
+      btnPlay.textContent = 'Play';
+      if(state.timer){ clearInterval(state.timer); state.timer = null; }
+    }
+  }
+
+  function updateStatus(note){
+    stepPill.textContent = `Steps: ${state.steps}`;
+    const s = state.slow === null ? 'NULL' : state.slow;
+    const f = state.fast === null ? 'NULL' : state.fast;
+    posPill.textContent = `S@${s}, F@${f}`;
+
+    if(note){ hintPill.textContent = note; }
+    else { hintPill.textContent = 'Rule: move S by 1, F by 2.'; }
+
+    if(state.done){
+      resultPill.style.display = 'inline-block';
+      if(state.meet){
+        resultPill.className = 'pill ok';
+        resultPill.textContent = 'Cycle detected ✅';
+      } else {
+        resultPill.className = 'pill muted';
+        resultPill.textContent = 'No cycle found ⛔';
+      }
+    } else {
+      resultPill.style.display = 'none';
+    }
+  }
+})();
+</script>
+</body>
+</html>
