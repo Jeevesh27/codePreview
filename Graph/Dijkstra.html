@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dijkstra Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for selected terms */
+    --new:#8ae9c1;  /* green for newly added term */
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 800px at 20% 10%, #151935 0%, var(--bg) 55%);color:var(--text);font:15px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+
+  .app{max-width:1200px;margin:24px auto;padding:0 var(--gap);display:grid;grid-template-columns:1.25fr 1fr;grid-template-rows:auto 1fr auto;gap:var(--gap)}
+  .title{grid-column:1/-1;display:flex;align-items:center;gap:12px}
+  .controls-section{grid-column:1/-1}
+  .graph-section{grid-column:1}
+  .code-section{grid-column:2}
+  .heap-section{grid-column:1/-1}
+  h1{font-size:22px;margin:0;letter-spacing:.3px}
+  .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(145deg,var(--panel-2),var(--panel));border:1px solid #2a2f59;color:var(--accent);font-weight:600;box-shadow:var(--shadow)}
+
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid #2a2f59;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .card h2{margin:0;padding:14px 16px 0;font-size:15px;color:var(--muted);letter-spacing:.4px}
+  .card .content{padding:14px 16px 16px}
+
+  .graph-wrap{position:relative;aspect-ratio:16/10;min-height:360px;border-top-left-radius:var(--radius);border-top-right-radius:var(--radius);overflow:hidden}
+  svg{width:100%;height:100%;display:block;background:
+      radial-gradient(600px 400px at 90% -10%, rgba(108,243,255,.08) 0%, rgba(108,243,255,0) 70%),
+      linear-gradient(0deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03));
+  }
+
+  /* Edges + weights */
+  .edge{stroke:#4c5286;stroke-width:2.5;opacity:.9;transition:stroke var(--speed),opacity var(--speed)}
+  .edge.active{stroke:var(--pair)}
+  .edge.best{stroke:var(--ok)}
+  .wlabel{fill:var(--muted);font-weight:700;font-size:12px;user-select:none}
+  .wlabel.active{fill:var(--pair)}
+  .wlabel.best{fill:var(--ok)}
+
+  /* Nodes */
+  .node{cursor:pointer;transition:transform var(--speed)}
+  .node circle{fill:var(--slot);stroke:#2f3566;stroke-width:2;filter:drop-shadow(0 6px 10px rgba(0,0,0,.35));transition:fill var(--speed),stroke var(--speed),r var(--speed)}
+  .node text{fill:var(--text);font-weight:700;pointer-events:none}
+  .node:hover{transform:translateY(-2px)}
+  .node.start circle{stroke:var(--pair)}
+  .node.current circle{fill:#2c356f;stroke:var(--pair);r:22}
+  .node.settled circle{fill:#1e304b;stroke:var(--ok)}
+
+  /* Controls layout */
+  .controls{display:grid;gap:var(--gap)}
+  .btnbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+  button,.select,input[type="range"]{
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));
+    border:1px solid #2a2f59;border-radius:12px;color:var(--text);
+    padding:10px 12px;font-weight:600;letter-spacing:.3px;box-shadow:var(--shadow)
+  }
+  button{cursor:pointer;transition:transform var(--speed),opacity var(--speed)}
+  button:hover{transform:translateY(-2px)}
+  button[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+  .select{display:flex;align-items:center;justify-content:space-between;padding-right:10px}
+  select{width:100%;background:transparent;border:none;color:var(--text);font-weight:700;outline:none;appearance:none;cursor:pointer}
+
+  .heap,.dist{display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-height:52px}
+  .chip{background:linear-gradient(180deg,var(--chip),#2f376e);border:1px solid #50589a;color:var(--text);border-radius:10px;padding:8px 10px;font-weight:700;min-width:42px;text-align:center;box-shadow:var(--shadow)}
+  .chip.new{outline:2px solid var(--new)}
+  .chip.bad{outline:2px dashed #b66}
+  .kv{display:grid;grid-template-columns:auto auto;gap:6px 10px}
+  .kv div{padding:6px 8px;border:1px solid #2a2f59;border-radius:8px;background:linear-gradient(180deg,var(--panel-2),var(--panel));font-weight:700}
+  .kv .key{color:var(--muted);font-weight:600}
+  .kv .val.inf{opacity:.7}
+  .kv .val.upd{outline:2px solid var(--new)}
+
+  .legend{display:grid;grid-template-columns:repeat(4,auto);gap:10px 14px;align-items:center;padding:12px 16px 16px;border-top:1px solid #2a2f59;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))}
+  .legend .dot{width:12px;height:12px;border-radius:50%;border:2px solid transparent;display:inline-block;margin-right:6px}
+  .l-start .dot{border-color:var(--pair);background:var(--slot)}
+  .l-current .dot{border-color:var(--pair);background:#2c356f}
+  .l-settled .dot{border-color:var(--ok);background:#1e304b}
+  .l-best .dot{border-color:var(--ok);background:#1e304b}
+
+  .range-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
+  .speed-val{font-variant-numeric:tabular-nums;color:var(--muted)}
+  label{color:var(--muted);font-size:12px;letter-spacing:.3px}
+
+  pre.code{background:#0f1433;border:1px solid #2a2f59;border-radius:12px;padding:12px;margin:0;overflow:auto;line-height:1.45;font-size:13px;counter-reset:ln}
+  pre.code code{white-space:pre;display:block}
+  .ln{display:block;padding-left:34px;position:relative}
+  .ln::before{counter-increment:ln;content:counter(ln);position:absolute;left:8px;color:#5b6298}
+  .hl{background:linear-gradient(90deg,rgba(255,209,102,.18),transparent 60%)}
+
+  @media (max-width:980px){
+    .app{grid-template-columns:1fr;grid-template-rows:auto auto auto auto}
+    .controls-section,.graph-section,.code-section,.heap-section{grid-column:1}
+  }
+</style>
+</head>
+<body>
+<div class="app" aria-live="polite">
+  <div class="title">
+    <span class="badge">Graph Algorithms</span>
+    <h1>3. Dijkstra’s Algorithm</h1>
+  </div>
+
+  <!-- Controls section -->
+  <section class="card controls-section">
+    <h2>Controls</h2>
+    <div class="content">
+      <div class="range-row">
+        <div style="display:grid;gap:8px">
+          <div class="select"><select id="sourceSel" aria-label="Source node"></select></div>
+          <div class="btnbar" role="group" aria-label="Controls">
+            <button id="btnPlay" title="Play / Pause (Space)">▶ Play</button>
+            <button id="btnStep" title="Step (N)">Step</button>
+            <button id="btnReset" title="Reset (R)">Reset</button>
+            <button id="btnShuffle" title="Shuffle layout">Shuffle</button>
+            <button id="btnShowPath" title="Highlight shortest path to selected target">Show Path</button>
+          </div>
+        </div>
+        <div class="speed-val">
+          <label for="speed">Speed</label>
+          <input id="speed" type="range" min="0.2" max="2.5" step="0.1" value="1"/>
+          <div><span id="speedVal">1.0</span>×</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Graph section -->
+  <section class="card graph-section">
+    <h2>Weighted Graph</h2>
+    <div class="content">
+      <div class="graph-wrap" id="graphWrap" role="region" aria-label="Graph canvas. Click a node to set source.">
+        <svg id="graph" viewBox="0 0 800 520"></svg>
+      </div>
+      <div class="legend">
+        <div class="l-start"><span class="dot"></span>Source</div>
+        <div class="l-current"><span class="dot"></span>Current (extract-min)</div>
+        <div class="l-settled"><span class="dot"></span>Settled (finalized)</div>
+        <div class="l-best"><span class="dot"></span>Tree edge</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Code section -->
+  <section class="card code-section">
+    <h2>Pseudocode</h2>
+    <div class="content">
+<pre class="code" aria-label="Dijkstra pseudocode">
+<code id="code">
+<span class="ln" data-ln="1">function <b>Dijkstra</b>(adjList, V, <span style="color:var(--pair)">source</span>):</span>
+<span class="ln" data-ln="2">    dist = array of size V, initialized to ∞</span>
+<span class="ln" data-ln="3">    dist[source] = 0</span>
+<span class="ln" data-ln="4"></span>
+<span class="ln" data-ln="5">    minHeap = priority queue storing (distance, vertex)</span>
+<span class="ln" data-ln="6">    insert (0, source) into minHeap</span>
+<span class="ln" data-ln="7"></span>
+<span class="ln" data-ln="8">    while minHeap is not empty:</span>
+<span class="ln" data-ln="9">        (d, u) = extract-min(minHeap)</span>
+<span class="ln" data-ln="10">        if d > dist[u]:</span>
+<span class="ln" data-ln="11">            continue   // skip outdated entry</span>
+<span class="ln" data-ln="12"></span>
+<span class="ln" data-ln="13">        for each (v, weight) in adjList[u]:</span>
+<span class="ln" data-ln="14">            if dist[u] + weight < dist[v]:</span>
+<span class="ln" data-ln="15">                dist[v] = dist[u] + weight</span>
+<span class="ln" data-ln="16">                insert (dist[v], v) into minHeap</span>
+<span class="ln" data-ln="17"></span>
+<span class="ln" data-ln="18">    return dist</span>
+</code>
+</pre>
+    </div>
+  </section>
+
+  <!-- Priority Queue section -->
+  <section class="card heap-section">
+    <h2>Priority Queue (Min-Heap) & Distances</h2>
+    <div class="content">
+      <div id="heap" class="heap" aria-live="polite"></div>
+      <div class="kv" id="distGrid" aria-live="polite" style="margin-top:10px"></div>
+      <div class="note" style="color:var(--muted);margin-top:8px">∞ = unreachable so far. A node becomes <b>settled</b> when it's extracted with the smallest tentative distance.</div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ===========================
+   Weighted Graph
+=========================== */
+const G = {
+  // Directed or undirected? We'll treat it as UNDIRECTED by mirroring edges.
+  adj: {
+    A:[['B',4],['C',1]],
+    B:[['A',4],['D',1],['E',4]],
+    C:[['A',1],['D',2],['F',5]],
+    D:[['B',1],['C',2],['E',1],['G',3]],
+    E:[['B',4],['D',1],['H',2]],
+    F:[['C',5],['I',2]],
+    G:[['D',3],['J',1]],
+    H:[['E',2],['J',3]],
+    I:[['F',2],['J',2]],
+    J:[['G',1],['H',3],['I',2]]
+  },
+  pos: {
+    A:[110,80],  B:[260,70],  C:[230,200],
+    D:[400,120], E:[420,230], F:[260,330],
+    G:[560,140], H:[520,320], I:[360,390],
+    J:[610,300]
+  }
+};
+// Mirror edges to be visually consistent undirected
+for(const u of Object.keys(G.adj)){
+  for(const [v,w] of G.adj[u]){
+    if(!G.adj[v]) G.adj[v]=[];
+    if(!G.adj[v].some(([x])=>x===u)) G.adj[v].push([u,w]);
+  }
+}
+const nodes = Object.keys(G.adj).sort();
+
+/* ===========================
+   State
+=========================== */
+const state = {
+  source: 'A',
+  dist: Object.fromEntries(nodes.map(n=>[n, Infinity])),
+  prev: Object.fromEntries(nodes.map(n=>[n, null])),
+  settled: new Set(),        // finalized nodes
+  current: null,             // node just extracted
+  heap: [],                  // list of {d,u,stale?}
+  steps: [], stepIndex: 0, playing: false, speed: 1.0,
+  treeEdges: new Set(),      // edges in SPT
+  lastUpdated: null
+};
+
+/* ===========================
+   DOM
+=========================== */
+const svg = document.getElementById('graph');
+const heapEl = document.getElementById('heap');
+const distGrid = document.getElementById('distGrid');
+const sourceSel = document.getElementById('sourceSel');
+const btnPlay = document.getElementById('btnPlay');
+const btnStep = document.getElementById('btnStep');
+const btnReset = document.getElementById('btnReset');
+const btnShuffle = document.getElementById('btnShuffle');
+const btnShowPath = document.getElementById('btnShowPath');
+const speedRange = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+
+/* ===========================
+   Helpers
+=========================== */
+function ek(u,v){return [u,v].sort().join('-');}
+function clear(el){while(el.firstChild) el.removeChild(el.firstChild);}
+function setHL(lines){document.querySelectorAll('.ln').forEach(ln=>ln.classList.remove('hl')); (lines||[]).forEach(n=>{const el=document.querySelector(`.ln[data-ln="${n}"]`); if(el) el.classList.add('hl');});}
+function formatDist(x){return (x===Infinity)?'∞':String(x);}
+function jitter(x,a,b){return Math.max(a, Math.min(b, x + (Math.random()*80-40)));}
+
+/* ===========================
+   Build SVG
+=========================== */
+function buildGraph(){
+  clear(svg);
+  // draw (unique) edges with weight labels
+  const seen = new Set();
+  for(const u of nodes){
+    for(const [v,w] of G.adj[u]){
+      const key = ek(u,v);
+      if(seen.has(key)) continue;
+      seen.add(key);
+      const [x1,y1] = G.pos[u], [x2,y2] = G.pos[v];
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+      line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+      line.classList.add('edge'); line.dataset.u=u; line.dataset.v=v;
+      svg.appendChild(line);
+
+      // label at mid-point slightly offset
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      const tx = mx + (y2-y1)/12, ty = my + (x1-x2)/12;
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('x', tx); text.setAttribute('y', ty);
+      text.setAttribute('text-anchor','middle');
+      text.classList.add('wlabel');
+      text.textContent = w;
+      text.dataset.u=u; text.dataset.v=v;
+      svg.appendChild(text);
+    }
+  }
+  // nodes
+  for(const id of nodes){
+    const [x,y]=G.pos[id];
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.classList.add('node'); g.dataset.id=id;
+    g.setAttribute('tabindex','0'); g.setAttribute('role','button');
+    g.setAttribute('aria-label',`Node ${id}. Click to set as source.`);
+    g.addEventListener('click',()=>{ state.source=id; resetAll(); });
+
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',x); c.setAttribute('cy',y); c.setAttribute('r',18);
+
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',x); t.setAttribute('y',y+5); t.setAttribute('text-anchor','middle'); t.textContent=id;
+
+    g.appendChild(c); g.appendChild(t); svg.appendChild(g);
+  }
+}
+
+function renderGraph(){
+  // nodes
+  document.querySelectorAll('.node').forEach(n=>{
+    const id = n.dataset.id;
+    n.classList.toggle('start', id===state.source);
+    n.classList.toggle('current', id===state.current);
+    n.classList.toggle('settled', state.settled.has(id));
+  });
+  // edges
+  document.querySelectorAll('.edge').forEach(e=>{
+    e.classList.remove('active','best');
+    const u=e.dataset.u, v=e.dataset.v; const k=ek(u,v);
+    if(state.current && (u===state.current || v===state.current)) e.classList.add('active');
+    if(state.treeEdges.has(k)) e.classList.add('best');
+  });
+  document.querySelectorAll('.wlabel').forEach(l=>{
+    l.classList.remove('active','best');
+    const u=l.dataset.u, v=l.dataset.v; const k=ek(u,v);
+    if(state.current && (u===state.current || v===state.current)) l.classList.add('active');
+    if(state.treeEdges.has(k)) l.classList.add('best');
+  });
+}
+
+function renderHeap(){
+  clear(heapEl);
+  state.heap.forEach((item,idx)=>{
+    const d=document.createElement('div');
+    d.className='chip';
+    if(item._new) d.classList.add('new');
+    if(item.stale) d.classList.add('bad');
+    d.textContent=`${item.u}:${formatDist(item.d)}`;
+    heapEl.appendChild(d);
+  });
+}
+
+function renderDist(){
+  clear(distGrid);
+  nodes.forEach(n=>{
+    const k=document.createElement('div'); k.className='key'; k.textContent=n;
+    const v=document.createElement('div'); v.className='val'; v.textContent=formatDist(state.dist[n]);
+    if(state.dist[n]===Infinity) v.classList.add('inf');
+    if(state.lastUpdated===n) v.classList.add('upd');
+    distGrid.appendChild(k); distGrid.appendChild(v);
+  });
+}
+
+function renderAll(){
+  renderGraph(); renderHeap(); renderDist();
+  if(state.stepIndex===0) setHL([1,2,3,5,6]);
+}
+
+/* ===========================
+   Step builder (records a full run)
+=========================== */
+function buildSteps(){
+  // local copies to simulate and emit steps
+  const steps=[];
+  const dist = Object.fromEntries(nodes.map(n=>[n, Infinity]));
+  const prev = Object.fromEntries(nodes.map(n=>[n, null]));
+  const settled = new Set();
+  let heap = [];
+
+  // helper heap ops (simple array + sort for clarity)
+  function heapPush(item){
+    heap.push(item);
+    heap.sort((a,b)=>a.d-b.d);
+    steps.push({type:'heapPush', item});
+  }
+  function heapPop(){
+    const it = heap.shift();
+    steps.push({type:'heapPop', item:it});
+    return it;
+  }
+
+  // init
+  steps.push({type:'init', hl:[1,2,3]});
+  dist[state.source]=0;
+  steps.push({type:'distSource', node:state.source, hl:[3]});
+  heapPush({d:0,u:state.source});
+
+  // main loop
+  while(heap.length){
+    steps.push({type:'whileCheck', size:heap.length, hl:[8]});
+    const {d,u} = heapPop();
+
+    // if outdated entry
+    if(d>dist[u]){
+      steps.push({type:'outdated', u, d, best:dist[u], hl:[10,11]});
+      continue;
+    }
+
+    // settle u
+    settled.add(u);
+    steps.push({type:'settle', u, d, hl:[9]});
+
+    // relax neighbors
+    for(const [v,w] of G.adj[u]){
+      steps.push({type:'consider', u, v, w, hl:[13]});
+      if(settled.has(v)) {
+        // settled nodes already optimal; still show check
+        steps.push({type:'skipSettled', v, hl:[13]});
+        continue;
+      }
+      const alt = d + w;
+      steps.push({type:'relaxCheck', u, v, w, alt, curr:dist[v], hl:[14]});
+      if(alt < dist[v]){
+        dist[v]=alt; prev[v]=u;
+        steps.push({type:'relaxAccept', v, alt, prev:u, hl:[15]});
+        heapPush({d:dist[v], u:v, _new:true});
+      }
+    }
+  }
+  steps.push({type:'done', dist, prev, hl:[18]});
+  state.steps = steps;
+}
+
+/* ===========================
+   Apply steps to UI state
+=========================== */
+function applyStep(s){
+  state.lastUpdated = null;
+  switch(s.type){
+    case 'init':
+      state.settled.clear(); state.treeEdges.clear();
+      state.current=null; state.heap=[]; 
+      for(const n of nodes){ state.dist[n]=Infinity; state.prev[n]=null; }
+      break;
+    case 'distSource':
+      state.dist[s.node]=0; state.lastUpdated=s.node; break;
+    case 'heapPush':
+      // mark all as not-new, then add
+      state.heap.forEach(i=>i._new=false);
+      state.heap.push({...s.item}); state.heap.sort((a,b)=>a.d-b.d); break;
+    case 'whileCheck':
+      break;
+    case 'heapPop':
+      state.current = s.item.u;
+      // remove first matching item
+      const idx = state.heap.findIndex(it=>it.d===s.item.d && it.u===s.item.u);
+      if(idx>=0) state.heap.splice(idx,1);
+      break;
+    case 'outdated':
+      // show as stale extraction (no state change except current highlight)
+      state.current = s.u;
+      break;
+    case 'settle':
+      state.settled.add(s.u);
+      // add tree edge from prev if exists
+      const p = state.prev[s.u];
+      if(p){ state.treeEdges.add(ek(p,s.u)); }
+      break;
+    case 'consider':
+      // just highlight via current node visuals
+      break;
+    case 'skipSettled':
+      break;
+    case 'relaxCheck':
+      // nothing yet
+      break;
+    case 'relaxAccept':
+      state.dist[s.v]=s.alt; state.prev[s.v]=s.prev; state.lastUpdated=s.v;
+      break;
+    case 'done':
+      // finalize tree edges from prev map
+      state.treeEdges.clear();
+      for(const v of nodes){ const p2=state.prev[v]; if(p2) state.treeEdges.add(ek(p2,v)); }
+      break;
+  }
+  setHL(s.hl||[]);
+  renderAll();
+}
+
+/* ===========================
+   Controls / Playback
+=========================== */
+let timer=null;
+function stepOnce(){
+  if(state.stepIndex>=state.steps.length){ pause(); return; }
+  const st = state.steps[state.stepIndex++];
+  applyStep(st);
+}
+function play(){ state.playing=true; btnPlay.textContent='⏸ Pause'; tick(); }
+function pause(){ state.playing=false; btnPlay.textContent='▶ Play'; if(timer) clearTimeout(timer); }
+function tick(){ if(!state.playing) return; stepOnce(); const base=650; timer=setTimeout(tick, base/state.speed); }
+
+/* ===========================
+   UI wiring
+=========================== */
+function populateSourceSel(){
+  clear(sourceSel);
+  nodes.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=`Source: ${n}`; if(n===state.source) o.selected=true; sourceSel.appendChild(o); });
+  sourceSel.addEventListener('change',()=>{ state.source=sourceSel.value; resetAll(); });
+}
+
+btnPlay.addEventListener('click',()=>{ state.playing?pause():play(); });
+btnStep.addEventListener('click',()=>{ pause(); stepOnce(); });
+btnReset.addEventListener('click',()=>{ pause(); resetAll(); });
+btnShuffle.addEventListener('click',()=>{
+  // jitter positions slightly and rebuild
+  for(const id of nodes){
+    const [x0,y0]=G.pos[id];
+    G.pos[id]=[jitter(x0,60,740), jitter(y0,60,460)];
+  }
+  buildGraph(); renderAll();
+});
+btnShowPath.addEventListener('click',()=>{
+  // choose a target interactively: the currently highlighted (last updated) or farthest finite
+  let target = state.lastUpdated || null;
+  if(!target){
+    // pick max dist finite
+    let best=null,bv=-1;
+    for(const n of nodes){ const d=state.dist[n]; if(isFinite(d) && d>bv){ bv=d; best=n; } }
+    target = best || state.source;
+  }
+  // highlight path from target back to source using prev
+  if(!target) return;
+  state.treeEdges.clear();
+  let cur=target;
+  while(cur && cur!==state.source){
+    const p=state.prev[cur]; if(!p) break;
+    state.treeEdges.add(ek(p,cur)); cur=p;
+  }
+  renderAll();
+});
+
+speedRange.addEventListener('input',()=>{ state.speed=parseFloat(speedRange.value); speedVal.textContent=state.speed.toFixed(1); });
+
+document.addEventListener('keydown',(e)=>{
+  if(e.key===' '){ e.preventDefault(); btnPlay.click(); }
+  else if(e.key.toLowerCase()==='n'){ e.preventDefault(); btnStep.click(); }
+  else if(e.key.toLowerCase()==='r'){ e.preventDefault(); btnReset.click(); }
+});
+
+/* ===========================
+   Reset & Bootstrap
+=========================== */
+function resetAll(){
+  pause();
+  state.stepIndex=0;
+  buildSteps();
+  renderAll();
+}
+function init(){
+  populateSourceSel();
+  buildGraph();
+  resetAll();
+}
+init();
+</script>
+</body>
+</html>
