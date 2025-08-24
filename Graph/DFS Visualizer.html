@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DFS Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+  body { margin:0; font-family:system-ui; background:var(--bg); color:var(--text); }
+  .app{max-width:1200px; margin:auto; padding:20px; display:grid; gap:var(--gap); grid-template-columns:1.2fr 1fr; grid-template-rows: auto auto auto 1fr;}
+  .title{grid-column:1/-1; display:flex; align-items:center; gap:10px;}
+  .controls-section{grid-column:1/-1;}
+  .stack-section{grid-column:1/-1;}
+  .graph-section{grid-column:1;}
+  .code-section{grid-column:2;}
+  h1{margin:0;font-size:22px;}
+  .badge{background:var(--panel); border:1px solid #2a2f59; padding:4px 10px; border-radius:999px; color:var(--accent); font-weight:600;}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid #2a2f59; border-radius:var(--radius); box-shadow:var(--shadow);}
+  .card h2{margin:0; padding:14px 16px 0; font-size:15px; color:var(--muted);}
+  .content{padding:14px 16px 16px;}
+  .graph-wrap{aspect-ratio:16/10; min-height:340px;}
+  svg{width:100%;height:100%;background:radial-gradient(800px 600px at 80% -10%, rgba(108,243,255,.05), transparent);}
+  .edge{stroke:#4c5286;stroke-width:2.5;opacity:.8;transition:stroke .3s;}
+  .edge.active{stroke:var(--pair);}
+  .edge.done{stroke:var(--ok);}
+  .node circle{fill:var(--slot);stroke:#2f3566;stroke-width:2;transition:.3s;}
+  .node text{fill:var(--text);font-weight:700;pointer-events:none;}
+  .node.start circle{stroke:var(--pair);}
+  .node.current circle{fill:#2c356f;stroke:var(--pair);}
+  .node.visited circle{fill:#1e304b;stroke:var(--ok);}
+  .stack{display:flex;flex-wrap:wrap;gap:8px;min-height:52px;}
+  .frame{background:linear-gradient(180deg,var(--chip),#2f376e);border:1px solid #50589a;border-radius:10px;padding:6px 10px;font-weight:700;box-shadow:var(--shadow);}
+  button{background:linear-gradient(180deg,var(--panel-2),var(--panel)); border:1px solid #2a2f59; border-radius:10px; color:var(--text); padding:8px 12px; cursor:pointer; font-weight:600; margin-right:8px;}
+  button:hover{transform:translateY(-2px);}
+  pre.code{background:#0f1433;border:1px solid #2a2f59;border-radius:12px;padding:12px;margin:0;font-size:13px;overflow:auto;line-height:1.45;counter-reset:ln;}
+  .ln{display:block;padding-left:34px;position:relative;}
+  .ln::before{counter-increment:ln;content:counter(ln);position:absolute;left:8px;color:#5b6298;}
+  .hl{background:linear-gradient(90deg,rgba(255,209,102,.18),transparent 60%);}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="title">
+    <span class="badge">Graph Algorithms</span>
+    <h1>2. DFS (Depth-First Search)</h1>
+  </div>
+
+  <!-- Controls section -->
+  <section class="card controls-section">
+    <h2>Controls</h2>
+    <div class="content">
+      <button id="btnPlay">▶ Play</button>
+      <button id="btnStep">Step</button>
+      <button id="btnReset">Reset</button>
+    </div>
+  </section>
+
+  <!-- Call Stack section -->
+  <section class="card stack-section">
+    <h2>Call Stack</h2>
+    <div class="content"><div id="stack" class="stack"></div></div>
+  </section>
+
+  <!-- Graph section -->
+  <section class="card graph-section">
+    <h2>Graph</h2>
+    <div class="content">
+      <div class="graph-wrap"><svg id="graph" viewBox="0 0 800 500"></svg></div>
+    </div>
+  </section>
+
+  <!-- Code section -->
+  <section class="card code-section">
+    <h2>Pseudocode</h2>
+    <div class="content">
+<pre class="code"><code id="code">
+<span class="ln" data-ln="1">function DFS(node, visited, adjList):</span>
+<span class="ln" data-ln="2">    visited[node] = true</span>
+<span class="ln" data-ln="3">    print(node)</span>
+<span class="ln" data-ln="4"></span>
+<span class="ln" data-ln="5">    for each neighbor in adjList[node]:</span>
+<span class="ln" data-ln="6">        if not visited[neighbor]:</span>
+<span class="ln" data-ln="7">            DFS(neighbor, visited, adjList)</span>
+<span class="ln" data-ln="8"></span>
+<span class="ln" data-ln="9">function runDFS(V, adjList, start):</span>
+<span class="ln" data-ln="10">    visited = array[V] initialized to false</span>
+<span class="ln" data-ln="11">    DFS(start, visited, adjList)</span>
+</code></pre>
+    </div>
+  </section>
+</div>
+
+<script>
+const G = {
+  adj:{
+    A:['B','C'],
+    B:['D','E'],
+    C:['F'],
+    D:['G'],
+    E:['H'],
+    F:['I'],
+    G:['J'],
+    H:[], I:[], J:[]
+  },
+  pos:{
+    A:[120,80], B:[260,90], C:[220,200],
+    D:[400,80], E:[380,200], F:[260,310],
+    G:[540,80], H:[500,260], I:[360,360],
+    J:[680,120]
+  }
+};
+const state={start:'A',steps:[],stepIndex:0,visited:new Set(),stack:[],playing:false};
+const svg=document.getElementById('graph');
+const stackEl=document.getElementById('stack');
+const btnPlay=document.getElementById('btnPlay'), btnStep=document.getElementById('btnStep'), btnReset=document.getElementById('btnReset');
+
+function edgeKey(u,v){return [u,v].sort().join('-');}
+function clear(el){while(el.firstChild) el.removeChild(el.firstChild);}
+function setHighlight(lines){document.querySelectorAll('.ln').forEach(l=>l.classList.remove('hl'));lines.forEach(n=>{const el=document.querySelector(`.ln[data-ln="${n}"]`);if(el)el.classList.add('hl');});}
+
+function buildGraph(){
+  clear(svg);
+  const added=new Set();
+  Object.keys(G.adj).forEach(u=>{
+    G.adj[u].forEach(v=>{
+      const k=edgeKey(u,v); if(added.has(k)) return; added.add(k);
+      const [x1,y1]=G.pos[u],[x2,y2]=G.pos[v];
+      const e=document.createElementNS('http://www.w3.org/2000/svg','line');
+      e.setAttribute('x1',x1);e.setAttribute('y1',y1);e.setAttribute('x2',x2);e.setAttribute('y2',y2);e.classList.add('edge');
+      svg.appendChild(e);
+    });
+  });
+  Object.keys(G.adj).forEach(id=>{
+    const [x,y]=G.pos[id];
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.classList.add('node'); g.setAttribute('data-id',id);
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',18);
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text'); t.setAttribute('x',x);t.setAttribute('y',y+5);t.setAttribute('text-anchor','middle');t.textContent=id;
+    g.appendChild(c);g.appendChild(t);svg.appendChild(g);
+  });
+}
+
+function render(){
+  document.querySelectorAll('.node').forEach(n=>{
+    const id=n.getAttribute('data-id');
+    n.classList.remove('start','current','visited');
+    if(id===state.start) n.classList.add('start');
+    if(state.visited.has(id)) n.classList.add('visited');
+    if(state.stack[state.stack.length-1]===id) n.classList.add('current');
+  });
+  clear(stackEl);
+  state.stack.forEach(f=>{
+    const d=document.createElement('div'); d.className='frame'; d.textContent=f; stackEl.appendChild(d);
+  });
+}
+
+function buildSteps(){
+  const steps=[];
+  const visited=new Set();
+  function dfs(u){
+    steps.push({type:'enter',node:u,hl:[1]});
+    steps.push({type:'markVisited',node:u,hl:[2,3]});
+    visited.add(u);
+    for(const nb of G.adj[u]){
+      steps.push({type:'forNeighbor',node:u,nb,hl:[5]});
+      if(!visited.has(nb)){
+        steps.push({type:'ifNotVisited',nb,hl:[6]});
+        dfs(nb);
+      }
+    }
+    steps.push({type:'exit',node:u,hl:[7]});
+  }
+  steps.push({type:'init',hl:[9,10]});
+  dfs(state.start);
+  state.steps=steps;
+}
+
+function applyStep(s){
+  switch(s.type){
+    case 'init': state.visited.clear();state.stack=[];break;
+    case 'enter': state.stack.push(s.node);break;
+    case 'markVisited': state.visited.add(s.node);break;
+    case 'forNeighbor': break;
+    case 'ifNotVisited': break;
+    case 'exit': state.stack.pop();break;
+  }
+  setHighlight(s.hl||[]);render();
+}
+
+function stepOnce(){
+  if(state.stepIndex>=state.steps.length){pause();return;}
+  const s=state.steps[state.stepIndex++];applyStep(s);
+}
+let timer=null;
+function play(){state.playing=true;btnPlay.textContent='⏸ Pause';tick();}
+function pause(){state.playing=false;btnPlay.textContent='▶ Play';if(timer)clearTimeout(timer);}
+function tick(){if(!state.playing)return;stepOnce();timer=setTimeout(tick,600);}
+
+btnPlay.onclick=()=>{state.playing?pause():play();};
+btnStep.onclick=()=>{pause();stepOnce();};
+btnReset.onclick=()=>{pause();state.stepIndex=0;buildSteps();render();setHighlight([9,10]);};
+
+function init(){buildGraph();buildSteps();render();setHighlight([9,10]);}
+init();
+</script>
+</body>
+</html>
