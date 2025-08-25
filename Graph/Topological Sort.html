@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Topological Sort Visualizer (DFS & Kahn)</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow: exploring/frontier */
+    --new:#8ae9c1;  /* green: finished/ordered */
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1000px 600px at 80% -10%, #1a1f3a 0%, #0f1220 50%) no-repeat, var(--bg);
+    color: var(--text);
+  }
+
+  header{
+    padding: 24px clamp(16px, 4vw, 32px);
+    display:grid; grid-template-columns: 1fr auto; gap:16px; align-items:center;
+  }
+  .title h1{ margin:0; font-size: clamp(22px, 2.2vw, 30px); letter-spacing:.3px; }
+  .subtitle{ color: var(--muted); margin-top:6px; font-size:.95rem; }
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button, select{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color: var(--text); border:1px solid #222842; border-radius:10px;
+    padding:10px 12px; box-shadow: var(--shadow); font-weight:600; cursor:pointer;
+  }
+  button:hover{ transform: translateY(-1px); border-color:#2c3256; }
+  button[aria-pressed="true"]{ outline:2px solid var(--accent); }
+  .chip{
+    background: var(--chip); color: var(--text); padding:4px 8px; border-radius: 999px; border:1px solid #2a2f58; font-size:12px;
+  }
+
+  main{
+    padding: 0 clamp(16px, 4vw, 32px) 32px;
+    display:grid; grid-template-columns: 1.2fr .9fr; gap: clamp(14px, 2vw, 20px);
+  }
+  @media (max-width: 980px){ main{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid #20264a; border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: clip;
+  }
+  .panel header{
+    padding: 12px 16px; background:#141832; border-bottom:1px solid #1f2546;
+    display:flex; justify-content: space-between; align-items:center;
+  }
+  .panel header h2{ margin:0; font-size:16px; letter-spacing:.5px; }
+  .panel .content{ padding:14px; }
+
+  /* Graph */
+  .graph-wrap{
+    position: relative; aspect-ratio: 16/10; width: 100%;
+    background:
+      radial-gradient(600px 200px at 70% -20%, rgba(108,243,255,.10), transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+    border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius);
+  }
+  svg{ width:100%; height:100%; display:block; }
+  .edge{ stroke:#515a93; stroke-width:3; opacity:.9; transition: all var(--speed); }
+  .edge.active{ stroke: var(--pair); stroke-width:4.5; }
+  .edge.dim{ opacity:.4; }
+  .node{ fill:#1d2350; stroke:#2e3a7d; stroke-width:2; transition: filter var(--speed), transform var(--speed); }
+  .node text{ fill: var(--text); font-weight:700; font-size:12px; user-select:none; }
+  .node circle{ r:16; }
+  .node.visiting circle{ stroke: var(--pair); fill:#232a5e; }
+  .node.done circle{ stroke: var(--new); fill:#203a3a; }
+  .node.queue circle{ stroke: var(--pair); stroke-dasharray: 4 3; }
+  .node:hover{ filter: drop-shadow(0 0 6px rgba(108,243,255,.35)); }
+
+  /* Right panel lists */
+  .grid{ display:grid; gap:10px; }
+  .card{
+    background: var(--slot); border:1px solid #2a2f58; border-radius: 12px; padding:10px;
+  }
+  .row{ display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+  .pill{
+    display:inline-block; padding:6px 10px; border-radius:999px; background: var(--chip); border:1px solid #2a2f58; font-weight:700;
+  }
+  .list{ display:flex; gap:8px; flex-wrap:wrap; }
+  .item{
+    padding:8px 10px; border-radius:10px; background: var(--slot); border:1px solid #2a2f58; font-weight:700;
+  }
+  .item.active{ outline:2px solid var(--pair); }
+  .item.done{ outline:2px solid var(--new); background:#1f2c2a; }
+
+  .explain{
+    background:#101433; border-top:1px solid #1f2546; padding:12px 14px;
+  }
+  .explain b{ color: var(--accent); }
+  .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas; background:#0e1230; border:1px solid #1c2250; padding:2px 6px; border-radius:8px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>🧭 Topological Sort (DFS &amp; Kahn)</h1>
+      <div class="subtitle">
+        Order vertices so every edge <b>u→v</b> puts <b>u</b> before <b>v</b>. Works only on DAGs.
+        Time: <span class="chip">O(V + E)</span>
+      </div>
+    </div>
+    <div class="controls" role="group" aria-label="Controls">
+      <label class="chip" for="algo">Algorithm</label>
+      <select id="algo" aria-label="Choose algorithm">
+        <option value="DFS" selected>DFS (postorder)</option>
+        <option value="KAHN">Kahn (BFS)</option>
+      </select>
+      <button id="btn-play" aria-label="Play/Pause (Space)">▶ Play</button>
+      <button id="btn-step" aria-label="Step (N)">Step ▷</button>
+      <button id="btn-reset" aria-label="Reset (R)">Reset ↺</button>
+      <button id="btn-shuffle" aria-label="Shuffle DAG (S)">Shuffle DAG 🎲</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: Graph -->
+    <section class="panel">
+      <header>
+        <h2>Graph (DAG)</h2>
+        <div class="chip">No cycles guaranteed</div>
+      </header>
+      <div class="content graph-wrap">
+        <svg id="graph" viewBox="0 0 800 520" aria-labelledby="graph-title" role="img">
+          <title id="graph-title">Topological Sort Graph</title>
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L10,4 L0,8 z" fill="#7f88c9"></path>
+            </marker>
+            <marker id="arrow-active" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L10,4 L0,8 z" fill="#ffd166"></path>
+            </marker>
+          </defs>
+          <g id="edges"></g>
+          <g id="nodes"></g>
+        </svg>
+      </div>
+      <div class="explain" id="explain">
+        Choose <b>DFS</b> or <b>Kahn</b>. Press <span class="kbd">Play</span> or <span class="kbd">Step</span>.
+      </div>
+    </section>
+
+    <!-- Right: Data structures -->
+    <section class="panel">
+      <header>
+        <h2>State</h2>
+        <div class="chip" id="dag-ok">DAG ✅</div>
+      </header>
+      <div class="content grid" id="state-panel">
+        <!-- Filled dynamically per algorithm -->
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+/* -----------------------------
+   Elements & Global State
+------------------------------ */
+const svg = document.getElementById('graph');
+const gEdges = document.getElementById('edges');
+const gNodes = document.getElementById('nodes');
+const explainEl = document.getElementById('explain');
+const statePanel = document.getElementById('state-panel');
+const dagOk = document.getElementById('dag-ok');
+
+const BTN = {
+  play: document.getElementById('btn-play'),
+  step: document.getElementById('btn-step'),
+  reset: document.getElementById('btn-reset'),
+  shuffle: document.getElementById('btn-shuffle'),
+};
+const algoSelect = document.getElementById('algo');
+
+const STATE = {
+  n: 8,
+  nodes: [],
+  edges: [],          // {id,u,v}
+  adj: [],            // adjacency: for u -> [{to, edgeId}]
+  indeg: [],          // for Kahn
+  order: [],          // result
+  running: false,
+  timer: null,
+  algo: 'DFS',
+  // DFS-specific
+  vis: [],            // 0=unvisited,1=visiting,2=done
+  callStack: [],      // [{node, idx}]
+  finishStack: [],
+
+  // Kahn-specific
+  queue: [],          // zero-in-degree (sorted)
+  processed: 0,
+  seeded: false,
+};
+
+/* -----------------------------
+   Helpers
+------------------------------ */
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+function defaultNodes(n=8){
+  const cx = 400, cy = 250, R = 190;
+  return Array.from({length:n}, (_,i)=>{
+    const ang = (i / n) * Math.PI*2 - Math.PI/2;
+    return { id:i, x: Math.round(cx + R*Math.cos(ang)), y: Math.round(cy + R*Math.sin(ang)) };
+  });
+}
+
+function shuffle(arr){
+  for (let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* Build a random DAG by choosing a random topo order and
+   only adding edges forward in that order (no cycles). */
+function makeRandomDAG(n){
+  const order = shuffle([...Array(n).keys()]);
+  const pos = new Map(order.map((v, i) => [v, i]));
+  const key = (u,v)=>`${u}-${v}`;
+  const seen = new Set();
+  const edges = [];
+
+  // ensure basic connectivity along the order (a loose chain)
+  for(let i=0;i<n-1;i++){
+    const u = order[i], v = order[i+1];
+    const k = key(u,v);
+    if(!seen.has(k)){ seen.add(k); edges.push({id:edges.length,u,v}); }
+  }
+
+  // add extra forward edges with some probability
+  for(let i=0;i<n;i++){
+    for(let j=i+1;j<n;j++){
+      if (Math.random() < 0.3){ // ~30% density
+        const u = order[i], v = order[j];
+        const k = key(u,v);
+        if(!seen.has(k)){ seen.add(k); edges.push({id:edges.length,u,v}); }
+      }
+    }
+  }
+
+  // adjacency
+  const adj = Array.from({length:n}, ()=>[]);
+  edges.forEach(e=>{
+    adj[e.u].push({to:e.v, edgeId:e.id});
+  });
+
+  // indegree
+  const indeg = Array(n).fill(0);
+  edges.forEach(e=> indeg[e.v]++);
+
+  return {edges, adj, indeg};
+}
+
+function edgeKey(u,v){ return `${u}-${v}`; }
+
+function shorten(a,b, pad=18){
+  // shorten line so it doesn't cover node circles
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx,dy);
+  if (len === 0) return {x1:a.x, y1:a.y, x2:b.x, y2:b.y};
+  const ux = dx/len, uy = dy/len;
+  return {
+    x1: a.x + ux*pad,
+    y1: a.y + uy*pad,
+    x2: b.x - ux*pad,
+    y2: b.y - uy*pad,
+  };
+}
+
+/* -----------------------------
+   Rendering: Graph
+------------------------------ */
+function renderNodes(){
+  gNodes.innerHTML = '';
+  STATE.nodes.forEach(n=>{
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class', 'node');
+    if (STATE.algo === 'DFS' && STATE.vis[n.id] === 1) g.classList.add('visiting');
+    if (STATE.algo === 'DFS' && STATE.vis[n.id] === 2) g.classList.add('done');
+    if (STATE.algo === 'KAHN' && STATE.order.includes(n.id)) g.classList.add('done');
+    if (STATE.algo === 'KAHN' && STATE.queue.includes(n.id)) g.classList.add('queue');
+
+    g.setAttribute('transform', `translate(${n.x},${n.y})`);
+    g.innerHTML = `<circle></circle><text text-anchor="middle" dy="4">${n.id}</text>`;
+    gNodes.appendChild(g);
+  });
+}
+
+function renderEdges(){
+  gEdges.innerHTML = '';
+  STATE.edges.forEach(e=>{
+    const a = STATE.nodes[e.u], b = STATE.nodes[e.v];
+    const p = shorten(a,b, 20);
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', p.x1); line.setAttribute('y1', p.y1);
+    line.setAttribute('x2', p.x2); line.setAttribute('y2', p.y2);
+    line.setAttribute('class', 'edge');
+    line.setAttribute('marker-end', 'url(#arrow)');
+    line.dataset.key = edgeKey(e.u,e.v);
+    gEdges.appendChild(line);
+  });
+}
+
+function setEdgeActive(u,v, on=true){
+  const key = edgeKey(u,v);
+  const el = [...gEdges.querySelectorAll('.edge')].find(x=>x.dataset.key===key);
+  if(!el) return;
+  if(on){
+    el.classList.add('active');
+    el.setAttribute('marker-end','url(#arrow-active)');
+  } else {
+    el.classList.remove('active');
+    el.setAttribute('marker-end','url(#arrow)');
+  }
+}
+
+/* -----------------------------
+   Rendering: State panel
+------------------------------ */
+function renderStatePanel(){
+  statePanel.innerHTML = '';
+  if (STATE.algo === 'DFS'){
+    // Call Stack
+    const callCard = document.createElement('div');
+    callCard.className = 'card';
+    callCard.innerHTML = `<div class="row"><b>Call Stack (DFS)</b><span class="pill">${STATE.callStack.length}</span></div>`;
+    const callList = document.createElement('div'); callList.className = 'list';
+    STATE.callStack.forEach((f, i)=>{
+      const d = document.createElement('div');
+      d.className = 'item' + (i===STATE.callStack.length-1 ? ' active' : '');
+      d.textContent = `${f.node} @ idx ${f.idx}`;
+      callList.appendChild(d);
+    });
+    callCard.appendChild(callList);
+    statePanel.appendChild(callCard);
+
+    // Finish Stack (push order)
+    const finCard = document.createElement('div');
+    finCard.className = 'card';
+    finCard.innerHTML = `<div class="row"><b>Finish Stack</b><span class="pill">${STATE.finishStack.length}</span></div>`;
+    const finList = document.createElement('div'); finList.className = 'list';
+    STATE.finishStack.forEach(v=>{
+      const d = document.createElement('div'); d.className='item'; d.textContent = v; finList.appendChild(d);
+    });
+    finCard.appendChild(finList);
+    statePanel.appendChild(finCard);
+
+    // Topological Order (reverse of finish)
+    const ordCard = document.createElement('div');
+    ordCard.className = 'card';
+    ordCard.innerHTML = `<div class="row"><b>Topological Order</b><span class="pill">${STATE.order.length}/${STATE.n}</span></div>`;
+    const ordList = document.createElement('div'); ordList.className = 'list';
+    STATE.order.forEach(v=>{
+      const d = document.createElement('div'); d.className='item done'; d.textContent = v; ordList.appendChild(d);
+    });
+    ordCard.appendChild(ordList);
+    statePanel.appendChild(ordCard);
+
+  } else {
+    // In-degree table
+    const degCard = document.createElement('div');
+    degCard.className='card';
+    degCard.innerHTML = `<div class="row"><b>In-Degree</b><span class="pill">∑ ${STATE.indeg.reduce((a,b)=>a+b,0)}</span></div>`;
+    const grid = document.createElement('div'); grid.className='list';
+    for(let i=0;i<STATE.n;i++){
+      const d = document.createElement('div');
+      const isZero = STATE.indeg[i]===0 && !STATE.order.includes(i);
+      d.className = 'item' + (isZero ? ' active' : '');
+      d.textContent = `${i}: ${STATE.indeg[i]}`;
+      grid.appendChild(d);
+    }
+    degCard.appendChild(grid);
+    statePanel.appendChild(degCard);
+
+    // Zero-in Queue
+    const qCard = document.createElement('div');
+    qCard.className='card';
+    qCard.innerHTML = `<div class="row"><b>Zero-In Queue</b><span class="pill">${STATE.queue.length}</span></div>`;
+    const qList = document.createElement('div'); qList.className='list';
+    STATE.queue.forEach((v,idx)=>{
+      const d = document.createElement('div'); d.className='item' + (idx===0 ? ' active' : ''); d.textContent = v; qList.appendChild(d);
+    });
+    qCard.appendChild(qList);
+    statePanel.appendChild(qCard);
+
+    // Topological Order
+    const ordCard = document.createElement('div');
+    ordCard.className = 'card';
+    ordCard.innerHTML = `<div class="row"><b>Topological Order</b><span class="pill">${STATE.order.length}/${STATE.n}</span></div>`;
+    const ordList = document.createElement('div'); ordList.className = 'list';
+    STATE.order.forEach(v=>{
+      const d = document.createElement('div'); d.className='item done'; d.textContent = v; ordList.appendChild(d);
+    });
+    ordCard.appendChild(ordList);
+    statePanel.appendChild(ordCard);
+  }
+}
+
+/* -----------------------------
+   Explain helper
+------------------------------ */
+function explain(html){ explainEl.innerHTML = html; }
+
+/* -----------------------------
+   Initialization / Reset
+------------------------------ */
+function init(shuffle=false){
+  const n = STATE.n;
+  STATE.nodes = defaultNodes(n);
+  const {edges, adj, indeg} = makeRandomDAG(n);
+  STATE.edges = edges;
+  STATE.adj = adj;
+  STATE.indeg = indeg;
+  STATE.order = [];
+  STATE.running = false;
+  clearTimeout(STATE.timer); STATE.timer=null;
+  BTN.play.textContent = '▶ Play'; BTN.play.setAttribute('aria-pressed','false');
+  dagOk.textContent = 'DAG ✅';
+
+  // DFS state
+  STATE.vis = Array(n).fill(0);
+  STATE.callStack = [];
+  STATE.finishStack = [];
+
+  // Kahn state
+  STATE.queue = [];
+  STATE.processed = 0;
+  STATE.seeded = false;
+
+  renderEdges(); renderNodes(); renderStatePanel();
+  STATE.edges.forEach(e=> setEdgeActive(e.u,e.v, false));
+  if (STATE.algo === 'DFS'){
+    explain(`DFS: recursively explore neighbors. On return, <b>push</b> node to the finish stack. Reverse it to get the <b>topological order</b>.`);
+  } else {
+    explain(`Kahn: compute <b>in-degree</b>, push all zeros to a queue. Repeatedly pop, append to order, and decrement neighbors’ in-degrees.`);
+  }
+}
+
+/* -----------------------------
+   DFS (explicit stack)
+------------------------------ */
+function dfsSeedIfNeeded(){
+  if (STATE.callStack.length) return;
+  // find next unvisited
+  const next = STATE.vis.findIndex(x=>x===0);
+  if (next === -1) return; // done
+  STATE.callStack.push({node: next, idx: 0});
+  STATE.vis[next] = 1; // visiting
+  renderNodes(); renderStatePanel();
+  explain(`Start DFS at <b>${next}</b>. Mark visiting and iterate its neighbors.`);
+}
+
+function dfsStep(){
+  // seed if empty
+  if (STATE.callStack.length === 0){
+    const remaining = STATE.vis.findIndex(x=>x===0);
+    if (remaining === -1){
+      explain(`<b>Done.</b> Reverse of finish stack gives the topological order (shown below).`);
+      return false;
+    }
+    dfsSeedIfNeeded();
+    return true;
+  }
+
+  const frame = STATE.callStack[STATE.callStack.length-1];
+  const u = frame.node;
+  const list = STATE.adj[u];
+
+  if (frame.idx < list.length){
+    // consider next neighbor
+    const {to:v} = list[frame.idx++];
+    setEdgeActive(u, v, true);
+    explain(`From <b>${u}</b> consider neighbor <b>${v}</b>.${STATE.vis[v] ? ' Already visited/visiting—skip.' : ' Recurse on it.'}`);
+    if (STATE.vis[v] === 0){
+      // push recurse frame
+      STATE.callStack.push({node:v, idx:0});
+      STATE.vis[v] = 1;
+    }
+    renderNodes(); renderStatePanel();
+    // turn off highlight shortly for readability
+    setTimeout(()=> setEdgeActive(u,v,false), 280);
+    return true;
+  } else {
+    // all neighbors processed → finish u
+    STATE.callStack.pop();
+    STATE.vis[u] = 2;
+    STATE.finishStack.push(u);
+    // Update topological order as reverse of finish (prepend)
+    STATE.order.unshift(u);
+
+    renderNodes(); renderStatePanel();
+    explain(`Finish <b>${u}</b>: push onto finish stack and place at the <b>front</b> of the topological order.`);
+    return true;
+  }
+}
+
+/* -----------------------------
+   Kahn (BFS)
+------------------------------ */
+function kahnSeedIfNeeded(){
+  if (STATE.seeded) return;
+  STATE.seeded = true;
+  // initial zero in-degree nodes
+  for(let i=0;i<STATE.n;i++){
+    if (STATE.indeg[i] === 0) STATE.queue.push(i);
+  }
+  STATE.queue.sort((a,b)=>a-b);
+  renderNodes(); renderStatePanel();
+  explain(`Initialize queue with all nodes of in-degree 0: [${STATE.queue.join(', ')}].`);
+}
+
+function kahnStep(){
+  kahnSeedIfNeeded();
+  if (STATE.queue.length === 0){
+    if (STATE.order.length === STATE.n){
+      explain(`<b>Done.</b> Queue empty and all nodes were processed. Topological order shown below.`);
+    } else {
+      explain(`<b>Cycle detected.</b> (Shouldn’t happen here: generator ensures a DAG.)`);
+      dagOk.textContent = 'Cycle detected ⚠️';
+    }
+    return false;
+  }
+
+  // pop smallest for determinism
+  const u = STATE.queue.shift();
+  STATE.order.push(u);
+  renderNodes(); renderStatePanel();
+  explain(`Pop <b>${u}</b> from queue, append to order. Decrement in-degree of its outgoing neighbors.`);
+
+  // process neighbors
+  for(const {to:v} of STATE.adj[u]){
+    setEdgeActive(u, v, true);
+    STATE.indeg[v]--;
+    // if zero and not already queued/processed, push
+    if (STATE.indeg[v] === 0 && !STATE.order.includes(v) && !STATE.queue.includes(v)){
+      STATE.queue.push(v);
+      STATE.queue.sort((a,b)=>a-b);
+    }
+    renderStatePanel();
+    // little highlight delay for clarity
+    setTimeout(()=> setEdgeActive(u,v,false), 250);
+  }
+
+  renderNodes(); renderStatePanel();
+  return true;
+}
+
+/* -----------------------------
+   Step / Play controller
+------------------------------ */
+function step(){
+  if (STATE.algo === 'DFS'){
+    return dfsStep();
+  } else {
+    return kahnStep();
+  }
+}
+
+function play(){
+  if (STATE.running){
+    STATE.running=false; BTN.play.textContent='▶ Play'; BTN.play.setAttribute('aria-pressed','false');
+    clearTimeout(STATE.timer); STATE.timer=null; return;
+  }
+  STATE.running=true; BTN.play.textContent='⏸ Pause'; BTN.play.setAttribute('aria-pressed','true');
+
+  const tick = ()=>{
+    if (!STATE.running) return;
+    const more = step();
+    if (!more){ STATE.running=false; BTN.play.textContent='▶ Play'; BTN.play.setAttribute('aria-pressed','false'); return; }
+    STATE.timer = setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+/* -----------------------------
+   Wire up controls
+------------------------------ */
+BTN.play.addEventListener('click', play);
+BTN.step.addEventListener('click', ()=>{
+  if (STATE.running) play();
+  if (STATE.algo === 'DFS') dfsSeedIfNeeded();
+  if (STATE.algo === 'KAHN') kahnSeedIfNeeded();
+  step();
+});
+BTN.reset.addEventListener('click', ()=> init(false));
+BTN.shuffle.addEventListener('click', ()=> init(true));
+algoSelect.addEventListener('change', (e)=>{
+  STATE.algo = e.target.value;
+  init(false);
+});
+window.addEventListener('keydown', (e)=>{
+  if (e.key === ' '){ e.preventDefault(); play(); }
+  if (e.key.toLowerCase() === 'n'){ BTN.step.click(); }
+  if (e.key.toLowerCase() === 'r'){ BTN.reset.click(); }
+  if (e.key.toLowerCase() === 's'){ BTN.shuffle.click(); }
+});
+
+/* -----------------------------
+   Bootstrap
+------------------------------ */
+init(false);
+
+/* -----------------------------
+   Reference (DFS-based)
+------------------------------ */
+/*
+function DFS(node, visited, stack, adj):
+    visited[node] = true
+    for each neighbor in adj[node]:
+        if not visited[neighbor]:
+            DFS(neighbor, visited, stack, adj)
+    push node onto stack
+
+function topologicalSortDFS(V, adj):
+    visited = array[V] initialized to false
+    stack = empty stack
+    for i in range(0, V):
+        if not visited[i]:
+            DFS(i, visited, stack, adj)
+    result = reverse(stack)
+    return result
+*/
+</script>
+</body>
+</html>
