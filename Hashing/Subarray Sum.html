@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Subarray Sum (Prefix Sum + Hashing) Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --speed:300ms;
+    --pair:#ffd166; /* considering */
+    --new:#8ae9c1;  /* found/ok */
+    --bad:#b05a7a;  /* no / reject */
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    margin:0; color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1000px 600px at 80% -10%, #1a1f3a 0%, #0f1220 50%) no-repeat, var(--bg);
+  }
+
+  header{
+    padding: 24px clamp(16px, 4vw, 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+  .title h1{ margin:0; font-size: clamp(24px, 4vw, 32px); }
+  .subtitle{ color: var(--muted); font-size: clamp(0.9rem, 2.5vw, 1rem); line-height: 1.4; }
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; }
+  input, button{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color: var(--text); border:1px solid #222842; border-radius:10px;
+    padding:10px 12px; font-weight:600; box-shadow:var(--shadow);
+  }
+  input[type="text"]{ min-width: 280px; max-width: 100%; }
+  input[type="number"]{ width: 96px; }
+  @media (max-width: 768px){
+    input[type="text"]{ min-width: 240px; }
+  }
+  @media (max-width: 480px){
+    input[type="text"]{ min-width: 200px; font-size: 16px; }
+    input[type="number"]{ width: 80px; font-size: 16px; }
+    input, button{ padding: 12px 14px; min-height: 44px; }
+    .controls{ gap:8px; }
+  }
+  button:hover{ transform: translateY(-1px); border-color:#2c3256; }
+  button[aria-pressed="true"]{ outline: 2px solid var(--accent); }
+  .chip{
+    background: var(--chip); color: var(--text);
+    padding:4px 8px; border-radius:999px; border:1px solid #2a2f58; font-size:12px; font-weight:700;
+  }
+
+  main{
+    padding: 0 clamp(16px, 4vw, 32px) 32px;
+    display:grid; grid-template-columns: 1.25fr .9fr; gap: clamp(14px, 2vw, 20px);
+  }
+  @media (max-width: 980px){ main{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid #20264a; border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: clip;
+  }
+  .panel header{
+    padding: 12px 16px; background:#141832; border-bottom: 1px solid #1f2546;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .panel header h2{ margin:0; font-size:16px; }
+  .panel .content{ padding: 14px; }
+
+  /* Array bar */
+  .array{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .elem{
+    position:relative;
+    padding:14px 16px; border-radius:12px;
+    background: var(--slot); border:1px solid #2a2f58; font-weight:800; font-size:1.05rem;
+    transition: all var(--speed);
+  }
+  .elem.active{ outline:2px solid var(--pair); }
+  .elem.in-range{ outline:2px solid var(--new); background:#1f2c2a; }
+  .elem.dim{ opacity:.6; }
+
+  .under{
+    position:absolute; left:6px; right:6px; bottom:-6px; height:6px; border-radius:3px; background:transparent;
+  }
+  .elem.in-range .under{ background: var(--new); box-shadow: 0 0 10px rgba(138,233,193,.6); }
+  .elem.active .under{ background: var(--pair); }
+
+  /* Prefix + hash set */
+  .grid{ display:grid; gap:10px; }
+  .row{ display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+  .pill{ display:inline-block; padding:6px 10px; border-radius:999px; background: var(--chip); border:1px solid #2a2f58; font-weight:700; }
+  .list{ display:flex; gap:8px; flex-wrap:wrap; }
+  .item{
+    padding:8px 10px; border-radius:10px; background: var(--slot); border:1px solid #2a2f58; font-weight:700;
+  }
+  .item.new{ outline:2px solid var(--pair); }
+  .item.hit{ outline:2px solid var(--new); background:#1f2c2a; }
+
+  .explain{
+    background:#101433; border-top:1px solid #1f2546; padding:12px 14px;
+  }
+  .explain b{ color: var(--accent); }
+  .kbd{ font-family: ui-monospace,SFMono-Regular,Menlo,Consolas; background:#0e1230; border:1px solid #1c2250; padding:2px 6px; border-radius:8px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>🎯 Subarray Sum (Prefix Sum + Hashing)</h1>
+    </div>
+    <div class="subtitle">
+      Check if an array has a subarray summing to <b>target</b>. Time: <span class="chip">O(n)</span>, Space: <span class="chip">O(n)</span>
+    </div>
+    <div class="controls">
+      <input id="arr" type="text" value="3,4,-7,1,3,3,1,-4" />
+      <label class="chip" for="target">Target</label>
+      <input id="target" type="number" value="7" />
+      <button id="btn-set">Set</button>
+      <button id="btn-play">▶ Play</button>
+      <button id="btn-step">Step ▷</button>
+      <button id="btn-reset">Reset ↺</button>
+      <button id="btn-rand">Random 🎲</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: Array & explanation -->
+    <section class="panel">
+      <header>
+        <h2>Array</h2>
+        <div class="pill" id="status">Status: —</div>
+      </header>
+      <div class="content">
+        <div id="array" class="array"></div>
+      </div>
+      <div class="explain" id="explain">
+        We maintain <b>prefixSum</b> and a hash set of seen prefix sums.  
+        At index <code>i</code> with value <code>a[i]</code>:
+        check if <code>prefixSum == target</code> or <code>(prefixSum - target)</code> is in the set.
+      </div>
+    </section>
+
+    <!-- Right: Prefix sums & Hash set -->
+    <section class="panel">
+      <header>
+        <h2>State</h2>
+        <div class="pill" id="prefix-pill">prefixSum: 0</div>
+      </header>
+      <div class="content grid">
+        <div class="row"><b>Seen Prefix Sums (hash set)</b><span class="pill" id="set-size">size: 0</span></div>
+        <div id="set" class="list"></div>
+
+        <div class="row"><b>Prefix Trace</b><span class="pill" id="step-pill">i: -1</span></div>
+        <div id="trace" class="list"></div>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+/* Elements */
+const arrInput = document.getElementById('arr');
+const targetInput = document.getElementById('target');
+const btnSet = document.getElementById('btn-set');
+const btnPlay = document.getElementById('btn-play');
+const btnStep = document.getElementById('btn-step');
+const btnReset = document.getElementById('btn-reset');
+const btnRand = document.getElementById('btn-rand');
+
+const arrayEl = document.getElementById('array');
+const explainEl = document.getElementById('explain');
+const prefixPill = document.getElementById('prefix-pill');
+const setEl = document.getElementById('set');
+const setSize = document.getElementById('set-size');
+const traceEl = document.getElementById('trace');
+const stepPill = document.getElementById('step-pill');
+const statusPill = document.getElementById('status');
+
+/* State */
+const STATE = {
+  arr: [],
+  target: 0,
+  i: 0,
+  prefix: 0,
+  set: new Set(),            // seen prefix sums
+  firstIndex: new Map(),     // prefix -> first index (for range reconstruction)
+  running: false,
+  timer: null,
+  found: null,               // {l, r} inclusive
+};
+
+function parseArray(str){
+  return str.split(',').map(s => s.trim()).filter(s => s.length>0).map(Number).filter(v => !Number.isNaN(v));
+}
+
+function renderArray(){
+  arrayEl.innerHTML = '';
+  STATE.arr.forEach((v, idx) => {
+    const div = document.createElement('div');
+    let cls = 'elem';
+    if (STATE.found && idx >= STATE.found.l && idx <= STATE.found.r) cls += ' in-range';
+    if (idx === STATE.i) cls += ' active';
+    div.className = cls;
+    div.innerHTML = `${v}<div class="under"></div>`;
+    arrayEl.appendChild(div);
+  });
+}
+
+function renderSet(newKey=null, hitKey=null){
+  setEl.innerHTML = '';
+  [...STATE.set].sort((a,b)=>a-b).forEach(val=>{
+    const d = document.createElement('div');
+    let cls = 'item';
+    if (val === newKey) cls += ' new';
+    if (val === hitKey) cls += ' hit';
+    d.className = cls;
+    d.textContent = val;
+    setEl.appendChild(d);
+  });
+  setSize.textContent = `size: ${STATE.set.size}`;
+}
+
+function renderTrace(){
+  traceEl.innerHTML = '';
+  STATE.arr.slice(0, Math.max(0, STATE.i)).reduce((acc,cur)=>{ acc+=cur; const d=document.createElement('div'); d.className='item'; d.textContent=acc; traceEl.appendChild(d); return acc; }, 0);
+  stepPill.textContent = `i: ${STATE.i-1}`;
+}
+
+function explain(html){ explainEl.innerHTML = html; }
+
+function setStatus(text, good=null){
+  statusPill.textContent = `Status: ${text}`;
+  statusPill.style.background = good===true ? 'linear-gradient(180deg,#1e3a35,#172a27)' :
+                                 good===false ? 'linear-gradient(180deg,#3a1e2a,#2a1720)' :
+                                 '';
+  statusPill.style.borderColor = good===true ? '#1f4a3f' : good===false ? '#4a1f2d' : '#2a2f58';
+}
+
+/* Core: one algorithm step */
+function step(){
+  if (STATE.found){ explain(`<b>Done.</b> Subarray found from index <b>${STATE.found.l}</b> to <b>${STATE.found.r}</b>.`); return false; }
+  if (STATE.i >= STATE.arr.length){
+    setStatus('No subarray equals target', false);
+    explain(`<b>Done.</b> Reached end. No subarray sums to <b>${STATE.target}</b>.`);
+    return false;
+  }
+
+  const val = STATE.arr[STATE.i];
+  const prevPrefix = STATE.prefix;
+  STATE.prefix += val;
+
+  // Case A: prefix equals target (subarray from 0..i)
+  if (STATE.prefix === STATE.target){
+    STATE.found = { l: 0, r: STATE.i };
+    renderArray(); renderSet(null, null); renderTrace();
+    prefixPill.textContent = `prefixSum: ${STATE.prefix}`;
+    setStatus(`Found subarray [0..${STATE.i}]`, true);
+    explain(`At i=${STATE.i}: prefixSum=${STATE.prefix}. Since prefixSum == target, subarray [0..${STATE.i}] sums to target.`);
+    STATE.i++;  // advance so subsequent steps stop
+    return false;
+  }
+
+  // Case B: prefix - target seen before → subarray (idx+1 .. i)
+  const needed = STATE.prefix - STATE.target;
+  if (STATE.set.has(needed)){
+    const start = STATE.firstIndex.get(needed) + 1;
+    STATE.found = { l: start, r: STATE.i };
+    renderArray(); renderSet(null, needed); renderTrace();
+    prefixPill.textContent = `prefixSum: ${STATE.prefix}`;
+    setStatus(`Found subarray [${start}..${STATE.i}]`, true);
+    explain(`At i=${STATE.i}: prefixSum=${STATE.prefix}. Since (prefixSum - target)=${needed} is in set (seen at index ${STATE.firstIndex.get(needed)}), subarray [${start}..${STATE.i}] sums to target.`);
+    STATE.i++;
+    return false;
+  }
+
+  // Otherwise: insert prefix into set
+  if (!STATE.set.has(STATE.prefix)){
+    STATE.set.add(STATE.prefix);
+    STATE.firstIndex.set(STATE.prefix, STATE.i); // record first occurrence
+    renderSet(STATE.prefix, null);
+  } else {
+    renderSet(null, null);
+  }
+
+  renderArray();
+  renderTrace();
+  prefixPill.textContent = `prefixSum: ${STATE.prefix}`;
+  setStatus('Searching…', null);
+
+  explain(`i=${STATE.i}, a[i]=${val}.<br>
+           Update prefixSum: <b>${prevPrefix}</b> + ${val} = <b>${STATE.prefix}</b>.<br>
+           Check: <code>prefixSum == target</code>? No. <code>prefixSum - target = ${STATE.prefix - STATE.target}</code> in set? No → insert ${STATE.prefix}.`);
+  STATE.i++;
+  return true;
+}
+
+/* Playback */
+function play(){
+  if (STATE.running){
+    STATE.running=false; btnPlay.textContent='▶ Play'; btnPlay.setAttribute('aria-pressed','false');
+    clearTimeout(STATE.timer); return;
+  }
+  STATE.running=true; btnPlay.textContent='⏸ Pause'; btnPlay.setAttribute('aria-pressed','true');
+  const tick=()=>{
+    if (!STATE.running) return;
+    const more = step();
+    if (!more){ STATE.running=false; btnPlay.textContent='▶ Play'; btnPlay.setAttribute('aria-pressed','false'); return; }
+    STATE.timer = setTimeout(tick, 1100);
+  };
+  tick();
+}
+
+/* Reset / Set / Random */
+function reset(){
+  STATE.arr = parseArray(arrInput.value);
+  STATE.target = Number(targetInput.value) || 0;
+  STATE.i = 0;
+  STATE.prefix = 0;
+  STATE.set = new Set();
+  STATE.firstIndex = new Map([[0, -1]]); // treat prefix 0 at index -1 for convenience
+  STATE.running = false;
+  STATE.found = null;
+  clearTimeout(STATE.timer); STATE.timer=null;
+  btnPlay.textContent='▶ Play'; btnPlay.setAttribute('aria-pressed','false');
+
+  renderArray(); renderSet(); renderTrace();
+  prefixPill.textContent = 'prefixSum: 0';
+  setStatus('Ready', null);
+  explain(`Ready. Target = <b>${STATE.target}</b>. We keep a set of seen prefix sums. If we ever see <code>prefixSum == target</code> or <code>prefixSum - target</code> already in the set, we found a valid subarray.`);
+}
+
+function setInputs(){ reset(); }
+
+function randomize(){
+  // generate a mix of negatives/positives and a plausible target
+  const len = randInt(6, 10);
+  const arr = Array.from({length:len}, ()=> randInt(-5, 9));
+  // choose a random subarray and set target to its sum (to ensure solvable sometimes)
+  if (Math.random() < 0.7){
+    const L = randInt(0, len-1), R = randInt(L, len-1);
+    const tgt = arr.slice(L, R+1).reduce((a,b)=>a+b,0);
+    targetInput.value = String(tgt);
+  } else {
+    targetInput.value = String(randInt(-5, 20));
+  }
+  arrInput.value = arr.join(',');
+  reset();
+}
+
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+/* Wire up */
+btnSet.addEventListener('click', setInputs);
+btnReset.addEventListener('click', reset);
+btnStep.addEventListener('click', ()=>{ if(STATE.running) play(); step(); });
+btnPlay.addEventListener('click', play);
+btnRand.addEventListener('click', randomize);
+
+window.addEventListener('keydown', (e)=>{
+  if (e.key === ' '){ e.preventDefault(); play(); }
+  if (e.key.toLowerCase()==='n'){ if(STATE.running) play(); step(); }
+  if (e.key.toLowerCase()==='r'){ reset(); }
+  if (e.key.toLowerCase()==='s'){ randomize(); }
+});
+
+/* Bootstrap */
+reset();
+
+/* Reference
+function subarrayWithSum(arr, target):
+    create empty hashSet
+    prefixSum = 0
+    for each element in arr:
+        prefixSum += element
+        if prefixSum == target OR (prefixSum - target in hashSet):
+            return true
+        insert prefixSum into hashSet
+    return false
+*/
+</script>
+</body>
+</html>
