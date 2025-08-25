@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kth Largest / Smallest using Heap</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1; --bad:#b05a7a;
+  }
+  *{ box-sizing:border-box }
+  body{
+    margin:0; color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1000px 600px at 80% -10%, #1a1f3a 0%, #0f1220 50%) no-repeat, var(--bg);
+  }
+  header{
+    padding:24px clamp(16px,4vw,32px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+  h1{ margin:0; font-size: clamp(24px,4vw,32px) }
+  .subtitle{ color:var(--muted); font-size: clamp(0.9rem,2.5vw,1rem); line-height: 1.4; }
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center }
+  input,button,select{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color:var(--text); border:1px solid #222842; border-radius:10px;
+    padding:10px 12px; font-weight:600; box-shadow:var(--shadow); cursor:pointer;
+  }
+  input[type="text"]{ min-width: 340px; max-width: 100%; }
+  input[type="number"]{ width:90px }
+  @media (max-width: 768px){
+    input[type="text"]{ min-width: 280px; }
+    .controls{ gap:8px; }
+  }
+  @media (max-width: 480px){
+    input[type="text"]{ min-width: 220px; font-size: 16px; }
+    input[type="number"]{ width: 70px; font-size: 16px; }
+    input, button, select{ padding: 12px 14px; min-height: 44px; }
+    .controls{ gap:6px; }
+  }
+  button:hover{ transform:translateY(-1px); border-color:#2c3256 }
+  button[aria-pressed="true"]{ outline:2px solid var(--accent) }
+  .chip{ background:var(--chip); color:var(--text); border:1px solid #2a2f58; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; white-space: nowrap; }
+  @media (max-width: 480px){
+    .chip{ font-size:11px; padding:3px 6px; }
+  }
+
+  main{
+    padding:0 clamp(16px,4vw,32px) 32px;
+    display:grid; grid-template-columns: 1.15fr .85fr; gap: clamp(14px, 2vw, 20px);
+  }
+  @media (max-width: 980px){ main{ grid-template-columns:1fr } }
+  @media (max-width: 480px){
+    main{ padding: 0 12px 24px; gap: 16px; }
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid #20264a; border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: clip;
+  }
+  .panel header{
+    padding:12px 16px; background:#141832; border-bottom:1px solid #1f2546;
+    display:flex; justify-content: space-between; align-items:center; flex-wrap:wrap; gap:8px;
+  }
+  .panel header h2{ margin:0; font-size:16px }
+  @media (max-width: 480px){
+    .panel header{ padding: 10px 12px; }
+    .panel .content{ padding: 12px; }
+  }
+  .panel .content{ padding:14px }
+
+  /* Array display */
+  .array{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .elem{
+    padding:14px 16px; border-radius:12px; background:var(--slot); border:1px solid #2a2f58;
+    font-weight:800; font-size:1.05rem; transition:all var(--speed); min-width: 44px; text-align:center;
+  }
+  @media (max-width: 480px){
+    .array{ gap:8px; }
+    .elem{ padding:12px 14px; font-size:1rem; min-width: 40px; }
+  }
+  .elem.active{ outline:2px solid var(--pair) }
+  .elem.done{ opacity:.6 }
+
+  /* Heap board (array view) */
+  .heap-array{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .cell{
+    padding:12px 14px; border-radius:12px; background:var(--slot); border:1px solid #2a2f58;
+    font-weight:800; min-width:48px; text-align:center; transition:all var(--speed);
+  }
+  @media (max-width: 480px){
+    .heap-array{ gap:8px; }
+    .cell{ padding:10px 12px; font-size:0.9rem; min-width: 40px; }
+  }
+  .cell.top{ outline:2px solid var(--new) }
+  .cell.pop{ outline:2px solid var(--bad); background:#2a1f2f }
+
+  /* Heap tree */
+  svg{ width:100%; height:100%; display:block }
+  .edge{ stroke:#6f78b8; stroke-width:2 }
+  .node circle{ r:16; fill:#1d2350; stroke:#2e3a7d; stroke-width:2 }
+  .node text{ fill:var(--text); font-weight:700; font-size:12px; text-anchor:middle; dominant-baseline:middle }
+  .node.top circle{ stroke: var(--new); stroke-width:3 }
+  .node.pop circle{ stroke: var(--bad); stroke-width:3 }
+
+  .explain{ background:#101433; border-top:1px solid #1f2546; padding:12px 14px; font-size: clamp(0.85rem, 2.5vw, 0.95rem); line-height: 1.5; }
+  .explain b{ color: var(--accent) }
+  .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas; background:#0e1230; border:1px solid #1c2250; padding:2px 6px; border-radius:8px }
+  @media (max-width: 480px){
+    .explain{ padding:10px 12px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🎯 Kth Largest / Smallest — Heap</h1>
+      <div class="subtitle">
+        Kth Largest → keep <b>min-heap</b> of size <b>k</b> • Kth Smallest → keep <b>max-heap</b> of size <b>k</b>.
+      </div>
+    </div>
+    <div class="controls">
+      <input id="arrInput" type="text" value="3,2,3,1,2,4,5,5,6" />
+      <label class="chip" for="k">k</label>
+      <input id="k" type="number" value="4" min="1"/>
+      <label class="chip" for="mode">Mode</label>
+      <select id="mode">
+        <option value="LARGEST" selected>Kth Largest (min-heap size k)</option>
+        <option value="SMALLEST">Kth Smallest (max-heap size k)</option>
+      </select>
+      <button id="btn-set">Set</button>
+      <button id="btn-play">▶ Play</button>
+      <button id="btn-step">Step ▷</button>
+      <button id="btn-reset">Reset ↺</button>
+      <button id="btn-rand">Random 🎲</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <header>
+        <h2>Array</h2>
+        <div class="chip" id="status">Status: Ready</div>
+      </header>
+      <div class="content">
+        <div id="array" class="array"></div>
+      </div>
+      <div id="explain" class="explain">
+        For each element: push into the heap. If heap size exceeds <b>k</b>, pop. The heap’s top is the answer.
+      </div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <h2>Heap (size ≤ k)</h2>
+        <div class="chip" id="heap-info">—</div>
+      </header>
+      <div class="content">
+        <div id="heapArray" class="heap-array" aria-label="heap as array"></div>
+        <div style="height: 260px; margin-top: 10px">
+          <svg id="heapTree" viewBox="0 0 800 240"></svg>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+/* Elements */
+const arrInput = document.getElementById('arrInput');
+const kInput   = document.getElementById('k');
+const modeSel  = document.getElementById('mode');
+const btnSet   = document.getElementById('btn-set');
+const btnPlay  = document.getElementById('btn-play');
+const btnStep  = document.getElementById('btn-step');
+const btnReset = document.getElementById('btn-reset');
+const btnRand  = document.getElementById('btn-rand');
+
+const arrayEl  = document.getElementById('array');
+const explainEl= document.getElementById('explain');
+const statusEl = document.getElementById('status');
+const heapInfo = document.getElementById('heap-info');
+const heapArray= document.getElementById('heapArray');
+const heapTree = document.getElementById('heapTree');
+
+/* State */
+const STATE = {
+  arr: [],
+  k: 1,
+  mode: 'LARGEST', // LARGEST = min-heap; SMALLEST = max-heap
+  i: 0,
+  heap: [],       // internal heap array
+  running: false,
+  timer: null,
+};
+
+/* Utils */
+function parseArray(str){
+  return str.split(',').map(s=>s.trim()).filter(Boolean).map(Number).filter(v=>!Number.isNaN(v));
+}
+function isMinHeap(){ return STATE.mode==='LARGEST'; }
+function heapCmp(a,b){ return isMinHeap() ? a < b : a > b; } // parent should be 'smaller' for min-heap; 'larger' for max-heap
+
+/* Binary heap helpers */
+function heapPush(x){
+  STATE.heap.push(x);
+  siftUp(STATE.heap.length-1);
+}
+function heapPop(){
+  if (STATE.heap.length===0) return null;
+  const n = STATE.heap.length;
+  const root = STATE.heap[0];
+  const last = STATE.heap.pop();
+  if (n>1){ STATE.heap[0]=last; siftDown(0); }
+  return root;
+}
+function siftUp(i){
+  while(i>0){
+    const p = Math.floor((i-1)/2);
+    if (heapCmp(STATE.heap[i], STATE.heap[p])){
+      [STATE.heap[i], STATE.heap[p]] = [STATE.heap[p], STATE.heap[i]];
+      i = p;
+    } else break;
+  }
+}
+function siftDown(i){
+  const n = STATE.heap.length;
+  while(true){
+    const l=2*i+1, r=2*i+2;
+    let best = i;
+    if (l<n && heapCmp(STATE.heap[l], STATE.heap[best])) best = l;
+    if (r<n && heapCmp(STATE.heap[r], STATE.heap[best])) best = r;
+    if (best !== i){
+      [STATE.heap[i], STATE.heap[best]] = [STATE.heap[best], STATE.heap[i]];
+      i = best;
+    } else break;
+  }
+}
+
+/* Rendering */
+function renderArray(){
+  arrayEl.innerHTML='';
+  STATE.arr.forEach((v, idx)=>{
+    const d=document.createElement('div');
+    d.className = 'elem' + (idx===STATE.i ? ' active' : idx<STATE.i ? ' done' : '');
+    d.textContent = v;
+    arrayEl.appendChild(d);
+  });
+}
+function renderHeap(){
+  // array
+  heapArray.innerHTML='';
+  STATE.heap.forEach((v, idx)=>{
+    const d=document.createElement('div');
+    let cls='cell';
+    if (idx===0) cls+=' top';
+    d.className=cls; d.textContent=v;
+    heapArray.appendChild(d);
+  });
+  heapInfo.textContent = `${isMinHeap() ? 'min-heap' : 'max-heap'} • size=${STATE.heap.length} / k=${STATE.k}`;
+
+  // tree
+  heapTree.innerHTML='';
+  const n=STATE.heap.length; if(!n) return;
+  const levels = Math.floor(Math.log2(n)) + 1;
+  const width=800, height=240;
+  const nodes=[];
+  for(let i=0;i<n;i++){
+    const level=Math.floor(Math.log2(i+1));
+    const pos=i-(2**level-1);
+    const cnt=2**level;
+    const x=(width/(cnt+1))*(pos+1), y=(height/(levels+1))*(level+1);
+    nodes.push({i,x,y,val:STATE.heap[i]});
+  }
+  nodes.forEach(nd=>{
+    const l=2*nd.i+1, r=2*nd.i+2;
+    if(l<nodes.length){
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',nd.x); line.setAttribute('y1',nd.y);
+      line.setAttribute('x2',nodes[l].x); line.setAttribute('y2',nodes[l].y);
+      line.setAttribute('class','edge'); heapTree.appendChild(line);
+    }
+    if(r<nodes.length){
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',nd.x); line.setAttribute('y1',nd.y);
+      line.setAttribute('x2',nodes[r].x); line.setAttribute('y2',nodes[r].y);
+      line.setAttribute('class','edge'); heapTree.appendChild(line);
+    }
+  });
+  nodes.forEach(nd=>{
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    let cls='node'; if(nd.i===0) cls+=' top';
+    g.setAttribute('class',cls);
+    g.setAttribute('transform',`translate(${nd.x},${nd.y})`);
+    g.innerHTML=`<circle></circle><text dy="4">${nd.val}</text>`;
+    heapTree.appendChild(g);
+  });
+}
+function say(html){ explainEl.innerHTML = html; }
+function setStatus(text){ statusEl.textContent = `Status: ${text}`; }
+
+/* Algorithm step */
+function step(){
+  if (STATE.i >= STATE.arr.length){
+    const ans = STATE.heap[0];
+    setStatus(`Done. Answer = ${ans}`);
+    say(`Finished scanning. The heap’s <b>top</b> is the answer: <b>${ans}</b>.`);
+    return false;
+  }
+  const x = STATE.arr[STATE.i];
+  renderArray();
+  say(`Read <b>${x}</b> → push into ${isMinHeap() ? 'min' : 'max'}-heap. If size > k, pop top.`);
+  // push
+  heapPush(x);
+  renderHeap();
+
+  // if overflow, pop
+  if (STATE.heap.length > STATE.k){
+    const popped = heapPop();
+    renderHeap();
+    say(`Heap exceeded size k=${STATE.k}. Popped <b>${popped}</b> from the top.`);
+  }
+
+  // preview current answer
+  if (STATE.heap.length === STATE.k){
+    const ans = STATE.heap[0];
+    setStatus(`Current answer candidate: ${ans}`);
+  } else {
+    setStatus(`Building heap… size=${STATE.heap.length}`);
+  }
+
+  STATE.i++;
+  renderArray();
+  return true;
+}
+
+/* Playback */
+function play(){
+  if (STATE.running){
+    STATE.running=false; btnPlay.textContent='▶ Play'; btnPlay.setAttribute('aria-pressed','false');
+    clearTimeout(STATE.timer); return;
+  }
+  STATE.running=true; btnPlay.textContent='⏸ Pause'; btnPlay.setAttribute('aria-pressed','true');
+  const tick=()=>{
+    if (!STATE.running) return;
+    const more = step();
+    if (!more){ STATE.running=false; btnPlay.textContent='▶ Play'; btnPlay.setAttribute('aria-pressed','false'); return; }
+    STATE.timer = setTimeout(tick, 900);
+  };
+  tick();
+}
+
+/* Reset/Set/Random */
+function reset(){
+  STATE.arr = parseArray(arrInput.value);
+  STATE.k = Math.max(1, Math.min(STATE.arr.length, Number(kInput.value)||1));
+  STATE.mode = modeSel.value;
+  STATE.i = 0;
+  STATE.heap = [];
+  clearTimeout(STATE.timer); STATE.timer=null; STATE.running=false;
+  btnPlay.textContent='▶ Play'; btnPlay.setAttribute('aria-pressed','false');
+  renderArray(); renderHeap();
+  setStatus('Ready');
+  say(`${STATE.mode==='LARGEST'
+        ? `We keep a <b>min-heap</b> of size k. Top is the <b>kth largest</b>.`
+        : `We keep a <b>max-heap</b> of size k. Top is the <b>kth smallest</b>.`
+      }`);
+}
+function setInputs(){ reset(); }
+function randomize(){
+  const len = Math.floor(Math.random()*8)+7; // 7..14
+  const arr = Array.from({length:len}, ()=> Math.floor(Math.random()*50));
+  arrInput.value = arr.join(',');
+  kInput.value = Math.max(1, Math.floor(Math.random()*len));
+  reset();
+}
+
+/* Wire up */
+btnSet.addEventListener('click', setInputs);
+btnReset.addEventListener('click', reset);
+btnStep.addEventListener('click', ()=>{ if(STATE.running) play(); step(); });
+btnPlay.addEventListener('click', play);
+btnRand.addEventListener('click', randomize);
+modeSel.addEventListener('change', reset);
+window.addEventListener('keydown', (e)=>{
+  if (e.key === ' '){ e.preventDefault(); play(); }
+  if (e.key.toLowerCase()==='n'){ if(STATE.running) play(); step(); }
+  if (e.key.toLowerCase()==='r'){ reset(); }
+  if (e.key.toLowerCase()==='s'){ randomize(); }
+});
+
+/* Bootstrap */
+reset();
+
+/* Reference
+kthLargest(arr, k):
+  minHeap = []
+  for x in arr:
+    push x
+    if size > k: pop
+  return heap[0]
+
+kthSmallest(arr, k):
+  maxHeap = []
+  for x in arr:
+    push x
+    if size > k: pop
+  return heap[0]
+*/
+</script>
+</body>
+</html>
