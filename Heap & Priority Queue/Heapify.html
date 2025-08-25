@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Heapify • Build Heap • Heap Sort Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1; --bad:#b05a7a;
+  }
+
+  *{ box-sizing: border-box }
+  body{
+    margin:0; background: radial-gradient(1000px 600px at 80% -10%, #1a1f3a 0%, #0f1220 50%) no-repeat, var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+  }
+
+  header{
+    padding: 24px clamp(16px, 4vw, 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+  h1{ margin:0; font-size: clamp(24px, 4vw, 32px) }
+  .subtitle{ color: var(--muted); font-size: clamp(0.9rem, 2.5vw, 1rem); line-height: 1.4; }
+
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center }
+  input, button, select{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color: var(--text); border: 1px solid #222842; border-radius: 10px;
+    padding: 10px 12px; font-weight: 600; box-shadow: var(--shadow); cursor: pointer;
+  }
+  input[type="text"]{ min-width: 340px; max-width: 100%; }
+  input[type="number"]{ width: 72px; }
+  @media (max-width: 768px){
+    input[type="text"]{ min-width: 280px; }
+    .controls{ gap:8px; }
+  }
+  @media (max-width: 480px){
+    input[type="text"]{ min-width: 220px; font-size: 16px; }
+    input[type="number"]{ width: 60px; font-size: 16px; }
+    input, button, select{ padding: 12px 14px; min-height: 44px; }
+    .controls{ gap:6px; }
+  }
+  button:hover{ transform: translateY(-1px); border-color:#2c3256 }
+  button[aria-pressed="true"]{ outline: 2px solid var(--accent); }
+  .chip{
+    background: var(--chip); color: var(--text); border:1px solid #2a2f58;
+    padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700;
+    white-space: nowrap;
+  }
+  @media (max-width: 480px){
+    .chip{ font-size:11px; padding:3px 6px; }
+  }
+
+  main{
+    padding: 0 clamp(16px, 4vw, 32px) 32px;
+    display: grid; grid-template-columns: 1.1fr .9fr; gap: clamp(14px, 2vw, 20px);
+  }
+  @media (max-width: 980px){ main{ grid-template-columns: 1fr; } }
+  @media (max-width: 480px){
+    main{ padding: 0 12px 24px; gap: 16px; }
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid #20264a; border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: clip;
+  }
+  .panel header{
+    padding: 12px 16px; background:#141832; border-bottom:1px solid #1f2546;
+    display:flex; justify-content: space-between; align-items: center; flex-wrap:wrap; gap:8px;
+  }
+  .panel header h2{ margin:0; font-size: 16px }
+  @media (max-width: 480px){
+    .panel header{ padding: 10px 12px; }
+    .panel .content{ padding: 12px; }
+  }
+
+  .panel .content{ padding:14px }
+
+  /* Array board (absolute positioning for swap animation) */
+  .board{
+    position: relative; height: 120px; /* one row */
+    border-radius: 10px; border:1px dashed #2a2f58; background: #111638;
+    display:block; overflow:hidden; overflow-x:auto;
+  }
+  @media (max-width: 480px){
+    .board{ height: 100px; }
+  }
+  .cell{
+    position: absolute; width: 48px; height: 48px;
+    display:grid; place-items:center;
+    border-radius: 12px; background: var(--slot); border:1px solid #2a2f58;
+    font-weight: 800; transition: transform 500ms ease, background 300ms ease, outline 300ms ease;
+    min-width: 44px; text-align:center;
+  }
+  @media (max-width: 480px){
+    .cell{ width: 40px; height: 40px; font-size: 0.9rem; min-width: 36px; }
+  }
+  .cell.sorted{ opacity:.65; }
+  .cell.active{ outline: 2px solid var(--pair); }
+  .cell.swap{ outline: 2px solid var(--new); background:#1f2c2a; }
+
+  .index-row{ display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; color:var(--muted); font-size: 12px; overflow-x:auto; }
+  .index-row .idx{ width:48px; text-align:center; flex-shrink:0; }
+  @media (max-width: 480px){
+    .index-row .idx{ width:40px; font-size:11px; }
+  }
+
+  .legend{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center; }
+  .legend .chip{ display:inline-flex; gap:6px; align-items:center; }
+  @media (max-width: 480px){
+    .legend{ gap:6px; }
+    .legend .chip{ font-size:11px; padding:3px 6px; }
+  }
+  .sw{ width:10px; height:10px; border-radius:2px; display:inline-block }
+  .sw.act{ background: var(--pair) } .sw.swap{ background: var(--new) } .sw.end{ background:#6f78b8 }
+
+  /* Tree */
+  svg{ width:100%; height:100%; display:block }
+  .edge{ stroke:#6f78b8; stroke-width:2 }
+  .node circle{ r:18; fill:#1d2350; stroke:#2e3a7d; stroke-width:2 }
+  .node text{ fill:var(--text); font-weight:700; font-size:12px; text-anchor:middle; dominant-baseline:middle }
+  .node.active circle{ stroke: var(--pair); stroke-width: 3 }
+  .node.swap circle{ stroke: var(--new); stroke-width: 3 }
+  .node.sorted circle{ opacity:.6 }
+
+  .explain{ background:#101433; border-top:1px solid #1f2546; padding:12px 14px; font-size: clamp(0.85rem, 2.5vw, 0.95rem); line-height: 1.5; }
+  .explain b{ color: var(--accent) }
+  .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas; background:#0e1230; border:1px solid #1c2250; padding:2px 6px; border-radius:8px }
+  .mini{ color: var(--muted); font-size: 12px; margin-top:8px; line-height: 1.4; }
+  @media (max-width: 480px){
+    .explain{ padding:10px 12px; }
+    .mini{ font-size:11px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🌲 Heapify • Build Heap • Heap Sort</h1>
+      <div class="subtitle">Complete binary tree stored as an array. Toggle <b>Min/Max</b>, step through heapify, build-heap, and heapsort with animations.</div>
+    </div>
+    <div class="controls" role="group" aria-label="Controls">
+      <input id="arrInput" type="text" value="4,10,3,5,1,8,7,6,2,9" />
+      <label class="chip" for="mode">Mode</label>
+      <select id="mode">
+        <option value="HEAPIFY" selected>Heapify (deep-dive)</option>
+        <option value="BUILD">Build Heap</option>
+        <option value="SORT">Heap Sort</option>
+      </select>
+      <label class="chip" for="type">Type</label>
+      <select id="type">
+        <option value="max" selected>Max Heap 🔼</option>
+        <option value="min">Min Heap 🔽</option>
+      </select>
+      <label class="chip" for="idx">i</label>
+      <input id="idx" type="number" value="0" min="0" />
+      <button id="btn-set">Set</button>
+      <button id="btn-play">▶ Play</button>
+      <button id="btn-step">Step ▷</button>
+      <button id="btn-reset">Reset ↺</button>
+      <button id="btn-rand">Random 🎲</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: Array + narration -->
+    <section class="panel">
+      <header>
+        <h2>Array (index math)</h2>
+        <div class="legend">
+          <span class="chip"><span class="sw act"></span> active / comparing</span>
+          <span class="chip"><span class="sw swap"></span> swapping</span>
+          <span class="chip"><span class="sw end"></span> out-of-heap (sorted tail)</span>
+        </div>
+      </header>
+      <div class="content">
+        <div id="board" class="board" aria-label="Array board"></div>
+        <div class="index-row" id="index-row"></div>
+        <div class="mini">Left child: <code>2*i + 1</code> • Right child: <code>2*i + 2</code> • Parent: <code>(i-1)//2</code></div>
+      </div>
+      <div class="explain" id="explain">Set an index <b>i</b>, choose Min/Max heap, then <span class="kbd">Step</span> or <span class="kbd">Play</span>.</div>
+    </section>
+
+    <!-- Right: Tree + state -->
+    <section class="panel">
+      <header>
+        <h2>Tree</h2>
+        <div class="chip" id="heap-size">heapSize: —</div>
+      </header>
+      <div class="content" style="height:420px">
+        <svg id="tree" viewBox="0 0 800 400"></svg>
+      </div>
+      <div class="explain" id="progress">—</div>
+    </section>
+  </main>
+
+<script type="module">
+/* Elements */
+const arrInput = document.getElementById('arrInput');
+const modeSel  = document.getElementById('mode');
+const typeSel  = document.getElementById('type');
+const idxInput = document.getElementById('idx');
+const btnSet   = document.getElementById('btn-set');
+const btnPlay  = document.getElementById('btn-play');
+const btnStep  = document.getElementById('btn-step');
+const btnReset = document.getElementById('btn-reset');
+const btnRand  = document.getElementById('btn-rand');
+
+const board    = document.getElementById('board');
+const indexRow = document.getElementById('index-row');
+const explainEl= document.getElementById('explain');
+const treeEl   = document.getElementById('tree');
+const heapSizePill = document.getElementById('heap-size');
+const progressEl = document.getElementById('progress');
+
+/* State */
+const STATE = {
+  items: [],        // [{id, val}]
+  heapSize: 0,      // active heap window is [0..heapSize-1]
+  mode: 'HEAPIFY',  // HEAPIFY | BUILD | SORT
+  type: 'max',      // max | min
+  i: 0,
+  // heapify micro-steps
+  stepPhase: 0,     // 0=show children, 1=compare left, 2=compare right, 3=swap or done
+  largest: 0,
+  running: false,
+  timer: null,
+  // sequences for BUILD/SORT
+  buildIndex: null,   // i from floor(n/2)-1 .. 0
+  sortEnd: null,      // end pointer for sort shrinking from n-1..1
+};
+
+/* Helpers */
+function parseArray(str){
+  return str.split(',').map(s=>s.trim()).filter(Boolean).map(Number).filter(v=>!Number.isNaN(v));
+}
+function cmp(a,b){ return (STATE.type==='max') ? (a>b) : (a<b); } // true if a should be above b
+
+/* ---------- Array board layout (absolute, animated) ---------- */
+const CELL_W = 48, GAP = 10, PAD = 14; // board has fixed height for one row
+function posX(index){ return PAD + index*(CELL_W+GAP); }
+function ensureCells(n){
+  board.style.height = '120px';
+  board.style.minWidth = `${PAD*2 + n*(CELL_W+GAP) - GAP}px`;
+  indexRow.innerHTML = '';
+  for(let i=0;i<n;i++){
+    const sp = document.createElement('div');
+    sp.className = 'idx';
+    sp.textContent = i;
+    indexRow.appendChild(sp);
+  }
+}
+function renderBoard(highlight = {}){ // {i:'active'|'swap'|'sorted', ...}
+  // create cells if needed
+  board.innerHTML = '';
+  ensureCells(STATE.items.length);
+  STATE.items.forEach((it, idx)=>{
+    const d = document.createElement('div');
+    let cls = 'cell';
+    if (idx >= STATE.heapSize) cls += ' sorted';
+    if (highlight[idx]) cls += ' ' + highlight[idx];
+    d.className = cls;
+    d.style.transform = `translate(${posX(idx)}px, 36px)`; // centered vertically
+    d.id = `cell-${it.id}`;
+    d.textContent = it.val;
+    board.appendChild(d);
+  });
+}
+/* Animate move by re-rendering transforms after swapping items */
+function swapItems(i, j){
+  [STATE.items[i], STATE.items[j]] = [STATE.items[j], STATE.items[i]];
+  // After swapping data, re-apply transforms so cells glide to new slots
+  STATE.items.forEach((it, idx)=>{
+    const el = document.getElementById(`cell-${it.id}`);
+    if (el) el.style.transform = `translate(${posX(idx)}px, 36px)`;
+  });
+}
+
+/* ---------- Tree rendering ---------- */
+function renderTree(highlight = {}){
+  treeEl.innerHTML = '';
+  const n = STATE.items.length;
+  if (!n) return;
+  const levels = Math.floor(Math.log2(n)) + 1;
+  const width = 800, height = 400;
+
+  const nodes = [];
+  for(let i=0;i<n;i++){
+    const level = Math.floor(Math.log2(i+1));
+    const posL  = i - (2**level - 1);
+    const count = 2**level;
+    const x = (width/(count+1))*(posL+1);
+    const y = (height/(levels+1))*(level+1);
+    nodes.push({i, x, y, val: STATE.items[i].val});
+  }
+
+  nodes.forEach(nd=>{
+    const l = 2*nd.i+1, r = 2*nd.i+2;
+    if (l<n){
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', nd.x); line.setAttribute('y1', nd.y);
+      line.setAttribute('x2', nodes[l].x); line.setAttribute('y2', nodes[l].y);
+      line.setAttribute('class', 'edge');
+      treeEl.appendChild(line);
+    }
+    if (r<n){
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', nd.x); line.setAttribute('y1', nd.y);
+      line.setAttribute('x2', nodes[r].x); line.setAttribute('y2', nodes[r].y);
+      line.setAttribute('class', 'edge');
+      treeEl.appendChild(line);
+    }
+  });
+
+  nodes.forEach(nd=>{
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    let cls = 'node';
+    if (nd.i >= STATE.heapSize) cls += ' sorted';
+    if (highlight[nd.i]) cls += ' ' + highlight[nd.i];
+    g.setAttribute('class', cls);
+    g.setAttribute('transform', `translate(${nd.x},${nd.y})`);
+    g.innerHTML = `<circle></circle><text dy="4">${nd.val}</text>`;
+    treeEl.appendChild(g);
+  });
+}
+
+/* ---------- Narration ---------- */
+function say(html){ explainEl.innerHTML = html; }
+function progress(msg){ progressEl.innerHTML = msg; }
+function setHeapSizePill(){ heapSizePill.textContent = `heapSize: ${STATE.heapSize}`; }
+
+/* ---------- Modes orchestration ---------- */
+function initFromInputs(){
+  const arr = parseArray(arrInput.value).slice(0, 20); // keep it tidy
+  STATE.items = arr.map((v, idx)=>({id: idx + 1_000, val: v}));
+  STATE.mode = modeSel.value;
+  STATE.type = typeSel.value;
+  STATE.i = Math.max(0, Math.min(arr.length-1, Number(idxInput.value) || 0));
+  STATE.heapSize = arr.length;
+
+  STATE.stepPhase = 0;
+  STATE.largest = STATE.i;
+  STATE.buildIndex = Math.floor(arr.length/2) - 1;
+  STATE.sortEnd = arr.length - 1;
+
+  renderBoard();
+  renderTree();
+  setHeapSizePill();
+  updateProgressIntro();
+}
+function updateProgressIntro(){
+  if (STATE.mode === 'HEAPIFY'){
+    progress(`Deep-dive <b>heapify</b> at i=${STATE.i} • children: <code>l=2*i+1</code>, <code>r=2*i+2</code>`);
+    say(`Start at <b>i=${STATE.i}</b>. Compare <code>a[i]</code> with its children (according to <b>${STATE.type.toUpperCase()}</b>-heap rule). Swap with the best child and continue at that child.`);
+  } else if (STATE.mode === 'BUILD'){
+    progress(`Build Heap: i runs from <b>${STATE.buildIndex}</b> down to <b>0</b>.`);
+    say(`Bottom-up build: call heapify at each <b>non-leaf</b> index <code>⌊n/2⌋-1 … 0</code> using ${STATE.type}-heap.`);
+  } else {
+    progress(`Heap Sort: (1) build heap • (2) swap root with end and reduce heapSize • (3) heapify(0).`);
+    say(`Heapsort (${STATE.type}-heap): build heap, then repeatedly move the root to the end and heapify the reduced heap.`);
+  }
+}
+
+/* ---------- Heapify micro-steps (single node) ---------- */
+function heapifyStep(){
+  const n = STATE.heapSize;
+  if (STATE.i >= n){ // guard
+    say(`i=${STATE.i} is outside the current heap window (0..${n-1}).`);
+    return false;
+  }
+  const i = STATE.i;
+  const l = 2*i + 1, r = 2*i + 2;
+
+  if (STATE.stepPhase === 0){
+    STATE.largest = i;
+    renderBoard({[i]:'active', ...(l<n?{[l]:'active'}:{}), ...(r<n?{[r]:'active'}:{})});
+    renderTree({[i]:'active', ...(l<n?{[l]:'active'}:{}), ...(r<n?{[r]:'active'}:{})});
+    say(`Look at <b>i=${i}</b> (value ${STATE.items[i].val}). Children: l=${l}${l<n?` (value ${STATE.items[l].val})`: ' (none)'}; r=${r}${r<n?` (value ${STATE.items[r].val})`:' (none)'}<br>We will pick the <b>${STATE.type==='max' ? 'largest' : 'smallest'}</b> among these.`);
+    STATE.stepPhase = 1;
+    return true;
+  }
+
+  if (STATE.stepPhase === 1){
+    // compare with left
+    if (l < n && cmp(STATE.items[l].val, STATE.items[STATE.largest].val)){
+      STATE.largest = l;
+      say(`Compare parent with <b>left</b>: ${STATE.items[l].val} is better → candidate index = ${l}.`);
+    } else {
+      say(`Compare parent with <b>left</b>: ${l < n ? STATE.items[l].val : '—'} does not beat candidate.`);
+    }
+    STATE.stepPhase = 2;
+    return true;
+  }
+
+  if (STATE.stepPhase === 2){
+    // compare with right
+    if (r < n && cmp(STATE.items[r].val, STATE.items[STATE.largest].val)){
+      STATE.largest = r;
+      say(`Compare candidate with <b>right</b>: ${STATE.items[r].val} is better → candidate index = ${r}.`);
+    } else {
+      say(`Compare candidate with <b>right</b>: ${r < n ? STATE.items[r].val : '—'} does not beat candidate.`);
+    }
+    STATE.stepPhase = 3;
+    return true;
+  }
+
+  if (STATE.stepPhase === 3){
+    if (STATE.largest !== i){
+      // animate swap
+      const a = i, b = STATE.largest;
+      renderBoard({[a]:'swap', [b]:'swap'}); renderTree({[a]:'swap',[b]:'swap'});
+      say(`Swap a[${i}] (${STATE.items[i].val}) ↔ a[${b}] (${STATE.items[b].val}). Continue heapify at index <b>${b}</b>.`);
+      // perform data swap (cells slide)
+      setTimeout(()=>{
+        swapItems(a,b);
+        renderTree({[b]:'active'}); // focus new index
+      }, 30);
+      STATE.i = b;
+      STATE.stepPhase = 0; // recurse/continue
+      return true;
+    } else {
+      // done at this node
+      renderBoard({[i]:'active'}); renderTree({[i]:'active'});
+      say(`Node at i=${i} already satisfies the ${STATE.type} heap property. Heapify at this node is done.`);
+      // signal done to caller mode
+      return false;
+    }
+  }
+}
+
+/* ---------- Build-heap controller ---------- */
+function buildStep(){
+  // If we haven't started heapify at current index, seed
+  if (STATE.buildIndex < 0){
+    progress(`<b>Build complete.</b> Root now satisfies heap property across the tree.`);
+    return false;
+  }
+  // run heapify micro-steps; if heapify returns false (done), move to next index
+  if (STATE.stepPhase === 0 && STATE.i !== STATE.buildIndex) STATE.i = STATE.buildIndex;
+  const cont = heapifyStep();
+  if (cont === false){
+    // finished heapify at current index, move to next
+    STATE.buildIndex--;
+    STATE.stepPhase = 0;
+    progress(`Build Heap progress → next i = <b>${Math.max(STATE.buildIndex,0)}</b>`);
+    if (STATE.buildIndex >= 0){
+      say(`Proceed to i=${STATE.buildIndex}.`);
+      STATE.i = STATE.buildIndex;
+      return true;
+    } else {
+      say(`<b>Build Heap done.</b> The array is a valid ${STATE.type} heap.`);
+      return false;
+    }
+  }
+  return true;
+}
+
+/* ---------- Heap sort controller ---------- */
+let sortPhase = 'BUILD'; // BUILD → SWAP_ROOT → HEAPIFY_ROOT → LOOP
+function sortStep(){
+  if (sortPhase === 'BUILD'){
+    // first ensure a heap
+    if (STATE.buildIndex === Math.floor(STATE.items.length/2) - 1 && STATE.stepPhase === 0){
+      progress('Heapsort step 1/3: building heap…');
+      say(`Step 1: Build a ${STATE.type} heap.`);
+    }
+    const more = buildStep();
+    if (!more){ sortPhase = 'SWAP_ROOT'; }
+    return true;
+  }
+
+  if (sortPhase === 'SWAP_ROOT'){
+    if (STATE.sortEnd <= 0){
+      progress('<b>Heapsort complete.</b>');
+      say('All elements are placed. Array is sorted.');
+      return false;
+    }
+    // swap root with end
+    const end = STATE.sortEnd;
+    renderBoard({[0]:'swap',[end]:'swap'}); renderTree({[0]:'swap',[end]:'swap'});
+    say(`Step 2: Move root to the end. Swap a[0] (${STATE.items[0].val}) ↔ a[${end}] (${STATE.items[end].val}). Reduce heapSize.`);
+    setTimeout(()=>{ swapItems(0,end); }, 30);
+    STATE.sortEnd--;
+    STATE.heapSize = STATE.sortEnd + 1;
+    setHeapSizePill();
+    sortPhase = 'HEAPIFY_ROOT';
+    STATE.i = 0; STATE.stepPhase = 0;
+    return true;
+  }
+
+  if (sortPhase === 'HEAPIFY_ROOT'){
+    // restore heap under new root
+    const cont = heapifyStep();
+    if (cont === false){
+      // root fixed, loop again
+      progress(`Heapsort progress: heapSize=${STATE.heapSize}, next end=${STATE.sortEnd}`);
+      sortPhase = 'SWAP_ROOT';
+    }
+    return true;
+  }
+}
+
+/* ---------- Step dispatcher ---------- */
+function step(){
+  if (STATE.mode === 'HEAPIFY'){
+    const cont = heapifyStep();
+    if (cont === false){
+      // finished at this node; nothing else to do
+      return false;
+    }
+    return true;
+  } else if (STATE.mode === 'BUILD'){
+    return buildStep();
+  } else {
+    return sortStep();
+  }
+}
+
+/* ---------- Playback ---------- */
+function play(){
+  if (STATE.running){
+    STATE.running = false; btnPlay.textContent = '▶ Play'; btnPlay.setAttribute('aria-pressed','false');
+    clearTimeout(STATE.timer); STATE.timer=null; return;
+  }
+  STATE.running = true; btnPlay.textContent = '⏸ Pause'; btnPlay.setAttribute('aria-pressed','true');
+  const tick = ()=>{
+    if (!STATE.running) return;
+    const more = step();
+    if (!more){
+      STATE.running = false; btnPlay.textContent = '▶ Play'; btnPlay.setAttribute('aria-pressed','false'); return;
+    }
+    STATE.timer = setTimeout(tick, 900);
+  };
+  tick();
+}
+
+/* ---------- Random + Reset ---------- */
+function randomize(){
+  const len = Math.floor(Math.random()*8) + 8; // 8..15
+  const arr = Array.from({length:len}, ()=> Math.floor(Math.random()*50));
+  arrInput.value = arr.join(',');
+  idxInput.value = Math.floor(Math.random()*len);
+  initialize();
+}
+function initialize(){
+  clearTimeout(STATE.timer); STATE.running=false; btnPlay.textContent='▶ Play'; btnPlay.setAttribute('aria-pressed','false');
+  sortPhase = 'BUILD';
+  initFromInputs();
+}
+function setInputs(){ initialize(); }
+
+/* ---------- Wire up ---------- */
+btnSet.addEventListener('click', setInputs);
+btnReset.addEventListener('click', initialize);
+btnStep.addEventListener('click', ()=>{ if(STATE.running) play(); step(); });
+btnPlay.addEventListener('click', play);
+btnRand.addEventListener('click', randomize);
+modeSel.addEventListener('change', initialize);
+typeSel.addEventListener('change', initialize);
+idxInput.addEventListener('change', initialize);
+
+window.addEventListener('keydown', (e)=>{
+  if (e.key === ' '){ e.preventDefault(); play(); }
+  if (e.key.toLowerCase() === 'n'){ if(STATE.running) play(); step(); }
+  if (e.key.toLowerCase() === 'r'){ initialize(); }
+  if (e.key.toLowerCase() === 's'){ randomize(); }
+});
+
+/* ---------- Bootstrap ---------- */
+initialize();
+
+/* -------------------------
+Reference (Max-heap shown; for Min-heap, invert comparisons)
+
+function heapify(arr, n, i):
+    best = i
+    l = 2*i + 1
+    r = 2*i + 2
+    if l < n and arr[l] > arr[best]: best = l
+    if r < n and arr[r] > arr[best]: best = r
+    if best != i:
+        swap(arr[i], arr[best])
+        heapify(arr, n, best)
+
+Build-heap: for i = floor(n/2)-1 down to 0: heapify(arr, n, i)
+Heap sort: build-heap, then for end = n-1 down to 1:
+  swap(arr[0], arr[end]); heapify(arr, end, 0)
+-------------------------- */
+</script>
+</body>
+</html>
