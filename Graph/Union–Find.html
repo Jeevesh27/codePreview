@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Union–Find (DSU) Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* highlight path / selected */
+    --new:#8ae9c1;  /* roots / merged */
+  }
+
+  *{ box-sizing:border-box }
+  body{
+    margin:0; color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1000px 600px at 80% -10%, #1a1f3a 0%, #0f1220 50%) no-repeat, var(--bg);
+  }
+
+  header{
+    padding:24px clamp(16px,4vw,32px);
+    display:grid; grid-template-columns: 1fr auto; gap:16px; align-items:center;
+  }
+  .title h1{ margin:0; font-size: clamp(22px,2.2vw,30px) }
+  .subtitle{ color:var(--muted); margin-top:6px; font-size:.95rem }
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+
+  button, select, input[type="number"]{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color:var(--text); border:1px solid #222842; border-radius:10px;
+    padding:10px 12px; box-shadow:var(--shadow); font-weight:600; cursor:pointer;
+  }
+  input[type="number"]{ width:72px }
+  button:hover{ transform:translateY(-1px); border-color:#2c3256 }
+  .chip{
+    background: var(--chip); color:var(--text);
+    padding:4px 8px; border-radius:999px; border:1px solid #2a2f58; font-size:12px;
+  }
+  label{ font-weight:700; color:var(--muted) }
+
+  main{
+    padding:0 clamp(16px,4vw,32px) 32px;
+    display:grid; grid-template-columns: 1.2fr .9fr; gap: clamp(14px,2vw,20px);
+  }
+  @media (max-width: 980px){ main{ grid-template-columns: 1fr } }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid #20264a; border-radius:var(--radius); box-shadow:var(--shadow); overflow:clip;
+  }
+  .panel header{
+    padding:12px 16px; background:#141832; border-bottom:1px solid #1f2546;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .panel header h2{ margin:0; font-size:16px; letter-spacing:.5px }
+  .panel .content{ padding:14px }
+
+  /* Graph area */
+  .graph-wrap{
+    position:relative; aspect-ratio: 16/10; width:100%;
+    background:
+      radial-gradient(600px 200px at 70% -20%, rgba(108,243,255,.10), transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+    border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius);
+  }
+  svg{ width:100%; height:100%; display:block }
+
+  .edge{ stroke:#6f78b8; stroke-width:3; transition: all var(--speed); marker-end:url(#arrow) }
+  .edge.path{ stroke: var(--pair); stroke-width:4.5; marker-end:url(#arrow-active) }
+  .edge.comp{ stroke: var(--new); stroke-width:4 }
+
+  .node{ fill:#1d2350; stroke:#2e3a7d; stroke-width:2; transition: filter var(--speed), transform var(--speed) }
+  .node text{ fill:var(--text); font-weight:700; font-size:12px; user-select:none }
+  .node circle{ r:16 }
+  .node.root circle{ stroke: var(--new); fill:#203a3a }
+  .node.sel circle{ stroke: var(--pair); stroke-width:3 }
+  .node:hover{ filter: drop-shadow(0 0 6px rgba(108,243,255,.35)) }
+
+  /* Right info */
+  .grid{ display:grid; gap:10px }
+  .card{ background:var(--slot); border:1px solid #2a2f58; border-radius:12px; padding:10px }
+  .row{ display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center }
+  .list{ display:flex; gap:8px; flex-wrap:wrap }
+  .item{ padding:8px 10px; border-radius:10px; background:var(--slot); border:1px solid #2a2f58; font-weight:700 }
+  .pill{ display:inline-block; padding:6px 10px; border-radius:999px; background:var(--chip); border:1px solid #2a2f58; font-weight:700 }
+
+  .explain{ background:#101433; border-top:1px solid #1f2546; padding:12px 14px }
+  .explain b{ color:var(--accent) }
+  .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas; background:#0e1230; border:1px solid #1c2250; padding:2px 6px; border-radius:8px }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>🧩 Union–Find (Disjoint Set Union)</h1>
+      <div class="subtitle">
+        Supports <b>find</b> (with path compression) and <b>union</b> (by rank/size).
+        Amortized time: <span class="chip">~ O(1)</span>
+      </div>
+    </div>
+    <div class="controls" role="group" aria-label="Controls">
+      <label class="chip" for="n">N</label>
+      <input id="n" type="number" min="2" max="20" value="10"/>
+      <button id="btn-make">Make Set</button>
+
+      <label class="chip">Union by</label>
+      <select id="mode">
+        <option value="rank" selected>Rank</option>
+        <option value="size">Size</option>
+      </select>
+
+      <label class="chip" for="x">x</label><input id="x" type="number" min="0" value="0"/>
+      <label class="chip" for="y">y</label><input id="y" type="number" min="1" value="1"/>
+      <button id="btn-union">union(x, y)</button>
+      <button id="btn-find">find(x)</button>
+      <button id="btn-random">Random unions 🎲</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: Forest -->
+    <section class="panel">
+      <header>
+        <h2>Forest (parent pointers)</h2>
+        <div class="chip" id="sets-count">Sets: 0</div>
+      </header>
+      <div class="content graph-wrap">
+        <svg id="graph" viewBox="0 0 800 520" aria-labelledby="graph-title" role="img">
+          <title id="graph-title">DSU Forest</title>
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L10,4 L0,8 z" fill="#7f88c9"></path>
+            </marker>
+            <marker id="arrow-active" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L10,4 L0,8 z" fill="#ffd166"></path>
+            </marker>
+          </defs>
+          <g id="edges"></g>
+          <g id="nodes"></g>
+        </svg>
+      </div>
+      <div class="explain" id="explain">Click a node to fill <span class="kbd">x</span> / <span class="kbd">y</span>. Try <b>find(x)</b> to see path compression live.</div>
+    </section>
+
+    <!-- Right: Arrays & Sets -->
+    <section class="panel">
+      <header>
+        <h2>State</h2>
+        <div class="chip" id="mode-chip">Union by: rank</div>
+      </header>
+      <div class="content grid" id="state-panel">
+        <div class="card" id="parent-card">
+          <div class="row"><b>parent[i]</b><span class="pill" id="parent-updates">updates: 0</span></div>
+          <div class="list" id="parent-list"></div>
+        </div>
+
+        <div class="card" id="aux-card">
+          <div class="row"><b id="aux-title">rank[i]</b><span class="pill" id="aux-note">higher = taller tree</span></div>
+          <div class="list" id="aux-list"></div>
+        </div>
+
+        <div class="card" id="sets-card">
+          <div class="row"><b>Sets / Components</b><span class="pill" id="comp-count">0</span></div>
+          <div class="list" id="sets-list"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+/* ---------- Elements ---------- */
+const svg = document.getElementById('graph');
+const gE = document.getElementById('edges');
+const gN = document.getElementById('nodes');
+const explainEl = document.getElementById('explain');
+
+const nInput = document.getElementById('n');
+const xInput = document.getElementById('x');
+const yInput = document.getElementById('y');
+const modeSel = document.getElementById('mode');
+const modeChip = document.getElementById('mode-chip');
+
+const btnMake = document.getElementById('btn-make');
+const btnUnion = document.getElementById('btn-union');
+const btnFind = document.getElementById('btn-find');
+const btnRand = document.getElementById('btn-random');
+
+const parentList = document.getElementById('parent-list');
+const auxList = document.getElementById('aux-list');
+const setsList = document.getElementById('sets-list');
+const parentUpdates = document.getElementById('parent-updates');
+const auxTitle = document.getElementById('aux-title');
+const auxNote = document.getElementById('aux-note');
+const setsCount = document.getElementById('sets-count');
+const compCount = document.getElementById('comp-count');
+
+/* ---------- Layout helpers ---------- */
+function gridPositions(n){
+  // place nodes in a grid; wider first
+  const cols = Math.min(10, Math.ceil(Math.sqrt(n*1.3)));
+  const rows = Math.ceil(n/cols);
+  const padX = 60, padY = 70;
+  const startX = 60, startY = 60;
+  const stepX = (800 - 2*startX) / Math.max(1, cols-1);
+  const stepY = (520 - 2*startY) / Math.max(1, rows-1);
+  return Array.from({length:n}, (_,i)=>{
+    const r = Math.floor(i/cols), c = i%cols;
+    return { id:i, x: Math.round(startX + c*stepX), y: Math.round(startY + r*stepY) };
+  });
+}
+function shorten(a,b, pad=20){
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx,dy); if (!len) return {x1:a.x,y1:a.y,x2:b.x,y2:b.y};
+  const ux = dx/len, uy = dy/len;
+  return { x1: a.x + ux*pad, y1: a.y + uy*pad, x2: b.x - ux*pad, y2: b.y - uy*pad };
+}
+
+/* ---------- DSU ---------- */
+class DSU{
+  constructor(n, mode='rank'){
+    this.n=n; this.parent=[...Array(n).keys()];
+    this.rank=Array(n).fill(0);      // also used as size when mode='size'
+    if (mode==='size') this.rank.fill(1);
+    this.mode=mode;
+    this.updates=0;
+  }
+  root(x){ while(this.parent[x]!==x) x=this.parent[x]; return x; } // non-compressing
+  find(x, trace=false){
+    if (!trace) { // full compression
+      if (this.parent[x]!==x) this.parent[x]=this.find(this.parent[x], false), this.updates++;
+      return this.parent[x];
+    } else {
+      // return path for step-by-step visualization
+      const path=[x];
+      while (this.parent[path[path.length-1]]!==path[path.length-1]){
+        path.push(this.parent[path[path.length-1]]);
+      }
+      return path; // last item is root
+    }
+  }
+  union(a,b){
+    let ra=this.root(a), rb=this.root(b);
+    if (ra===rb) return {merged:false, ra, rb};
+    // union by rank or size
+    if (this.rank[ra] < this.rank[rb]) [ra,rb]=[rb,ra];
+    this.parent[rb]=ra; this.updates++;
+    if (this.mode==='rank'){
+      if (this.rank[ra]===this.rank[rb]) this.rank[ra]++;
+    } else { // size
+      this.rank[ra]+=this.rank[rb];
+    }
+    return {merged:true, ra, rb};
+  }
+  components(){
+    const mp=new Map();
+    for(let i=0;i<this.n;i++){
+      const r=this.root(i);
+      if(!mp.has(r)) mp.set(r,[]);
+      mp.get(r).push(i);
+    }
+    return [...mp.entries()].map(([root, members])=>({root, members}));
+  }
+}
+
+/* ---------- State ---------- */
+const STATE = {
+  n: 10,
+  nodes: [],
+  dsu: null,
+};
+
+/* ---------- Rendering ---------- */
+function render(){
+  // nodes
+  gN.innerHTML=''; gE.innerHTML='';
+  STATE.nodes.forEach(n=>{
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    const isRoot = STATE.dsu && STATE.dsu.parent[n.id]===n.id;
+    g.setAttribute('class','node'+(isRoot?' root':''));
+    g.setAttribute('transform',`translate(${n.x},${n.y})`);
+    g.innerHTML=`<circle></circle><text text-anchor="middle" dy="4">${n.id}</text>`;
+    g.addEventListener('click', ()=> fillXY(n.id));
+    gN.appendChild(g);
+  });
+
+  // edges (parent pointers)
+  if (STATE.dsu){
+    for(let i=0;i<STATE.n;i++){
+      const p=STATE.dsu.parent[i];
+      if (p!==i){
+        const a=STATE.nodes[i], b=STATE.nodes[p];
+        const s=shorten(a,b,18);
+        const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1',s.x1); line.setAttribute('y1',s.y1);
+        line.setAttribute('x2',s.x2); line.setAttribute('y2',s.y2);
+        line.setAttribute('class','edge');
+        line.dataset.key=`${i}->${p}`;
+        gE.appendChild(line);
+      }
+    }
+  }
+
+  // arrays + sets
+  parentList.innerHTML=''; auxList.innerHTML=''; setsList.innerHTML='';
+  if (STATE.dsu){
+    for(let i=0;i<STATE.n;i++){
+      const d1=document.createElement('div'); d1.className='item'; d1.textContent=`${i}:${STATE.dsu.parent[i]}`;
+      parentList.appendChild(d1);
+      const d2=document.createElement('div'); d2.className='item';
+      d2.textContent = STATE.dsu.mode==='rank' ? `${i}:${STATE.dsu.rank[i]}` : `${i}:${STATE.dsu.rank[i]}`;
+      auxList.appendChild(d2);
+    }
+    parentUpdates.textContent=`updates: ${STATE.dsu.updates}`;
+    const comps=STATE.dsu.components();
+    comps.forEach(c=>{
+      const d=document.createElement('div'); d.className='item'; d.textContent=`root ${c.root}: { ${c.members.join(', ')} }`;
+      setsList.appendChild(d);
+    });
+    setsCount.textContent=`Sets: ${comps.length}`;
+    compCount.textContent=comps.length;
+    auxTitle.textContent = STATE.dsu.mode==='rank' ? 'rank[i]' : 'size[i]';
+    auxNote.textContent  = STATE.dsu.mode==='rank' ? 'higher = taller tree' : 'sum of members in tree';
+    modeChip.textContent = `Union by: ${STATE.dsu.mode}`;
+  }
+}
+
+function explain(html){ explainEl.innerHTML = html; }
+
+/* ---------- Interactions ---------- */
+function fillXY(v){
+  // fill x then y alternately
+  const xVal = parseInt(xInput.value,10);
+  const yVal = parseInt(yInput.value,10);
+  if (isNaN(xVal) || document.activeElement===xInput){
+    xInput.value = v;
+  } else if (isNaN(yVal) || document.activeElement===yInput || v===xVal){
+    yInput.value = v;
+  } else {
+    xInput.value = v;
+  }
+  highlightXY();
+}
+function highlightXY(){
+  gN.querySelectorAll('.node').forEach(n=>n.classList.remove('sel'));
+  const xs = [parseInt(xInput.value,10), parseInt(yInput.value,10)].filter(v=>!Number.isNaN(v));
+  xs.forEach(v=>{
+    const idx = STATE.nodes[v]?.id;
+    if (idx!=null){
+      const g = gN.children[idx];
+      g && g.classList.add('sel');
+    }
+  });
+}
+
+function makeSet(){
+  const n = Math.max(2, Math.min(20, parseInt(nInput.value,10)||10));
+  STATE.n = n;
+  STATE.nodes = gridPositions(n);
+  STATE.dsu = new DSU(n, modeSel.value);
+  xInput.min=0; yInput.min=0; xInput.max=n-1; yInput.max=n-1;
+  xInput.value=0; yInput.value=Math.min(1,n-1);
+  explain(`Created <b>${n}</b> singleton sets: parent[i]=i. Try union(x,y) or find(x).`);
+  render(); highlightXY();
+}
+
+function unionXY(){
+  const x = parseInt(xInput.value,10), y=parseInt(yInput.value,10);
+  if (Number.isNaN(x)||Number.isNaN(y) || x<0 || y<0 || x>=STATE.n || y>=STATE.n){ explain('Pick valid x,y within range.'); return; }
+  const beforeA = STATE.dsu.root(x), beforeB = STATE.dsu.root(y);
+  const res = STATE.dsu.union(x,y);
+  render();
+  // color the merged edge (root change)
+  if (res.merged){
+    // draw a quick green emphasis from child-root to new root
+    const e = [...gE.querySelectorAll('.edge')].find(el=>el.dataset.key===`${res.rb}->${res.ra}`);
+    e && e.classList.add('comp');
+    explain(`Union(${x}, ${y}): merged root <b>${beforeA}</b> with root <b>${beforeB}</b> → new root <b>${STATE.dsu.root(x)}</b> (${STATE.dsu.mode}).`);
+  } else {
+    explain(`Union(${x}, ${y}): already in the same set (root <b>${beforeA}</b>).`);
+  }
+}
+
+function findX(){
+  const x = parseInt(xInput.value,10);
+  if (Number.isNaN(x) || x<0 || x>=STATE.n){ explain('Choose a valid x in range.'); return; }
+  const path = STATE.dsu.find(x, true); // trace path: [x,...,root]
+  // highlight path edges/nodes
+  [...gE.querySelectorAll('.edge')].forEach(el=>el.classList.remove('path'));
+  [...gN.querySelectorAll('.node')].forEach(el=>el.classList.remove('sel'));
+  for(let i=0;i<path.length-1;i++){
+    const a=path[i], b=path[i+1];
+    const el=[...gE.querySelectorAll('.edge')].find(e=>e.dataset.key===`${a}->${b}`);
+    el && el.classList.add('path');
+    const gn=gN.children[a]; gn && gn.classList.add('sel');
+  }
+  const root = path[path.length-1];
+  const gnRoot = gN.children[root]; gnRoot && gnRoot.classList.add('sel');
+
+  explain(`find(${x}): path = [${path.join(' → ')}]. <b>Path compression</b> will rewire each node along the path to point directly to root <b>${root}</b>.`);
+
+  // perform compression and re-render after a short moment for effect
+  setTimeout(()=>{
+    // do actual compressed find
+    STATE.dsu.find(x, false);
+    render();
+    const gn = gN.children[root]; gn && gn.classList.add('root');
+    explain(`Compressed: all nodes on the path now point to <b>${root}</b>. Subsequent finds are faster.`);
+  }, 650);
+}
+
+function randomUnions(){
+  const steps = Math.max(1, Math.floor(STATE.n*1.2));
+  for(let i=0;i<steps;i++){
+    const a = Math.floor(Math.random()*STATE.n);
+    let b = Math.floor(Math.random()*STATE.n);
+    if (a===b) b = (b+1)%STATE.n;
+    STATE.dsu.union(a,b);
+  }
+  render();
+  explain(`Performed ${steps} random unions. Try find(x) on any node to watch path compression.`);
+}
+
+/* ---------- Events ---------- */
+btnMake.addEventListener('click', makeSet);
+btnUnion.addEventListener('click', unionXY);
+btnFind.addEventListener('click', findX);
+btnRand.addEventListener('click', randomUnions);
+modeSel.addEventListener('change', ()=>{
+  if (!STATE.dsu) return;
+  // rebuild DSU preserving current partition (simpler to remake from scratch)
+  const comps = STATE.dsu.components();
+  const mode = modeSel.value;
+  const d = new DSU(STATE.n, mode);
+  comps.forEach(c=>{
+    const r = c.members[0];
+    for(let i=1;i<c.members.length;i++) d.union(r, c.members[i]);
+  });
+  STATE.dsu = d;
+  render();
+  explain(`Switched to union-by-<b>${mode}</b>.`);
+});
+svg.addEventListener('click', highlightXY);
+
+/* Keyboard shortcuts */
+window.addEventListener('keydown', (e)=>{
+  if (e.key.toLowerCase()==='u') unionXY();
+  if (e.key.toLowerCase()==='f') findX();
+  if (e.key.toLowerCase()==='r') makeSet();
+});
+
+/* ---------- Bootstrap ---------- */
+makeSet();
+</script>
+</body>
+</html>
