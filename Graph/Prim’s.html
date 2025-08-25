@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Prim’s Algorithm Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:14px; --speed:300ms;
+    --pair:#ffd166; /* yellow for frontier (heap) */
+    --new:#8ae9c1;  /* green for MST edge */
+  }
+
+  * { box-sizing: border-box; }
+  body{
+    margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1000px 600px at 80% -10%, #1a1f3a 0%, #0f1220 50%) no-repeat, var(--bg);
+    color: var(--text);
+  }
+
+  header{
+    padding: 24px clamp(16px, 4vw, 32px);
+    display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;
+  }
+  .title h1{ margin:0; font-size: clamp(22px, 2.2vw, 30px); letter-spacing: .3px;}
+  .subtitle{ color: var(--muted); margin-top:6px; font-size: 0.95rem;}
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color: var(--text); border: 1px solid #222842;
+    padding: 10px 14px; border-radius: 10px; cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: transform .08s ease, background var(--speed), border-color var(--speed);
+    font-weight: 600;
+  }
+  button:hover{ transform: translateY(-1px); border-color:#2c3256;}
+  button[aria-pressed="true"]{ outline: 2px solid var(--accent); }
+  select{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color: var(--text); border: 1px solid #222842; border-radius: 10px;
+    padding: 10px 12px; box-shadow: var(--shadow);
+    font-weight: 600;
+  }
+  .chip{
+    background: var(--chip); color: var(--text); padding:4px 8px; border-radius: 999px; border:1px solid #2a2f58; font-size: 12px;
+  }
+
+  main{
+    padding: 0 clamp(16px, 4vw, 32px) 32px;
+    display: grid;
+    grid-template-columns: 1.2fr .9fr;
+    gap: clamp(14px, 2vw, 20px);
+  }
+  @media (max-width: 980px){ main{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid #20264a; border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: clip;
+  }
+  .panel header{
+    padding: 12px 16px; background: #141832; border-bottom: 1px solid #1f2546;
+    display:flex; justify-content: space-between; align-items:center;
+  }
+  .panel header h2{ margin:0; font-size: 16px; letter-spacing:.5px; }
+  .panel .content{ padding: 14px; }
+
+  .graph-wrap{
+    position: relative; aspect-ratio: 16/10; width: 100%;
+    background:
+      radial-gradient(600px 200px at 70% -20%, rgba(108,243,255,.10), transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+    border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius);
+  }
+  svg{ width: 100%; height: 100%; display:block; }
+
+  .edge { stroke: #515a93; stroke-width: 3; opacity:.85; transition: all var(--speed); }
+  .edge-hover { stroke: #7e88c7; }
+  .edge-label{
+    font-size: 12px; fill: var(--muted); user-select:none; paint-order: stroke; stroke: #0d1125; stroke-width: 3px;
+  }
+  .edge.mst { stroke: var(--new); stroke-width: 5; filter: drop-shadow(0 0 4px rgba(138,233,193,.65)); }
+  .edge.frontier { stroke: var(--pair); stroke-width: 5; }
+  .edge.blocked { stroke: #b05a7a; stroke-dasharray: 8 6; opacity:.9; }
+
+  .node{ fill: #1d2350; stroke: #2e3a7d; stroke-width: 2; transition: transform var(--speed), filter var(--speed); }
+  .node text{ fill: var(--text); font-weight: 700; font-size: 12px; }
+  .node circle{ r: 16; }
+  .node.visited circle{ fill: #203a3a; stroke: var(--new); }
+  .node.start circle{ stroke-width: 3; filter: drop-shadow(0 0 6px rgba(108,243,255,.6)); }
+  .node:hover{ filter: drop-shadow(0 0 6px rgba(108, 243, 255, .35)); }
+
+  .list, .heap, .visited{
+    display: grid; gap:10px;
+  }
+  .heap-item{
+    display:grid; grid-template-columns: 64px 1fr 68px; align-items:center; gap:8px;
+    padding:10px; border-radius:12px; background: var(--slot); border:1px solid #2a2f58;
+  }
+  .heap-item .badge{
+    width:48px; height:40px; display:grid; place-items:center; border-radius:10px; background: var(--chip);
+    font-weight:700; font-size:12px; line-height:1.1;
+  }
+  .heap-item .uv{ color: var(--text); font-weight:600; }
+  .heap-item .w{ text-align:right; color: var(--accent-2); font-weight:700; }
+  .heap-item.active{ outline:2px solid var(--pair); }
+  .heap-item.used{ outline:2px solid var(--new); background: #1f2c2a; }
+
+  .visited-grid{
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap:10px;
+  }
+  .v-card{
+    background: var(--slot); border:1px solid #2a2f58; border-radius: 12px; padding:10px; text-align:center; font-weight:700;
+  }
+  .v-card.on{ outline:2px solid var(--new); color: var(--new); }
+
+  .legend{
+    display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+  }
+  .legend .chip{ display:inline-flex; gap:6px; align-items:center; }
+  .swatch{ width:10px; height:10px; border-radius:2px; display:inline-block; }
+  .swatch.frontier{ background: var(--pair); }
+  .swatch.mst{ background: var(--new); }
+  .swatch.blocked{ background: #b05a7a; }
+
+  .explain{
+    background: #101433; border-top:1px solid #1f2546; padding:12px 14px; color: var(--text);
+  }
+  .explain b{ color: var(--accent); }
+  .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono"; background:#0e1230; border:1px solid #1c2250; padding:2px 6px; border-radius:8px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>🌲 Prim’s Algorithm</h1>
+      <div class="subtitle">Greedy: grow an MST from a start node; always pick the smallest edge crossing the cut. Uses a <b>priority queue</b>. Time: <span class="chip">O(E log V)</span></div>
+    </div>
+    <div class="controls" role="group" aria-label="Playback">
+      <label class="chip" for="start-select">Start</label>
+      <select id="start-select" aria-label="Choose start vertex"></select>
+      <button id="btn-play" aria-label="Play/Pause (Space)">▶ Play</button>
+      <button id="btn-step" aria-label="Step (N)">Step ▷</button>
+      <button id="btn-reset" aria-label="Reset (R)">Reset ↺</button>
+      <button id="btn-shuffle" aria-label="Shuffle Weights (S)">Shuffle Weights 🎲</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: Graph -->
+    <section class="panel">
+      <header>
+        <h2>Graph</h2>
+        <div class="legend">
+          <span class="chip"><span class="swatch frontier"></span> frontier (in heap)</span>
+          <span class="chip"><span class="swatch mst"></span> chosen (MST)</span>
+          <span class="chip"><span class="swatch blocked"></span> ignored</span>
+        </div>
+      </header>
+      <div class="content graph-wrap">
+        <svg id="graph" viewBox="0 0 800 520" aria-labelledby="graph-title" role="img">
+          <title id="graph-title">Graph visualization for Prim’s Algorithm</title>
+          <g id="edges"></g>
+          <g id="nodes"></g>
+        </svg>
+      </div>
+      <div class="explain" id="explain">Pick a start node, then <span class="kbd">Play</span> or <span class="kbd">Step</span>.</div>
+    </section>
+
+    <!-- Right: Heap + Visited -->
+    <section class="panel">
+      <header>
+        <h2>Priority Queue (min-heap) &amp; Visited</h2>
+    </header>
+      <div class="content">
+        <h3 style="margin:8px 0 8px">Min-Heap (by edge weight)</h3>
+        <div class="heap" id="heap"></div>
+
+        <h3 style="margin:14px 0 8px">Visited</h3>
+        <div class="visited" id="visited"></div>
+        <p class="mini" style="color:var(--muted)">We push candidate edges <code>(w, v, parent)</code> for each frontier. Extract-min picks the lightest crossing edge. If <code>v</code> is already visited, we skip it.</p>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+/* -------------------------
+   Elements & State
+-------------------------- */
+const svg = document.getElementById('graph');
+const gEdges = document.getElementById('edges');
+const gNodes = document.getElementById('nodes');
+const heapEl = document.getElementById('heap');
+const visitedEl = document.getElementById('visited');
+const explainEl = document.getElementById('explain');
+
+const BTN = {
+  play: document.getElementById('btn-play'),
+  step: document.getElementById('btn-step'),
+  reset: document.getElementById('btn-reset'),
+  shuffle: document.getElementById('btn-shuffle'),
+};
+const startSelect = document.getElementById('start-select');
+
+const STATE = {
+  n: 8,
+  nodes: [],
+  edges: [],      // list of {id,u,v,w}
+  adj: [],        // adjacency list: [ {to, w, edgeId}, ... ]
+  mst: [],
+  visited: [],
+  start: 0,
+  heap: [],       // array of {w, v, parent, edgeId}
+  running: false,
+  timer: null,
+};
+
+/* -------------------------
+   Helpers & Data
+-------------------------- */
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+function defaultNodes(n=8){
+  const cx = 400, cy = 250, R = 190;
+  return Array.from({length:n}, (_,i)=>{
+    const ang = (i / n) * Math.PI*2 - Math.PI/2;
+    return { id:i, x: Math.round(cx + R*Math.cos(ang)), y: Math.round(cy + R*Math.sin(ang)) };
+  });
+}
+
+/* Base connected-ish graph; we’ll reshuffle weights for variety */
+function baseEdges(){
+  const E = [
+    [0,1,7],[1,2,5],[2,3,8],[3,4,10],[4,5,3],[5,6,6],[6,7,4],[7,0,9],
+    [0,2,9],[1,3,7],[2,4,2],[3,5,4],[4,6,5],[5,7,1],[6,0,6],[7,2,3]
+  ];
+  return E.map(([u,v,w], id)=>({id,u,v,w}));
+}
+function shuffleWeights(edges){ return edges.map(e=>({...e, w: randInt(1,12)})); }
+
+function buildAdj(n, edges){
+  const adj = Array.from({length:n}, ()=>[]);
+  edges.forEach(e=>{
+    adj[e.u].push({to:e.v, w:e.w, edgeId:e.id});
+    adj[e.v].push({to:e.u, w:e.w, edgeId:e.id});
+  });
+  return adj;
+}
+
+function edgeKey(u,v){ return u < v ? `${u}-${v}` : `${v}-${u}`; }
+
+/* -------------------------
+   Rendering
+-------------------------- */
+function renderNodes(){
+  gNodes.innerHTML = '';
+  STATE.nodes.forEach(n=>{
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','node');
+    if (n.id === STATE.start) g.classList.add('start');
+    if (STATE.visited[n.id]) g.classList.add('visited');
+    g.setAttribute('transform',`translate(${n.x},${n.y})`);
+    g.innerHTML = `<circle></circle><text text-anchor="middle" dy="4">${n.id}</text>`;
+    gNodes.appendChild(g);
+  });
+}
+
+function renderEdges(){
+  gEdges.innerHTML = '';
+  STATE.edges.forEach(e=>{
+    const a = STATE.nodes[e.u], b = STATE.nodes[e.v];
+    const midx = (a.x+b.x)/2, midy = (a.y+b.y)/2;
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+    line.setAttribute('class', 'edge');
+    line.dataset.key = edgeKey(e.u,e.v);
+    gEdges.appendChild(line);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('x', midx); label.setAttribute('y', midy - 6);
+    label.setAttribute('class', 'edge-label');
+    label.textContent = e.w;
+    gEdges.appendChild(label);
+  });
+}
+
+function markEdge(u,v,status){
+  const key = edgeKey(u,v);
+  const line = [...gEdges.querySelectorAll('.edge')].find(el=>el.dataset.key===key);
+  if(!line) return;
+  line.classList.remove('frontier','mst','blocked');
+  if(status) line.classList.add(status);
+}
+
+function renderHeap(){
+  heapEl.innerHTML = '';
+  // Show as a sorted list (min at top). We’ll keep internal heap sorted too.
+  STATE.heap.forEach((h, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'heap-item';
+    div.id = `heap-${h.edgeId}-${h.v}-${idx}`;
+    div.innerHTML = `
+      <div class="badge">min #${idx+1}</div>
+      <div class="uv">(parent:${h.parent} → v:${h.v})</div>
+      <div class="w">w=${h.w}</div>
+    `;
+    heapEl.appendChild(div);
+  });
+}
+
+function renderVisited(){
+  visitedEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'visited-grid';
+  for(let i=0;i<STATE.n;i++){
+    const v = document.createElement('div');
+    v.className = 'v-card' + (STATE.visited[i] ? ' on' : '');
+    v.textContent = i;
+    wrap.appendChild(v);
+  }
+  visitedEl.appendChild(wrap);
+}
+
+/* -------------------------
+   Priority Queue (simple)
+-------------------------- */
+function heapPush(item){
+  STATE.heap.push(item);
+  STATE.heap.sort((a,b)=>a.w-b.w || a.v-b.v || a.parent-b.parent);
+}
+function heapPop(){
+  return STATE.heap.shift();
+}
+
+/* -------------------------
+   Prim core (one step)
+-------------------------- */
+function explain(text){ explainEl.innerHTML = text; }
+
+function init(shuffle=false){
+  STATE.nodes = defaultNodes(STATE.n);
+  const edges = shuffle ? shuffleWeights(baseEdges()) : baseEdges();
+  STATE.edges = edges;
+  STATE.adj = buildAdj(STATE.n, edges);
+  STATE.visited = Array(STATE.n).fill(false);
+  STATE.heap = [];
+  STATE.mst = [];
+  clearTimeout(STATE.timer); STATE.running=false; BTN.play.textContent='▶ Play'; BTN.play.setAttribute('aria-pressed','false');
+
+  // build start selector
+  startSelect.innerHTML = '';
+  for(let i=0;i<STATE.n;i++){
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = i;
+    if (i===STATE.start) opt.selected = true;
+    startSelect.appendChild(opt);
+  }
+
+  renderEdges(); renderNodes(); renderHeap(); renderVisited();
+  // clear edge classes
+  STATE.edges.forEach(e=>markEdge(e.u,e.v,null));
+  explain(`Ready. Start at <b>${STATE.start}</b>. Push (0, start, -1) then expand the lightest frontier edge.`);
+}
+
+function seedStart(){
+  // reset everything and push start
+  STATE.heap = [{w:0, v:STATE.start, parent:-1, edgeId:-1}];
+  renderHeap();
+  renderVisited();
+}
+
+function addFrontier(u){
+  for(const {to:wv, w, edgeId} of STATE.adj[u]){
+    if (!STATE.visited[wv]){
+      heapPush({w, v: wv, parent: u, edgeId});
+      // mark its edge as frontier (if not already MST)
+      const e = STATE.edges.find(E => E.id === edgeId);
+      markEdge(e.u, e.v, 'frontier');
+    }
+  }
+  renderHeap();
+}
+
+function step(){
+  // ensure seeded
+  if (STATE.heap.length===0 && STATE.mst.length===0 && !STATE.visited.some(Boolean)){
+    seedStart();
+    explain(`Inserted <b>(0, start=${STATE.start}, -1)</b> into the heap. Extract it to begin.`);
+    return true;
+  }
+
+  // Pop until we find an unvisited vertex or heap empty
+  let item = null;
+  while(STATE.heap.length){
+    item = heapPop();
+    if (!STATE.visited[item.v]) break;
+    // This edge leads to an already-visited vertex; ignore
+  }
+
+  if (!item){
+    explain(`<b>Done.</b> Heap is empty. The green edges form the <b>Minimum Spanning Tree</b>.`);
+    return false;
+  }
+
+  // Highlight the edge being considered
+  if (item.parent !== -1){
+    const e = STATE.edges.find(E => E.id === item.edgeId);
+    markEdge(e.u, e.v, 'frontier');
+  }
+  renderHeap();
+
+  // If v already visited, skip (shouldn't happen due to while, but safe)
+  if (STATE.visited[item.v]){
+    explain(`Skip vertex <b>${item.v}</b> since it’s already visited. Continue popping.`);
+    return true;
+  }
+
+  // Visit v
+  STATE.visited[item.v] = true;
+  renderVisited(); renderNodes();
+
+  // If it has a parent, accept that edge into MST
+  if (item.parent !== -1){
+    STATE.mst.push(item.edgeId);
+    const e = STATE.edges.find(E => E.id === item.edgeId);
+    markEdge(e.u, e.v, 'mst');
+    explain(`Extract-min: picked edge <b>(${item.parent}, ${item.v})</b> with weight <b>${item.w}</b>. Add to MST. Mark <b>${item.v}</b> visited and push its frontier edges.`);
+  } else {
+    explain(`Extract start node <b>${item.v}</b>. Mark visited and push its frontier edges.`);
+  }
+
+  // After accepting, new frontier edges from v
+  addFrontier(item.v);
+
+  // Any frontier edge now connecting two visited vertices can be cosmetically marked blocked
+  for(const h of STATE.heap){
+    if (STATE.visited[h.v] && STATE.visited[h.parent]){
+      const e = STATE.edges.find(E => E.id === h.edgeId);
+      markEdge(e.u, e.v, 'blocked');
+    }
+  }
+
+  return true;
+}
+
+/* -------------------------
+   Playback
+-------------------------- */
+function play(){
+  if (STATE.running){
+    STATE.running=false; BTN.play.textContent='▶ Play'; BTN.play.setAttribute('aria-pressed','false');
+    clearTimeout(STATE.timer); STATE.timer=null;
+    return;
+  }
+  STATE.running=true; BTN.play.textContent='⏸ Pause'; BTN.play.setAttribute('aria-pressed','true');
+
+  const tick = ()=>{
+    if (!STATE.running) return;
+    const more = step();
+    if (!more){ STATE.running=false; BTN.play.textContent='▶ Play'; BTN.play.setAttribute('aria-pressed','false'); return; }
+    STATE.timer = setTimeout(tick, 1200);
+  };
+  tick();
+}
+
+/* -------------------------
+   Wiring
+-------------------------- */
+BTN.play.addEventListener('click', play);
+BTN.step.addEventListener('click', ()=>{ if(STATE.running) play(); step(); });
+BTN.reset.addEventListener('click', ()=> init(false));
+BTN.shuffle.addEventListener('click', ()=> init(true));
+startSelect.addEventListener('change', (e)=>{
+  STATE.start = parseInt(e.target.value,10);
+  init(false);
+});
+
+window.addEventListener('keydown', (e)=>{
+  if (e.key === ' '){ e.preventDefault(); play(); }
+  if (e.key.toLowerCase() === 'n'){ step(); }
+  if (e.key.toLowerCase() === 'r'){ init(false); }
+  if (e.key.toLowerCase() === 's'){ init(true); }
+});
+
+/* Hover affordance on edges */
+gEdges.addEventListener('pointerover', (e)=>{
+  if (e.target.classList.contains('edge')) e.target.classList.add('edge-hover');
+});
+gEdges.addEventListener('pointerout', (e)=>{
+  if (e.target.classList.contains('edge')) e.target.classList.remove('edge-hover');
+});
+
+/* -------------------------
+   Bootstrap
+-------------------------- */
+init(false);
+
+/* -------------------------
+   Reference (Prim)
+-------------------------- */
+/*
+function Prim(V, adj, start):
+    MST = empty set
+    visited = array[V] initialized to false
+    minHeap = priority queue storing (weight, vertex, parent)
+
+    insert (0, start, -1) into minHeap
+
+    while minHeap is not empty:
+        (w, u, parent) = extract-min(minHeap)
+        if visited[u] continue
+        visited[u] = true
+        if parent != -1:
+            add edge (parent, u, w) to MST
+
+        for each (v, weight) in adj[u]:
+            if not visited[v]:
+                insert (weight, v, u) into minHeap
+
+    return MST
+*/
+</script>
+</body>
+</html>
