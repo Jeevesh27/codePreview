@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Frequency Counting Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+  body{margin:0;background:var(--bg);color:var(--text);font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  header{padding:24px clamp(16px,4vw,32px);display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center}
+  h1{margin:0;font-size:clamp(22px,2.2vw,30px)}
+  .subtitle{color:var(--muted);margin-top:6px;font-size:.95rem}
+  .controls{display:flex;gap:10px;flex-wrap:wrap}
+  button,input{background:linear-gradient(180deg,var(--panel-2),var(--panel));color:var(--text);border:1px solid #222842;border-radius:10px;padding:10px 14px;font-weight:600;box-shadow:var(--shadow)}
+  button:hover{transform:translateY(-1px);border-color:#2c3256}
+  main{padding:0 clamp(16px,4vw,32px) 32px;display:grid;grid-template-columns:1.1fr .9fr;gap:20px}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .panel{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid #20264a;border-radius:var(--radius);box-shadow:var(--shadow)}
+  .panel header{padding:12px 16px;background:#141832;border-bottom:1px solid #1f2546}
+  .panel h2{margin:0;font-size:16px}
+  .panel .content{padding:14px}
+  .array{display:flex;gap:10px;flex-wrap:wrap}
+  .elem{padding:14px 16px;border-radius:12px;background:var(--slot);border:1px solid #2a2f58;font-weight:700;font-size:1.1rem;transition:all var(--speed)}
+  .elem.active{outline:2px solid var(--pair)}
+  .map{display:grid;gap:10px}
+  .entry{display:grid;grid-template-columns:1fr auto;align-items:center;padding:10px;border-radius:12px;background:var(--slot);border:1px solid #2a2f58}
+  .entry.new{outline:2px solid var(--new)}
+  .entry .count{font-weight:700;color:var(--accent-2)}
+  .explain{background:#101433;border-top:1px solid #1f2546;padding:12px 14px}
+  .explain b{color:var(--accent)}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas;background:#0e1230;border:1px solid #1c2250;padding:2px 6px;border-radius:8px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔢 Frequency Counting</h1>
+    <div class="subtitle">Use a <b>hash map</b> to count occurrences of elements in an array.</div>
+  </div>
+  <div class="controls">
+    <input id="arrInput" value="a,b,a,c,b,a" />
+    <button id="btn-set">Set Array</button>
+    <button id="btn-play">▶ Play</button>
+    <button id="btn-step">Step ▷</button>
+    <button id="btn-reset">Reset ↺</button>
+    <button id="btn-rand">Random 🎲</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <header><h2>Array</h2></header>
+    <div class="content"><div id="array" class="array"></div></div>
+    <div class="explain" id="explain">Press <span class="kbd">Play</span> or <span class="kbd">Step</span> to start counting.</div>
+  </section>
+
+  <section class="panel">
+    <header><h2>Hash Map</h2></header>
+    <div class="content"><div id="map" class="map"></div></div>
+  </section>
+</main>
+
+<script type="module">
+const arrInput=document.getElementById('arrInput');
+const btnSet=document.getElementById('btn-set');
+const btnPlay=document.getElementById('btn-play');
+const btnStep=document.getElementById('btn-step');
+const btnReset=document.getElementById('btn-reset');
+const btnRand=document.getElementById('btn-rand');
+const arrayEl=document.getElementById('array');
+const mapEl=document.getElementById('map');
+const explainEl=document.getElementById('explain');
+
+const STATE={arr:[],map:{},i:0,running:false,timer:null};
+
+function renderArray(){
+  arrayEl.innerHTML='';
+  STATE.arr.forEach((val,idx)=>{
+    const div=document.createElement('div');
+    div.className='elem'+(idx===STATE.i?' active':'');
+    div.textContent=val;
+    arrayEl.appendChild(div);
+  });
+}
+function renderMap(newKey=null){
+  mapEl.innerHTML='';
+  Object.entries(STATE.map).forEach(([k,v])=>{
+    const div=document.createElement('div');
+    div.className='entry'+(k===newKey?' new':'');
+    div.innerHTML=`<div>${k}</div><div class="count">${v}</div>`;
+    mapEl.appendChild(div);
+  });
+}
+function explain(html){explainEl.innerHTML=html}
+
+function reset(){
+  STATE.arr=arrInput.value.split(',').map(x=>x.trim()).filter(Boolean);
+  STATE.map={};STATE.i=0;STATE.running=false;
+  clearTimeout(STATE.timer);STATE.timer=null;
+  btnPlay.textContent='▶ Play';btnPlay.setAttribute('aria-pressed','false');
+  renderArray();renderMap();explain('Ready. Step through the array and count each occurrence.');
+}
+
+function step(){
+  if(STATE.i>=STATE.arr.length){explain('<b>Done.</b> All elements processed.');return false}
+  const el=STATE.arr[STATE.i];
+  STATE.map[el]=(STATE.map[el]||0)+1;
+  renderArray();renderMap(el);
+  explain(`Element <b>${el}</b> → count = ${STATE.map[el]}`);
+  STATE.i++;
+  return true;
+}
+function play(){
+  if(STATE.running){STATE.running=false;btnPlay.textContent='▶ Play';clearTimeout(STATE.timer);return}
+  STATE.running=true;btnPlay.textContent='⏸ Pause';
+  const tick=()=>{
+    if(!STATE.running)return;
+    const more=step();
+    if(!more){STATE.running=false;btnPlay.textContent='▶ Play';return}
+    STATE.timer=setTimeout(tick,1000);
+  };tick();
+}
+
+function randomArr(){
+  const vals='abcde';const len=randInt(6,10);
+  const arr=[...Array(len)].map(()=>vals[randInt(0,vals.length-1)]);
+  arrInput.value=arr.join(',');
+  reset();
+}
+function randInt(a,b){return Math.floor(Math.random()*(b-a))+a}
+
+btnSet.onclick=reset;btnReset.onclick=reset;
+btnStep.onclick=()=>{if(STATE.running)play();step()};
+btnPlay.onclick=play;btnRand.onclick=randomArr;
+
+window.addEventListener('keydown',e=>{
+  if(e.key===' '){e.preventDefault();play()}
+  if(e.key.toLowerCase()==='n'){step()}
+  if(e.key.toLowerCase()==='r'){reset()}
+  if(e.key.toLowerCase()==='s'){randomArr()}
+});
+
+reset();
+
+/* Reference
+function frequencyCount(arr):
+    create empty hashMap
+    for each element in arr:
+        hashMap[element] += 1
+    return hashMap
+*/
+</script>
+</body>
+</html>
