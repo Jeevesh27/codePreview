@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Make Array → Heap • Insert • Delete (Min/Max)</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1; --bad:#b05a7a;
+  }
+
+  *{ box-sizing: border-box }
+  body{
+    margin:0; background: radial-gradient(1000px 600px at 80% -10%, #1a1f3a 0%, #0f1220 50%) no-repeat, var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+  }
+
+  header{
+    padding: 24px clamp(16px, 4vw, 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+  h1{ margin:0; font-size: clamp(24px, 4vw, 32px) }
+  .subtitle{ color: var(--muted); font-size: clamp(0.9rem, 2.5vw, 1rem); line-height: 1.4; }
+
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center }
+  input, button, select{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    color: var(--text); border: 1px solid #222842; border-radius: 10px;
+    padding: 10px 12px; font-weight: 600; box-shadow: var(--shadow); cursor: pointer;
+  }
+  input[type="text"]{ min-width: 340px; max-width: 100%; }
+  input[type="number"]{ width: 90px; }
+  @media (max-width: 768px){
+    input[type="text"]{ min-width: 280px; }
+    .controls{ gap:8px; }
+  }
+  @media (max-width: 480px){
+    input[type="text"]{ min-width: 220px; font-size: 16px; }
+    input[type="number"]{ width: 70px; font-size: 16px; }
+    input, button, select{ padding: 12px 14px; min-height: 44px; }
+    .controls{ gap:6px; }
+  }
+  button:hover{ transform: translateY(-1px); border-color:#2c3256 }
+  button[aria-pressed="true"]{ outline:2px solid var(--accent) }
+  .chip{ background:var(--chip); color:var(--text); border:1px solid #2a2f58; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; white-space: nowrap; }
+  @media (max-width: 480px){
+    .chip{ font-size:11px; padding:3px 6px; }
+  }
+
+  main{
+    padding: 0 clamp(16px, 4vw, 32px) 32px;
+    display:grid; grid-template-columns: 1.15fr .85fr; gap: clamp(14px, 2vw, 20px);
+  }
+  @media (max-width: 980px){ main{ grid-template-columns: 1fr; } }
+  @media (max-width: 480px){
+    main{ padding: 0 12px 24px; gap: 16px; }
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid #20264a; border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: clip;
+  }
+  .panel header{
+    padding: 12px 16px; background:#141832; border-bottom:1px solid #1f2546;
+    display:flex; justify-content: space-between; align-items: center; flex-wrap:wrap; gap:8px;
+  }
+  .panel header h2{ margin:0; font-size: 16px }
+  @media (max-width: 480px){
+    .panel header{ padding: 10px 12px; }
+    .panel .content{ padding: 12px; }
+  }
+
+  .panel .content{ padding:14px }
+
+  /* Array board */
+  .board{
+    position: relative; height: 120px;
+    border-radius: 10px; border:1px dashed #2a2f58; background:#111638;
+    overflow:hidden; overflow-x:auto;
+  }
+  @media (max-width: 480px){
+    .board{ height: 100px; }
+  }
+  .cell{
+    position:absolute; width:54px; height:54px; display:grid; place-items:center;
+    border-radius:12px; background:var(--slot); border:1px solid #2a2f58; font-weight:800;
+    transition: transform 450ms ease, background 300ms ease, outline 300ms ease, opacity 300ms ease;
+    min-width: 48px; text-align:center;
+  }
+  @media (max-width: 480px){
+    .cell{ width: 44px; height: 44px; font-size: 0.9rem; min-width: 40px; }
+  }
+  .cell.active{ outline:2px solid var(--pair) }
+  .cell.swap{ outline:2px solid var(--new); background:#1f2c2a }
+  .cell.fade{ opacity:.4 }
+  .index-row{ display:flex; gap:8px; margin-top:8px; color:var(--muted); font-size:12px; flex-wrap:wrap; overflow-x:auto; }
+  .index-row .idx{ width:54px; text-align:center; flex-shrink:0; }
+  @media (max-width: 480px){
+    .index-row .idx{ width:44px; font-size:11px; }
+  }
+
+  /* Tree */
+  svg{ width:100%; height:100%; display:block }
+  .edge{ stroke:#6f78b8; stroke-width:2 }
+  .node circle{ r:18; fill:#1d2350; stroke:#2e3a7d; stroke-width:2 }
+  .node text{ fill:var(--text); font-weight:700; font-size:12px; text-anchor:middle; dominant-baseline:middle }
+  .node.active circle{ stroke: var(--pair); stroke-width: 3 }
+  .node.swap circle{ stroke: var(--new); stroke-width: 3 }
+
+  .legend{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center; }
+  .legend .chip{ display:inline-flex; gap:6px; align-items:center; }
+  @media (max-width: 480px){
+    .legend{ gap:6px; }
+    .legend .chip{ font-size:11px; padding:3px 6px; }
+  }
+  .sw{ width:10px; height:10px; border-radius:2px; display:inline-block }
+  .sw.act{ background: var(--pair) } .sw.swap{ background: var(--new) }
+
+  .explain{ background:#101433; border-top:1px solid #1f2546; padding:12px 14px; font-size: clamp(0.85rem, 2.5vw, 0.95rem); line-height: 1.5; }
+  .explain b{ color:var(--accent) }
+  .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas; background:#0e1230; border:1px solid #1c2250; padding:2px 6px; border-radius:8px }
+  @media (max-width: 480px){
+    .explain{ padding:10px 12px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🧺 Make Array → Heap • Insert • Delete</h1>
+      <div class="subtitle">Toggle <b>Min/Max</b>, build from array, and step through <b>insert</b> / <b>delete</b> with animations.</div>
+    </div>
+    <div class="controls" role="group" aria-label="Controls">
+      <input id="arrInput" type="text" value="7,3,5,1,9,2,8,6,4" />
+      <label class="chip" for="type">Type</label>
+      <select id="type">
+        <option value="max" selected>Max Heap 🔼</option>
+        <option value="min">Min Heap 🔽</option>
+      </select>
+      <button id="btn-make">Make Heap</button>
+
+      <label class="chip" for="insVal">Insert</label>
+      <input id="insVal" type="number" value="10" />
+      <button id="btn-insert">Insert</button>
+
+      <label class="chip" for="delIdx">Delete index</label>
+      <input id="delIdx" type="number" value="0" min="0" />
+      <button id="btn-delete">Delete</button>
+
+      <button id="btn-play">▶ Play</button>
+      <button id="btn-step">Step ▷</button>
+      <button id="btn-reset">Reset ↺</button>
+      <button id="btn-rand">Random 🎲</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: Array + narration -->
+    <section class="panel">
+      <header>
+        <h2>Array (Heap in-place)</h2>
+        <div class="legend">
+          <span class="chip"><span class="sw act"></span> active</span>
+          <span class="chip"><span class="sw swap"></span> swapping</span>
+        </div>
+      </header>
+      <div class="content">
+        <div id="board" class="board"></div>
+        <div id="index-row" class="index-row"></div>
+      </div>
+      <div class="explain" id="narrate">Type, set/insert/delete, then <span class="kbd">Step</span> or <span class="kbd">Play</span>.</div>
+    </section>
+
+    <!-- Right: Tree -->
+    <section class="panel">
+      <header>
+        <h2>Tree View</h2>
+        <div class="chip" id="heap-type-chip">max</div>
+      </header>
+      <div class="content" style="height:420px">
+        <svg id="tree" viewBox="0 0 800 400"></svg>
+      </div>
+      <div class="explain"><b>Index Math:</b> left = 2*i + 1, right = 2*i + 2, parent = (i-1)//2</div>
+    </section>
+  </main>
+
+<script type="module">
+/* Elements */
+const arrInput = document.getElementById('arrInput');
+const typeSel  = document.getElementById('type');
+const heapTypeChip = document.getElementById('heap-type-chip');
+
+const btnMake  = document.getElementById('btn-make');
+const insVal   = document.getElementById('insVal');
+const btnIns   = document.getElementById('btn-insert');
+const delIdx   = document.getElementById('delIdx');
+const btnDel   = document.getElementById('btn-delete');
+
+const btnPlay  = document.getElementById('btn-play');
+const btnStep  = document.getElementById('btn-step');
+const btnReset = document.getElementById('btn-reset');
+const btnRand  = document.getElementById('btn-rand');
+
+const board    = document.getElementById('board');
+const indexRow = document.getElementById('index-row');
+const narrate  = document.getElementById('narrate');
+const treeEl   = document.getElementById('tree');
+
+/* State */
+const CELL_W=54, GAP=8, PAD=12;
+const STATE = {
+  a: [],                // heap array
+  items: [],            // [{id,val}] for stable animation
+  type: 'max',          // 'max'|'min'
+  queue: [],            // animation/action steps
+  running: false,
+  timer: null,
+  nextId: 1000,
+};
+
+function parseArray(str){
+  return str.split(',').map(s=>s.trim()).filter(Boolean).map(Number).filter(v=>!Number.isNaN(v));
+}
+function cmpUp(x,y){ return (STATE.type==='max') ? (x>y) : (x<y); } // x should go above y?
+function cmpDown(x,y){ return (STATE.type==='max') ? (x>y) : (x<y); } // same check
+
+/* ---------- Rendering ---------- */
+function ensureCells(n){
+  board.style.minWidth = `${PAD*2 + n*(CELL_W+GAP) - GAP}px`;
+  indexRow.innerHTML = '';
+  for(let i=0;i<n;i++){
+    const d=document.createElement('div'); d.className='idx'; d.textContent=i; d.style.width=CELL_W+'px';
+    indexRow.appendChild(d);
+  }
+}
+function posX(i){ return PAD + i*(CELL_W+GAP); }
+function renderBoard(highlight={}){ // {i:'active'|'swap'|'fade'}
+  board.innerHTML='';
+  ensureCells(STATE.items.length);
+  STATE.items.forEach((it, i)=>{
+    const cell=document.createElement('div');
+    let cls='cell';
+    if(highlight[i]) cls+=' '+highlight[i];
+    cell.className=cls; cell.id=`cell-${it.id}`;
+    cell.style.transform = `translate(${posX(i)}px, 34px)`;
+    cell.textContent=it.val;
+    board.appendChild(cell);
+  });
+}
+function swapItems(i,j){
+  [STATE.items[i], STATE.items[j]] = [STATE.items[j], STATE.items[i]];
+  // move cells into place
+  STATE.items.forEach((it, idx)=>{
+    const el = document.getElementById(`cell-${it.id}`);
+    if (el) el.style.transform = `translate(${posX(idx)}px, 34px)`;
+  });
+}
+function renderTree(highlight={}){
+  treeEl.innerHTML='';
+  const n=STATE.items.length; if(!n) return;
+  const levels = Math.floor(Math.log2(n)) + 1;
+  const width=800, height=400;
+  const nodes=[];
+  for(let i=0;i<n;i++){
+    const level=Math.floor(Math.log2(i+1));
+    const pos=i-(2**level-1);
+    const cnt=2**level;
+    const x=(width/(cnt+1))*(pos+1), y=(height/(levels+1))*(level+1);
+    nodes.push({i,x,y,val:STATE.items[i].val});
+  }
+  nodes.forEach(nd=>{
+    const l=2*nd.i+1, r=2*nd.i+2;
+    if(l<nodes.length){
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',nd.x); line.setAttribute('y1',nd.y);
+      line.setAttribute('x2',nodes[l].x); line.setAttribute('y2',nodes[l].y);
+      line.setAttribute('class','edge'); treeEl.appendChild(line);
+    }
+    if(r<nodes.length){
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',nd.x); line.setAttribute('y1',nd.y);
+      line.setAttribute('x2',nodes[r].x); line.setAttribute('y2',nodes[r].y);
+      line.setAttribute('class','edge'); treeEl.appendChild(line);
+    }
+  });
+  nodes.forEach(nd=>{
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    let cls='node'; if(highlight[nd.i]) cls+=' '+highlight[nd.i];
+    g.setAttribute('class',cls);
+    g.setAttribute('transform',`translate(${nd.x},${nd.y})`);
+    g.innerHTML=`<circle></circle><text dy="4">${nd.val}</text>`;
+    treeEl.appendChild(g);
+  });
+}
+function say(html){ narrate.innerHTML = html; heapTypeChip.textContent = STATE.type; }
+
+/* ---------- Action queue engine ---------- */
+function enqueue(fn){ STATE.queue.push(fn); }
+function step(){
+  if(!STATE.queue.length){ say('Idle. Choose an operation.'); return false; }
+  const fn = STATE.queue.shift();
+  fn();
+  return STATE.queue.length>0;
+}
+function play(){
+  if(STATE.running){ STATE.running=false; btnPlay.textContent='▶ Play'; clearTimeout(STATE.timer); return; }
+  
+  // Check if there are operations to animate
+  if(STATE.queue.length === 0){
+    say('⚠️ No operations queued! First click <b>Make Heap</b>, <b>Insert</b>, or <b>Delete</b> to create animations, then click Play.');
+    return;
+  }
+  
+  STATE.running=true; btnPlay.textContent='⏸ Pause';
+  const tick=()=>{
+    if(!STATE.running) return;
+    const more = step();
+    if(!more){ STATE.running=false; btnPlay.textContent='▶ Play'; return; }
+    STATE.timer=setTimeout(tick, 700);
+  };
+  tick();
+}
+
+/* ---------- Heap primitives with animation steps ---------- */
+function pushAnimationSwap(i,j){
+  enqueue(()=>{ renderBoard({[i]:'swap',[j]:'swap'}); renderTree({[i]:'swap',[j]:'swap'}); });
+  enqueue(()=>{ swapItems(i,j); });
+}
+function pushHighlight(i, cls='active'){
+  enqueue(()=>{ renderBoard({[i]:cls}); renderTree({[i]:cls}); });
+}
+
+function siftUpSteps(i){
+  pushHighlight(i);
+  enqueue(()=>{ say(`Sift-up: index <b>${i}</b>`); });
+  while(i>0){
+    const p=Math.floor((i-1)/2);
+    const iv=STATE.items[i].val, pv=STATE.items[p].val;
+    enqueue(()=>{ renderBoard({[i]:'active',[p]:'active'}); renderTree({[i]:'active',[p]:'active'}); say(`Compare child a[${i}]=${iv} with parent a[${p}]=${pv}`); });
+    if(!cmpUp(iv, pv)) break;
+    pushAnimationSwap(i,p);
+    i=p;
+  }
+  enqueue(()=>{ renderBoard(); renderTree(); say('Sift-up done.'); });
+}
+
+function siftDownSteps(i, n){
+  // n = heap size
+  enqueue(()=>{ renderBoard({[i]:'active'}); renderTree({[i]:'active'}); say(`Sift-down from index <b>${i}</b> (heap size ${n})`); });
+  while(true){
+    const l=2*i+1, r=2*i+2; let best=i;
+    if(l<n){ const lv=STATE.items[l].val, bv=STATE.items[best].val;
+      enqueue(()=>{ renderBoard({[i]:'active',[l]:'active'}); renderTree({[i]:'active',[l]:'active'}); say(`Check left a[${l}]=${lv} vs candidate a[${best}]=${bv}`); });
+      if(cmpDown(lv, bv)) best=l;
+    }
+    if(r<n){ const rv=STATE.items[r].val, bv=STATE.items[best].val;
+      enqueue(()=>{ renderBoard({[best]:'active',[r]:'active'}); renderTree({[best]:'active',[r]:'active'}); say(`Check right a[${r}]=${rv} vs candidate a[${best}]=${bv}`); });
+      if(cmpDown(rv, bv)) best=r;
+    }
+    if(best!==i){
+      pushAnimationSwap(i,best);
+      i=best;
+    } else {
+      break;
+    }
+  }
+  enqueue(()=>{ renderBoard(); renderTree(); say('Sift-down done.'); });
+}
+
+/* ---------- Operations ---------- */
+function setFromInput(){
+  const arr = parseArray(arrInput.value).slice(0, 40);
+  STATE.type = typeSel.value;
+  STATE.a = arr.slice();
+  STATE.items = arr.map(v=>({id: STATE.nextId++, val: v}));
+  renderBoard(); renderTree(); say('Array loaded. Click “Make Heap” to heapify bottom-up.');
+}
+function makeHeap(){
+  // bottom-up heapify
+  STATE.queue = [];
+  const n = STATE.items.length;
+  enqueue(()=> say(`Build ${STATE.type} heap from array (bottom-up).`) );
+  for(let i=Math.floor(n/2)-1; i>=0; i--){
+    siftDownSteps(i, n);
+  }
+}
+function insertVal(){
+  const v = Number(insVal.value);
+  if(Number.isNaN(v)){ say('Enter a valid number to insert.'); return; }
+  STATE.queue = [];
+  enqueue(()=>{ STATE.items.push({id:STATE.nextId++, val:v}); renderBoard(); renderTree(); say(`Inserted at end: value <b>${v}</b>. Now sift-up.`); });
+  siftUpSteps(STATE.items.length-1);
+}
+function deleteIndex(){
+  let i = Number(delIdx.value)||0;
+  if(i<0 || i>=STATE.items.length){ say('Delete index out of range.'); return; }
+  STATE.queue = [];
+  const last = STATE.items.length-1;
+  if (i===last){
+    enqueue(()=>{ renderBoard({[i]:'active'}); renderTree({[i]:'active'}); say(`Delete last element at index ${i}.`); });
+    enqueue(()=>{ STATE.items.pop(); renderBoard(); renderTree(); say('Deleted.'); });
+    return;
+  }
+  enqueue(()=>{ renderBoard({[i]:'active',[last]:'active'}); renderTree({[i]:'active',[last]:'active'}); say(`Delete index <b>${i}</b>: swap with last, pop, then fix heap from index ${i}.`); });
+  // swap with last
+  pushAnimationSwap(i,last);
+  // pop tail
+  enqueue(()=>{ STATE.items.pop(); renderBoard(); renderTree(); });
+  // decide sift direction: compare with parent and children
+  enqueue(()=>{
+    const p = i>0 ? Math.floor((i-1)/2) : -1;
+    const needUp = (p>=0) && cmpUp(STATE.items[i].val, STATE.items[p].val);
+    STATE.__needUp = needUp;
+    say(`After removal: ${needUp ? 'child better than parent → sift-up' : 'check children → sift-down'}.`);
+  });
+  enqueue(()=>{
+    const n=STATE.items.length;
+    if (STATE.__needUp) siftUpSteps(i);
+    else siftDownSteps(i, n);
+  });
+}
+
+/* ---------- Wire up ---------- */
+function resetAll(){ clearTimeout(STATE.timer); STATE.running=false; btnPlay.textContent='▶ Play'; STATE.queue=[]; setFromInput(); }
+function randomize(){
+  const len = Math.floor(Math.random()*8)+8; // 8..15
+  const arr = Array.from({length:len}, ()=> Math.floor(Math.random()*50));
+  arrInput.value = arr.join(',');
+  setFromInput();
+}
+
+btnMake.addEventListener('click', makeHeap);
+btnIns.addEventListener('click', insertVal);
+btnDel.addEventListener('click', deleteIndex);
+
+btnStep.addEventListener('click', ()=>{ if(STATE.running) play(); step(); });
+btnPlay.addEventListener('click', play);
+btnReset.addEventListener('click', resetAll);
+btnRand.addEventListener('click', randomize);
+typeSel.addEventListener('change', ()=>{ STATE.type = typeSel.value; heapTypeChip.textContent=STATE.type; say(`Heap type set to <b>${STATE.type}</b>.`); });
+
+
+window.addEventListener('keydown', (e)=>{
+  if (e.key === ' '){ e.preventDefault(); play(); }
+  if (e.key.toLowerCase() === 'n'){ if(STATE.running) play(); step(); }
+  if (e.key.toLowerCase() === 'r'){ resetAll(); }
+  if (e.key.toLowerCase() === 's'){ randomize(); }
+});
+
+/* ---------- Init ---------- */
+setFromInput();
+</script>
+</body>
+</html>
