@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tabulation vs Memoization — Visualizer (Fibonacci)</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --slot:#2a305a; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:18px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+    background: radial-gradient(1200px 800px at 20% -10%, #1b1f39 0%, var(--bg) 45%);
+    color:var(--text);
+  }
+  .wrap{ max-width:1200px; margin:24px auto 60px; padding:0 16px; }
+
+  header{ text-align:center; margin-bottom:24px; }
+  header h1{ margin:0; letter-spacing:.3px; font-size:clamp(20px,2.4vw,32px); }
+  header .hint{ color:var(--muted); font-size:clamp(12px,1.2vw,14px); margin-top:6px }
+
+  /* Controls */
+  .controls{
+    background:linear-gradient(145deg, var(--panel), var(--panel-2));
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:18px;
+    display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;
+    margin-bottom:24px;
+  }
+  .row{ display:flex; flex-wrap:wrap; gap:12px; align-items:center }
+  .seg{
+    display:inline-flex; background:var(--slot); border-radius:999px; padding:4px; gap:6px;
+  }
+  .seg button{
+    border:0; background:transparent; color:var(--text); padding:8px 12px; border-radius:999px; cursor:pointer;
+    transition:transform .06s ease, background .2s ease, color .2s ease;
+  }
+  .seg button.active{ background:var(--accent); color:#091020; font-weight:700 }
+  .seg button:hover{ transform:translateY(-1px) }
+
+  label{ color:var(--muted); font-size:14px }
+  input[type="range"]{ width:160px }
+  .value{ color:var(--accent); font-weight:700; min-width:3ch; text-align:right }
+
+  .btn{
+    border:0; background:var(--chip); color:var(--text); padding:10px 14px; border-radius:12px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:8px; font-weight:700;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    transition:filter .15s ease, transform .06s ease, background .2s ease;
+  }
+  .btn:active{ transform:translateY(1px) }
+  .btn.primary{ background:linear-gradient(180deg, var(--accent), #5fd8ff); color:#07121a }
+  .btn.ghost{ background:transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18) }
+  .btn[disabled]{ opacity:.55; pointer-events:none }
+
+  /* Panels grid */
+  .panels{
+    display:grid; grid-template-columns: 1fr 1fr; gap:var(--gap);
+  }
+  @media (max-width: 900px){ .panels{ grid-template-columns:1fr } }
+
+  /* Panel card */
+  .panel{
+    background:linear-gradient(160deg, var(--panel), var(--panel-2));
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:18px;
+    display:flex; flex-direction:column; gap:16px;
+  }
+  .panel h2{ margin:0; font-size:clamp(16px,1.8vw,20px); display:flex; align-items:center; gap:8px }
+  .panel .tag{ font-size:12px; color:#07121a; background:var(--accent); border-radius:6px; padding:3px 8px; font-weight:800 }
+  .panel .sub{ color:var(--muted); font-size:clamp(12px,1.4vw,14px); line-height:1.55 }
+
+  /* mini-cards inside panel */
+  .cards{ display:grid; grid-template-columns:1fr 1fr; gap:var(--gap) }
+  @media (max-width: 700px){ .cards{ grid-template-columns:1fr } }
+
+  .card{
+    background:rgba(255,255,255,.03);
+    border-radius:12px;
+    padding:14px;
+    outline:1px solid rgba(255,255,255,.06);
+    display:flex; flex-direction:column; gap:10px; min-height:120px;
+  }
+  .card h3{ margin:0; font-size:14px; color:var(--text) }
+
+  .legend{ display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--muted) }
+  .leg{ display:inline-flex; align-items:center; gap:6px }
+  .sw{ width:14px; height:14px; border-radius:4px; outline:1px solid rgba(255,255,255,.12) }
+  .sw.hit{ background:var(--pair) }
+  .sw.new{ background:var(--new) }
+  .sw.cur{ background:var(--accent) }
+
+  .stack, .cache{
+    display:flex; flex-wrap:wrap; align-items:flex-start; gap:8px;
+    background:rgba(0,0,0,.12); padding:10px; border-radius:10px; min-height:54px;
+    outline:1px solid rgba(255,255,255,.06);
+  }
+  .frame, .chip{
+    border-radius:10px; background:var(--chip); padding:8px 10px; font-variant-numeric:tabular-nums;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    transition: transform var(--speed) ease, outline var(--speed) ease, background var(--speed) ease;
+  }
+  .frame .k{ color:var(--accent); font-weight:800 }
+  .chip .k{ color:var(--accent) }
+  .chip .v{ color:var(--ok); font-weight:800 }
+  .dim{ opacity:.55 }
+
+  .highlight{ outline:2px solid var(--pair) }
+  .new{ background:linear-gradient(180deg, var(--new), #77dcb1); color:#06120f }
+  .current{ outline:2px solid var(--accent); box-shadow:0 0 0 4px rgba(108,243,255,.10) }
+
+  /* Table */
+  .table{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+    gap:10px;
+    background:rgba(0,0,0,.12); padding:10px; border-radius:12px;
+    outline:1px solid rgba(255,255,255,.06);
+  }
+  .cell{
+    background:var(--chip);
+    border-radius:10px;
+    padding:8px 6px;
+    text-align:center;
+    position:relative;
+    font-variant-numeric:tabular-nums;
+    transition: transform var(--speed) ease, outline var(--speed) ease, background var(--speed) ease;
+  }
+  .cell .idx{ position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-size:11px; color:var(--muted) }
+  .cell .val{ font-weight:800 }
+
+  /* Code block */
+  .code{
+    background:#0b0e1a; border-radius:12px; padding:12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:#c7d6ff; font-size:12.5px; line-height:1.55; overflow:auto; white-space:pre; outline:1px solid rgba(255,255,255,.06);
+  }
+  .code .cmt{ color:#7e87b6 }
+  .code .kw{ color:#8ae9c1; font-weight:700 }
+  .code .fn{ color:#ffd166; font-weight:700 }
+  .code .hl{ background:rgba(255,209,102,.18); padding:0 4px; border-radius:6px }
+
+  .result{ display:flex; align-items:center; gap:8px; font-weight:800; color:var(--accent-2) }
+  .pill{ border-radius:999px; background:rgba(138,233,193,.12); padding:6px 10px; color:var(--accent-2); font-weight:800; box-shadow: inset 0 0 0 1px rgba(138,233,193,.35) }
+
+  .footer-note{ color:var(--muted); font-size:12px; margin-top:10px; text-align:center }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Tabulation <span style="opacity:.6">vs</span> Memoization — <span style="color:var(--accent)">Fibonacci</span></h1>
+    <div class="hint">Step through and see call stacks, cache hits, and a bottom-up DP table fill in real time.</div>
+  </header>
+
+  <section class="controls" aria-label="controls">
+    <div class="row" role="tablist" aria-label="mode selector">
+      <div class="seg">
+        <button id="mode-memo" class="active" aria-selected="true">Memoization</button>
+        <button id="mode-tabu" aria-selected="false">Tabulation</button>
+      </div>
+      <div class="seg" role="group" aria-label="quick pick n">
+        <button data-quick="5">n=5</button>
+        <button data-quick="10">n=10</button>
+        <button data-quick="20">n=20</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="n">n</label>
+      <input id="n" type="range" min="2" max="40" value="10" />
+      <span class="value" id="n-val">10</span>
+    </div>
+
+    <div class="row">
+      <label for="sp">speed</label>
+      <input id="sp" type="range" min="60" max="1200" step="40" value="350" />
+      <span class="value" id="sp-val">350ms</span>
+    </div>
+
+    <div class="row">
+      <button id="btn-step" class="btn">⏭️ Step</button>
+      <button id="btn-play" class="btn primary">▶️ Play</button>
+      <button id="btn-reset" class="btn ghost">↺ Reset</button>
+    </div>
+  </section>
+
+  <section class="panels">
+    <!-- MEMOIZATION -->
+    <div class="panel" id="panel-memo">
+      <h2>Memoization <span class="tag">Top-down</span></h2>
+      <div class="sub">Recursive calls build a <b>call stack</b>. Results are cached; future calls hit the <b>memo</b>.</div>
+
+      <div class="legend" aria-hidden="true">
+        <span class="leg"><span class="sw cur"></span>current</span>
+        <span class="leg"><span class="sw new"></span>newly cached</span>
+        <span class="leg"><span class="sw hit"></span>cache hit / pair</span>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <h3>Call stack</h3>
+          <div id="stack" class="stack" aria-live="polite"></div>
+        </div>
+        <div class="card">
+          <h3>Memo (cache)</h3>
+          <div id="cache" class="cache"></div>
+        </div>
+      </div>
+
+      <div class="result" id="memo-result">Result: <span class="pill">—</span></div>
+
+      <div class="code" aria-label="pseudo code">
+<span class="cmt">// Top-down Fibonacci with memoization</span>
+<span class="kw">function</span> <span class="fn">fib</span>(n):
+  <span class="kw">if</span> n &lt;= 1: <span class="kw">return</span> n
+  <span class="kw">if</span> memo[n] <span class="kw">exists</span>: <span class="kw">return</span> memo[n] <span class="cmt">// <span class="hl">hit</span></span>
+  memo[n] = <span class="fn">fib</span>(n<span class="kw">-</span>1) <span class="kw">+</span> <span class="fn">fib</span>(n<span class="kw">-</span>2) <span class="cmt">// <span class="hl">store</span></span>
+  <span class="kw">return</span> memo[n]
+      </div>
+    </div>
+
+    <!-- TABULATION -->
+    <div class="panel" id="panel-tabu" style="opacity:.7">
+      <h2>Tabulation <span class="tag">Bottom-up</span></h2>
+      <div class="sub">Fill a <b>table</b> from base cases up. Each cell depends on two previous cells.</div>
+
+      <div class="legend" aria-hidden="true">
+        <span class="leg"><span class="sw cur"></span>current</span>
+        <span class="leg"><span class="sw new"></span>just filled</span>
+        <span class="leg"><span class="sw hit"></span>dependency pair</span>
+      </div>
+
+      <div class="card">
+        <h3>DP table</h3>
+        <div id="table" class="table"></div>
+      </div>
+
+      <div class="result" id="tabu-result">Result: <span class="pill">—</span></div>
+
+      <div class="code" aria-label="pseudo code">
+<span class="cmt">// Bottom-up Fibonacci with tabulation</span>
+<span class="kw">function</span> <span class="fn">fib</span>(n):
+  dp[0] = 0; dp[1] = 1
+  <span class="kw">for</span> i = 2 → n:
+     dp[i] = dp[i<span class="kw">-</span>1] <span class="kw">+</span> dp[i<span class="kw">-</span>2]
+  <span class="kw">return</span> dp[n]
+      </div>
+    </div>
+  </section>
+
+  <p class="footer-note">Tips: Switch modes to compare. Yellow = pair/related terms, Green = newly added value, Aqua = current focus. Speed controls animation delay.</p>
+</div>
+
+<script>
+(function(){
+  const $ = (sel, el=document)=>el.querySelector(sel);
+  const $$ = (sel, el=document)=>Array.from(el.querySelectorAll(sel));
+
+  // Controls
+  const modeMemoBtn = $('#mode-memo');
+  const modeTabuBtn = $('#mode-tabu');
+  const nRange = $('#n'); const nVal = $('#n-val');
+  const spRange = $('#sp'); const spVal = $('#sp-val');
+  const stepBtn = $('#btn-step'); const playBtn = $('#btn-play'); const resetBtn = $('#btn-reset');
+
+  // Panels & display
+  const panelMemo = $('#panel-memo');
+  const panelTabu = $('#panel-tabu');
+  const stackEl = $('#stack');
+  const cacheEl = $('#cache');
+  const tableEl = $('#table');
+  const memoRes = $('#memo-result .pill');
+  const tabuRes = $('#tabu-result .pill');
+
+  // State
+  let mode = 'memo';
+  let N = parseInt(nRange.value,10);
+  let speed = parseInt(spRange.value,10);
+  let timer = null;
+
+  // Simulation states
+  let memoState, tabuState;
+
+  function clearTimer(){ if(timer){ clearInterval(timer); timer=null; } }
+  function setMode(next){
+    mode = next;
+    modeMemoBtn.classList.toggle('active', mode==='memo');
+    modeTabuBtn.classList.toggle('active', mode==='tabu');
+    panelMemo.style.opacity = mode==='memo' ? '1' : '.7';
+    panelTabu.style.opacity = mode==='tabu' ? '1' : '.7';
+    playBtn.textContent = timer ? '⏸️ Pause' : '▶️ Play';
+  }
+
+  function resetAll(){
+    clearTimer();
+    stackEl.innerHTML = ''; cacheEl.innerHTML = ''; tableEl.innerHTML = '';
+    memoRes.textContent = '—'; tabuRes.textContent = '—';
+
+    memoState = buildMemoPlan(N);
+    tabuState = buildTabuPlan(N);
+
+    renderTableSkeleton(N);
+    renderState();
+  }
+
+  function renderState(){ // initial empties
+    renderStack([], false);
+    renderCache({});
+  }
+
+  // ---------- Build Plans ----------
+  function buildMemoPlan(n){
+    const plan = [];
+    const memo = {};
+    function dfs(k){
+      plan.push({t:'enter', n:k});
+      if(k<=1){
+        plan.push({t:'cache', n:k, val:k});
+        plan.push({t:'leave', n:k});
+        memo[k]=k; return k;
+      }
+      if(memo[k]!==undefined){
+        plan.push({t:'hit', n:k, val:memo[k]});
+        plan.push({t:'leave', n:k});
+        return memo[k];
+      }
+      const a = dfs(k-1);
+      const b = dfs(k-2);
+      const v = a+b;
+      plan.push({t:'combine', n:k, a:k-1, b:k-2, val:v});
+      memo[k]=v;
+      plan.push({t:'cache', n:k, val:v});
+      plan.push({t:'leave', n:k});
+      return v;
+    }
+    const result = dfs(n);
+    return { plan, memoFinal:{...memo}, idx:0, callStack:[], memoLive:{}, result };
+  }
+
+  function buildTabuPlan(n){
+    const plan = [];
+    const dp = [];
+    dp[0]=0; dp[1]=1;
+    plan.push({t:'seed', i:0, val:0});
+    plan.push({t:'seed', i:1, val:1});
+    for(let i=2;i<=n;i++){
+      plan.push({t:'pair', i, a:i-1, b:i-2});
+      const v = dp[i-1]+dp[i-2];
+      dp[i]=v;
+      plan.push({t:'set', i, val:v});
+    }
+    plan.push({t:'done', i:n, val:dp[n]});
+    return { plan, dpFinal:[...dp], idx:0, tableLive:[], result: dp[n] };
+  }
+
+  // ---------- Rendering ----------
+  function el(tag, props={}, children=[]){
+    const e = document.createElement(tag);
+    Object.entries(props).forEach(([k,v])=>{
+      if(k==='class') e.className = v;
+      else if(k==='text') e.textContent = v;
+      else e.setAttribute(k,v);
+    });
+    children.forEach(c => e.appendChild(c));
+    return e;
+  }
+
+  function renderStack(callStack, highlightTop=true){
+    stackEl.innerHTML='';
+    if(callStack.length===0){
+      stackEl.appendChild(el('div',{class:'dim',text:'(empty)'}));
+    } else {
+      callStack.forEach((n,idx)=>{
+        const cls = ['frame'];
+        if(highlightTop && idx===callStack.length-1) cls.push('current');
+        const f = el('div',{class:cls.join(' ')});
+        f.appendChild(el('div',{class:'k',text:`fib(${n})`}));
+        stackEl.appendChild(f);
+      });
+    }
+  }
+
+  function renderCache(memoLive, highlight={hit:null, add:null}){
+    cacheEl.innerHTML='';
+    const keys = Object.keys(memoLive).map(Number).sort((a,b)=>a-b);
+    if(keys.length===0){
+      cacheEl.appendChild(el('div',{class:'dim',text:'(empty)'}));
+      return;
+    }
+    keys.forEach(k=>{
+      const classes = ['chip'];
+      if(highlight.add===k) classes.push('new');
+      if(highlight.hit===k) classes.push('highlight');
+      const c = el('div',{class:classes.join(' ')});
+      c.appendChild(el('span',{class:'k',text:`n=${k}`})); c.appendChild(document.createTextNode(' → '));
+      c.appendChild(el('span',{class:'v',text:String(memoLive[k])}));
+      cacheEl.appendChild(c);
+    });
+  }
+
+  function renderTableSkeleton(n){
+    tableEl.innerHTML='';
+    for(let i=0;i<=n;i++){
+      const cell = el('div',{class:'cell dim', id:`cell-${i}`});
+      cell.appendChild(el('div',{class:'idx',text:String(i)}));
+      cell.appendChild(el('div',{class:'val',text:'·'}));
+      tableEl.appendChild(cell);
+    }
+  }
+  function getCell(i){ return document.getElementById('cell-'+i); }
+  function getCellVal(i){
+    const c = getCell(i); if(!c) return null;
+    const t = c.querySelector('.val').textContent;
+    if(t==='·' || t==='…') return null;
+    const num = Number(t);
+    return Number.isFinite(num) ? num : null;
+  }
+  function setCell(i, val, {current=false, pair=false, fresh=false}={}){
+    const c = getCell(i);
+    if(!c) return;
+    c.classList.remove('dim','current','highlight','new');
+    if(pair) c.classList.add('highlight');
+    if(fresh) c.classList.add('new');
+    if(current) c.classList.add('current');
+    c.querySelector('.val').textContent = String(val);
+  }
+  function clearTableStyles(){ $$('.cell').forEach(c=>c.classList.remove('current','highlight','new')); }
+
+  // ---------- Step engines ----------
+  function stepMemo(){
+    const s = memoState;
+    if(s.idx >= s.plan.length) return false;
+    const ev = s.plan[s.idx++];
+
+    let hitKey=null, addKey=null;
+
+    if(ev.t==='enter'){ s.callStack.push(ev.n); }
+    if(ev.t==='hit'){ hitKey = ev.n; }
+    if(ev.t==='cache'){ s.memoLive[ev.n]=ev.val; addKey=ev.n; }
+    if(ev.t==='leave'){
+      s.callStack.pop();
+      if(s.idx>=s.plan.length){ memoRes.textContent = String(s.memoLive[N]); }
+    }
+
+    renderStack(s.callStack);
+    renderCache(s.memoLive, {hit:hitKey, add:addKey});
+
+    // subtle cross-highlights on table
+    clearTableStyles();
+    if(addKey!==null) setCell(addKey, s.memoLive[addKey], {fresh:true});
+    if(hitKey!==null) setCell(hitKey, s.memoLive[hitKey], {pair:true});
+    if(s.callStack.length){
+      const cur = s.callStack[s.callStack.length-1];
+      const val = s.memoLive[cur] ?? '…';
+      setCell(cur, val, {current:true});
+    }
+    return true;
+  }
+
+  function stepTabu(){
+    const s = tabuState;
+    if(s.idx >= s.plan.length) return false;
+    const ev = s.plan[s.idx++];
+
+    clearTableStyles();
+
+    if(ev.t==='seed'){
+      setCell(ev.i, ev.val, {fresh:true});
+    }
+    if(ev.t==='pair'){
+      // Just highlight dependencies if present
+      const va = getCellVal(ev.a); const vb = getCellVal(ev.b);
+      if(va!==null) setCell(ev.a, va, {pair:true});
+      if(vb!==null) setCell(ev.b, vb, {pair:true});
+    }
+    if(ev.t==='set'){
+      setCell(ev.i, ev.val, {current:true, fresh:true});
+    }
+    if(ev.t==='done'){
+      tabuRes.textContent = String(ev.val);
+    }
+    return true;
+  }
+
+  function step(){ return (mode==='memo' ? stepMemo() : stepTabu()); }
+
+  function play(){
+    if(timer){ clearTimer(); playBtn.textContent='▶️ Play'; return; }
+    timer = setInterval(()=>{
+      const more = step();
+      if(!more){ clearTimer(); playBtn.textContent='▶️ Play'; }
+    }, Math.max(60, speed));
+    playBtn.textContent='⏸️ Pause';
+  }
+
+  // ---------- Wire up ----------
+  modeMemoBtn.addEventListener('click', ()=>setMode('memo'));
+  modeTabuBtn.addEventListener('click', ()=>setMode('tabu'));
+
+  stepBtn.addEventListener('click', step);
+  playBtn.addEventListener('click', play);
+  resetBtn.addEventListener('click', resetAll);
+
+  nRange.addEventListener('input', e=>{ N=parseInt(e.target.value,10); nVal.textContent=String(N); });
+  nRange.addEventListener('change', resetAll);
+  spRange.addEventListener('input', e=>{
+    speed=parseInt(e.target.value,10); spVal.textContent = speed+'ms';
+    if(timer){ clearTimer(); play(); }
+  });
+
+  $$('.seg [data-quick]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      nRange.value = btn.dataset.quick;
+      nRange.dispatchEvent(new Event('input'));
+      resetAll();
+    });
+  });
+
+  // Init
+  resetAll();
+})();
+</script>
+</body>
+</html>
