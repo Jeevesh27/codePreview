@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Fibonacci Tabulation Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:18px; --speed:300ms;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+  body{
+    margin:0; color:var(--text);
+    font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    background: radial-gradient(1200px 800px at 20% -10%, #1b1f39 0%, var(--bg) 45%);
+  }
+  .wrap{max-width:1100px; margin:24px auto 56px; padding:0 14px}
+  header{text-align:center; margin-bottom:20px}
+  header h1{margin:0; font-size:clamp(20px,2.4vw,32px)}
+  header .hint{color:var(--muted); font-size:clamp(12px,1.2vw,14px); margin-top:6px}
+
+  .controls{
+    background:linear-gradient(145deg, var(--panel), var(--panel-2));
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:16px; margin-bottom:16px;
+    display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
+  }
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  label{color:var(--muted); font-size:14px}
+  input[type="range"]{width:170px}
+  .value{color:var(--accent); font-weight:700; min-width:3ch; text-align:right}
+  .btn{
+    border:0; background:var(--chip); color:var(--text);
+    padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:700;
+    display:inline-flex; align-items:center; gap:8px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+    transition:transform .06s ease, background .2s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(180deg, var(--accent), #5fd8ff); color:#07121a}
+  .btn.ghost{background:transparent; box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+
+  .panel{
+    background:linear-gradient(160deg, var(--panel), var(--panel-2));
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:16px; display:flex; flex-direction:column; gap:12px;
+  }
+  .panel h2{margin:0; font-size:clamp(16px,1.8vw,20px)}
+
+  .table{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+    gap:10px;
+    background:rgba(0,0,0,.12); padding:10px; border-radius:12px;
+    outline:1px solid rgba(255,255,255,.06);
+  }
+  .cell{
+    background:var(--chip);
+    border-radius:10px;
+    padding:8px 6px;
+    text-align:center;
+    position:relative;
+    font-variant-numeric:tabular-nums;
+    transition: transform var(--speed) ease, outline var(--speed) ease, background var(--speed) ease;
+  }
+  .cell .idx{ position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-size:11px; color:var(--muted) }
+  .cell .val{ font-weight:800 }
+
+  .pair{outline:2px solid var(--pair)}
+  .new{background:linear-gradient(180deg, var(--new), #77dcb1); color:#06120f}
+  .current{outline:2px solid var(--accent); box-shadow:0 0 0 4px rgba(108,243,255,.15)}
+
+  .result{ display:flex; align-items:center; gap:8px; font-weight:800; color:var(--accent-2); margin-top:10px }
+  .pill{ border-radius:999px; background:rgba(138,233,193,.12); padding:6px 10px; color:var(--accent-2); font-weight:800; box-shadow: inset 0 0 0 1px rgba(138,233,193,.35) }
+
+  .legend{display:flex; flex-wrap:wrap; gap:12px; color:var(--muted); font-size:12px}
+  .sw{width:14px; height:14px; border-radius:4px; display:inline-block}
+  .sw.cur{background:var(--accent)}
+  .sw.new{background:var(--new)}
+  .sw.pair{background:var(--pair)}
+
+  .code{
+    background:#0b0e1a; border-radius:12px; padding:12px;
+    font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color:#c7d6ff; font-size:12.5px; line-height:1.55;
+    overflow:auto; white-space:pre; outline:1px solid rgba(255,255,255,.06);
+  }
+  .code .kw{color:#8ae9c1; font-weight:700}
+  .code .fn{color:#ffd166; font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fibonacci — Tabulation (Bottom-Up DP)</h1>
+    <div class="hint">See how the DP table is filled step by step using the relation <b>dp[i] = dp[i-1] + dp[i-2]</b>.</div>
+  </header>
+
+  <section class="controls">
+    <div class="row">
+      <label for="n">n</label>
+      <input id="n" type="range" min="2" max="30" value="10">
+      <span class="value" id="n-val">10</span>
+    </div>
+    <div class="row">
+      <label for="sp">speed</label>
+      <input id="sp" type="range" min="60" max="1200" step="40" value="300">
+      <span class="value" id="sp-val">300ms</span>
+    </div>
+    <div class="row">
+      <button id="btn-step" class="btn">⏭️ Step</button>
+      <button id="btn-play" class="btn primary">▶️ Play</button>
+      <button id="btn-reset" class="btn ghost">↺ Reset</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>DP Table</h2>
+    <div class="legend">
+      <span><span class="sw cur"></span> current index</span>
+      <span><span class="sw new"></span> just computed</span>
+      <span><span class="sw pair"></span> dependencies</span>
+    </div>
+    <div id="table" class="table"></div>
+    <div class="result">Result: <span class="pill" id="result">—</span></div>
+
+    <div class="code" aria-label="pseudocode">
+<span class="kw">function</span> <span class="fn">fib</span>(n):
+    dp[0] = 0; dp[1] = 1
+    <span class="kw">for</span> i = 2 → n:
+        dp[i] = dp[i-1] + dp[i-2]
+    <span class="kw">return</span> dp[n]
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $ = s=>document.querySelector(s);
+  const nRange=$('#n'), nVal=$('#n-val');
+  const spRange=$('#sp'), spVal=$('#sp-val');
+  const stepBtn=$('#btn-step'), playBtn=$('#btn-play'), resetBtn=$('#btn-reset');
+  const tableEl=$('#table'), resultEl=$('#result');
+
+  let N=parseInt(nRange.value,10), speed=parseInt(spRange.value,10);
+  let timer=null, plan=[], idx=0;
+
+  function buildPlan(n){
+    const p=[];
+    const dp=[];
+    dp[0]=0; dp[1]=1;
+    p.push({t:'seed',i:0,val:0});
+    p.push({t:'seed',i:1,val:1});
+    for(let i=2;i<=n;i++){
+      p.push({t:'pair',i,a:i-1,b:i-2});
+      const v=dp[i-1]+dp[i-2];
+      dp[i]=v;
+      p.push({t:'set',i,val:v});
+    }
+    p.push({t:'done',i:n,val:dp[n]});
+    return p;
+  }
+
+  function renderTable(n){
+    tableEl.innerHTML='';
+    for(let i=0;i<=n;i++){
+      const d=document.createElement('div');
+      d.className='cell dim'; d.id='c-'+i;
+      d.innerHTML=`<div class="idx">${i}</div><div class="val">·</div>`;
+      tableEl.appendChild(d);
+    }
+  }
+  function getCell(i){return document.getElementById('c-'+i);}
+  function setCell(i,val,opt={}){
+    const c=getCell(i);
+    if(!c) return;
+    c.classList.remove('pair','current','new');
+    if(opt.pair) c.classList.add('pair');
+    if(opt.current) c.classList.add('current');
+    if(opt.new) c.classList.add('new');
+    c.querySelector('.val').textContent=val;
+  }
+  function clearHighlights(){ [...tableEl.children].forEach(c=>c.classList.remove('pair','current','new')); }
+
+  function step(){
+    if(idx>=plan.length) return false;
+    const ev=plan[idx++];
+    clearHighlights();
+    if(ev.t==='seed'){ setCell(ev.i,ev.val,{new:true}); }
+    if(ev.t==='pair'){ setCell(ev.a,getCell(ev.a).querySelector('.val').textContent,{pair:true}); setCell(ev.b,getCell(ev.b).querySelector('.val').textContent,{pair:true}); }
+    if(ev.t==='set'){ setCell(ev.i,ev.val,{current:true,new:true}); }
+    if(ev.t==='done'){ resultEl.textContent=String(ev.val); }
+    return true;
+  }
+
+  function play(){
+    if(timer){ clearInterval(timer); timer=null; playBtn.textContent='▶️ Play'; return; }
+    timer=setInterval(()=>{ if(!step()){clearInterval(timer);timer=null; playBtn.textContent='▶️ Play';}},Math.max(60,speed));
+    playBtn.textContent='⏸️ Pause';
+  }
+
+  function resetAll(){
+    clearInterval(timer); timer=null; idx=0;
+    plan=buildPlan(N);
+    renderTable(N);
+    resultEl.textContent='—';
+    playBtn.textContent='▶️ Play';
+  }
+
+  nRange.addEventListener('input',e=>{N=parseInt(e.target.value,10); nVal.textContent=N;});
+  nRange.addEventListener('change',resetAll);
+  spRange.addEventListener('input',e=>{speed=parseInt(e.target.value,10); spVal.textContent=speed+'ms'; if(timer){clearInterval(timer);play();}});
+  stepBtn.addEventListener('click',step);
+  playBtn.addEventListener('click',play);
+  resetBtn.addEventListener('click',resetAll);
+
+  resetAll();
+})();
+</script>
+</body>
+</html>
