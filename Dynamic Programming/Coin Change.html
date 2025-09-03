@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Coin Change (Count Ways) Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --chip:#39407a; --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:18px;
+    --pair:#ffd166; --new:#8ae9c1;
+  }
+  body{margin:0; color:var(--text); font-family:sans-serif;
+       background: radial-gradient(1200px 800px at 20% -10%, #1b1f39 0%, var(--bg) 45%);}
+  .wrap{max-width:1000px; margin:24px auto 60px; padding:0 16px}
+  header{text-align:center; margin-bottom:24px}
+  header h1{margin:0; font-size:clamp(20px,2.5vw,30px)}
+  header .hint{color:var(--muted); font-size:14px; margin-top:6px}
+
+  .controls{background:linear-gradient(145deg, var(--panel), var(--panel-2));
+            border-radius:var(--radius); box-shadow:var(--shadow);
+            padding:16px; margin-bottom:20px;
+            display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between}
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  label{color:var(--muted); font-size:14px}
+  input[type="range"]{width:150px}
+  input[type="text"]{padding:6px 10px; border-radius:8px; border:1px solid #444; background:#222; color:var(--text)}
+  .value{color:var(--accent); font-weight:700; min-width:3ch; text-align:right}
+  .btn{border:0; background:var(--chip); color:var(--text);
+       padding:8px 14px; border-radius:10px; cursor:pointer; font-weight:700}
+  .btn.primary{background:linear-gradient(180deg, var(--accent), #5fd8ff); color:#07121a}
+  .btn.ghost{background:transparent; border:1px solid #555}
+
+  .panel{background:linear-gradient(160deg, var(--panel), var(--panel-2));
+         border-radius:var(--radius); box-shadow:var(--shadow);
+         padding:16px; display:flex; flex-direction:column; gap:14px}
+  .table{display:grid; grid-template-columns: repeat(auto-fit,minmax(54px,1fr));
+         gap:8px; background:rgba(0,0,0,.12); padding:10px; border-radius:12px}
+  .cell{background:var(--chip); border-radius:10px; padding:6px; text-align:center; position:relative}
+  .cell .idx{position:absolute; top:-16px; left:50%; transform:translateX(-50%);
+             font-size:11px; color:var(--muted)}
+  .cell .val{font-weight:700}
+  .pair{outline:2px solid var(--pair)}
+  .current{outline:2px solid var(--accent)}
+  .new{background:var(--new); color:#062}
+
+  .legend{display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--muted)}
+  .sw{width:14px; height:14px; border-radius:4px; display:inline-block}
+  .sw.cur{background:var(--accent)}
+  .sw.new{background:var(--new)}
+  .sw.pair{background:var(--pair)}
+
+  .result{margin-top:6px; font-weight:700; color:var(--accent-2)}
+  .pill{background:rgba(138,233,193,.12); border-radius:999px; padding:4px 10px; color:var(--accent-2); font-weight:800}
+  .step-info{font-size:14px; color:var(--accent); margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Coin Change (Count Ways) — Tabulation DP</h1>
+    <div class="hint">We count the ways to make target <b>N</b> using given coins. Each update: <code>dp[amt] += dp[amt-coin]</code></div>
+  </header>
+
+  <section class="controls">
+    <div class="row">
+      <label>Coins</label>
+      <input id="coins" type="text" value="1,2,5" />
+    </div>
+    <div class="row">
+      <label for="n">Target N</label>
+      <input id="n" type="range" min="2" max="20" value="10">
+      <span id="n-val" class="value">10</span>
+    </div>
+    <div class="row">
+      <button id="btn-step" class="btn">⏭️ Step</button>
+      <button id="btn-play" class="btn primary">▶️ Play</button>
+      <button id="btn-reset" class="btn ghost">↺ Reset</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>DP Array</h2>
+    <div class="legend">
+      <span><span class="sw cur"></span> current amt</span>
+      <span><span class="sw new"></span> updated value</span>
+      <span><span class="sw pair"></span> dependency (amt-coin)</span>
+    </div>
+    <div id="table" class="table"></div>
+    <div id="step-info" class="step-info">Ready</div>
+    <div class="result">Result: <span class="pill" id="result">—</span></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s);
+  const coinsInput=$('#coins'), nRange=$('#n'), nVal=$('#n-val');
+  const stepBtn=$('#btn-step'), playBtn=$('#btn-play'), resetBtn=$('#btn-reset');
+  const tableEl=$('#table'), resultEl=$('#result'), stepInfo=$('#step-info');
+
+  let coins=[1,2,5], N=parseInt(nRange.value,10), plan=[], idx=0, timer=null;
+
+  function buildPlan(n,coins){
+    const dp=Array(n+1).fill(0);
+    dp[0]=1;
+    const p=[{t:'seed',i:0,val:1}];
+    for(const coin of coins){
+      p.push({t:'coin',coin});
+      for(let amt=coin; amt<=n; amt++){
+        p.push({t:'pair',i:amt,from:amt-coin,coin});
+        dp[amt]+=dp[amt-coin];
+        p.push({t:'set',i:amt,val:dp[amt],from:amt-coin,coin});
+      }
+    }
+    p.push({t:'done',val:dp[n]});
+    return p;
+  }
+
+  function renderTable(n){
+    tableEl.innerHTML='';
+    for(let i=0;i<=n;i++){
+      const d=document.createElement('div');
+      d.className='cell'; d.id='c-'+i;
+      d.innerHTML=`<div class="idx">${i}</div><div class="val">·</div>`;
+      tableEl.appendChild(d);
+    }
+  }
+  function getCell(i){return document.getElementById('c-'+i);}
+  function setCell(i,val,opt={}){
+    const c=getCell(i); if(!c)return;
+    c.classList.remove('pair','current','new');
+    if(opt.pair) c.classList.add('pair');
+    if(opt.current) c.classList.add('current');
+    if(opt.new) c.classList.add('new');
+    c.querySelector('.val').textContent=val;
+  }
+  function clearHighlights(){ [...tableEl.children].forEach(c=>c.classList.remove('pair','current','new')); }
+
+  function step(){
+    if(idx>=plan.length) return false;
+    const ev=plan[idx++];
+    clearHighlights();
+    if(ev.t==='seed'){ setCell(ev.i,ev.val,{new:true}); stepInfo.textContent=`Initialize dp[0]=1`; }
+    if(ev.t==='coin'){ stepInfo.textContent=`Using coin = ${ev.coin}`; }
+    if(ev.t==='pair'){ setCell(ev.from,getCell(ev.from).querySelector('.val').textContent,{pair:true}); setCell(ev.i,getCell(ev.i).querySelector('.val').textContent,{current:true}); stepInfo.textContent=`Update dp[${ev.i}] with dp[${ev.from}] (coin ${ev.coin})`; }
+    if(ev.t==='set'){ setCell(ev.i,ev.val,{new:true,current:true}); stepInfo.textContent=`dp[${ev.i}] = ${ev.val}`; }
+    if(ev.t==='done'){ resultEl.textContent=String(ev.val); stepInfo.textContent=`Done. dp[N] = ${ev.val}`; }
+    return true;
+  }
+
+  function play(){
+    if(timer){ clearInterval(timer); timer=null; playBtn.textContent='▶️ Play'; return; }
+    timer=setInterval(()=>{ if(!step()){clearInterval(timer);timer=null; playBtn.textContent='▶️ Play'; }},400);
+    playBtn.textContent='⏸️ Pause';
+  }
+  function resetAll(){
+    clearInterval(timer); timer=null; idx=0;
+    coins=coinsInput.value.split(',').map(x=>parseInt(x.trim(),10)).filter(x=>!isNaN(x));
+    plan=buildPlan(N,coins);
+    renderTable(N);
+    resultEl.textContent='—';
+    stepInfo.textContent='Ready';
+    playBtn.textContent='▶️ Play';
+  }
+
+  nRange.addEventListener('input',e=>{N=parseInt(e.target.value,10); nVal.textContent=N;});
+  nRange.addEventListener('change',resetAll);
+  coinsInput.addEventListener('change',resetAll);
+  stepBtn.addEventListener('click',step);
+  playBtn.addEventListener('click',play);
+  resetBtn.addEventListener('click',resetAll);
+
+  resetAll();
+})();
+</script>
+</body>
+</html>
