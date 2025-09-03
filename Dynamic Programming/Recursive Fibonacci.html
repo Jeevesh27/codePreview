@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Recursive Fibonacci — Tree Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --accent:#6cf3ff; --accent-2:#8ae9c1;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --ok:#84fab0; --chip:#39407a;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px; --gap:18px; --speed:260ms;
+    --leaf:#8ae9c1; --done:#84fab0; --edge:#3a427a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; color:var(--text);
+    font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(1200px 800px at 20% -10%, #1b1f39 0%, var(--bg) 45%);
+  }
+  .wrap{max-width:1100px; margin:24px auto 56px; padding:0 14px}
+  header{text-align:center; margin-bottom:20px}
+  header h1{margin:0; font-size:clamp(20px,2.4vw,32px); letter-spacing:.2px}
+  header .hint{color:var(--muted); font-size:clamp(12px,1.2vw,14px); margin-top:6px}
+
+  .controls{
+    background:linear-gradient(145deg, var(--panel), var(--panel-2));
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:16px; margin-bottom:16px;
+    display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
+  }
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  label{color:var(--muted); font-size:14px}
+  input[type="range"]{width:170px}
+  .value{color:var(--accent); font-weight:700; min-width:3ch; text-align:right}
+  .btn{
+    border:0; background:var(--chip); color:var(--text);
+    padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:700;
+    display:inline-flex; align-items:center; gap:8px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+    transition:transform .06s ease, background .2s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(180deg, var(--accent), #5fd8ff); color:#07121a}
+  .btn.ghost{background:transparent; box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+  .panel{
+    background:linear-gradient(160deg, var(--panel), var(--panel-2));
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:16px; display:flex; flex-direction:column; gap:12px;
+  }
+  .panel h2{margin:0; font-size:clamp(16px,1.8vw,20px)}
+  .panel .sub{color:var(--muted); font-size:clamp(12px,1.4vw,14px)}
+  .legend{display:flex; flex-wrap:wrap; gap:12px; color:var(--muted); font-size:12px}
+  .leg{display:inline-flex; align-items:center; gap:6px}
+  .sw{width:14px; height:14px; border-radius:4px; display:inline-block}
+  .sw.cur{background:var(--accent)}
+  .sw.leaf{background:var(--leaf)}
+  .sw.done{background:var(--done)}
+  .sw.edge{background:var(--edge)}
+
+  /* SVG container */
+  .stage{
+    background:rgba(0,0,0,.12); border-radius:12px; outline:1px solid rgba(255,255,255,.06);
+    overflow:hidden;
+  }
+  svg{width:100%; height:auto; display:block}
+  .edge{stroke:var(--edge); stroke-width:2; opacity:.35; transition:opacity var(--speed)}
+  .edge.on{opacity:.9}
+  .node circle{
+    fill:var(--chip); stroke:#0000; stroke-width:2;
+    transition:filter var(--speed), transform var(--speed), fill var(--speed), stroke var(--speed);
+  }
+  .node text{font-size:12px; font-weight:800; fill:var(--text); text-anchor:middle; dominant-baseline:middle}
+  .node.current circle{stroke:var(--accent); stroke-width:3; filter:drop-shadow(0 0 0.4rem rgba(108,243,255,.35))}
+  .node.leaf circle{fill:var(--leaf); stroke:#06261d}
+  .node.done circle{fill:var(--done); stroke:#063018}
+  .node .small{font-size:10px; font-weight:600; fill:#0c1a14}
+
+  .stats{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    color:var(--muted); font-size:13px;
+  }
+  .pill{
+    border-radius:999px; background:rgba(138,233,193,.12);
+    padding:6px 10px; color:var(--accent-2); font-weight:800;
+    box-shadow: inset 0 0 0 1px rgba(138,233,193,.35)
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fibonacci Numbers — Recursive Tree</h1>
+    <div class="hint">Relation: <b>F(n) = F(n-1) + F(n-2)</b>. Step through the recursion to see why plain recursion repeats work.</div>
+  </header>
+
+  <section class="controls" aria-label="controls">
+    <div class="row">
+      <label for="n">n</label>
+      <input id="n" type="range" min="2" max="12" value="7">
+      <span class="value" id="n-val">7</span>
+    </div>
+    <div class="row">
+      <label for="sp">speed</label>
+      <input id="sp" type="range" min="60" max="1200" step="40" value="320">
+      <span class="value" id="sp-val">320ms</span>
+    </div>
+    <div class="row">
+      <button id="btn-step" class="btn">⏭️ Step</button>
+      <button id="btn-play" class="btn primary">▶️ Play</button>
+      <button id="btn-reset" class="btn ghost">↺ Reset</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Recursion tree</h2>
+    <div class="sub">Nodes are calls to <b>fib(n)</b>. Leaves are base cases (<b>0</b> or <b>1</b>). Completed nodes show <b>fib(n)=value</b>.</div>
+
+    <div class="legend" aria-hidden="true">
+      <span class="leg"><span class="sw edge"></span>edge</span>
+      <span class="leg"><span class="sw cur"></span>current call</span>
+      <span class="leg"><span class="sw leaf"></span>base case</span>
+      <span class="leg"><span class="sw done"></span>computed value</span>
+    </div>
+
+    <div class="stage">
+      <svg id="svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" aria-label="recursion tree"></svg>
+    </div>
+
+    <div class="stats" id="stats">
+      <span>Total calls: <b id="stat-total">0</b></span>
+      <span>Distinct n: <b id="stat-uniq">0</b></span>
+      <span>Duplicate calls: <b id="stat-dup">0</b></span>
+      <span style="margin-left:auto">Result: <span class="pill" id="result">—</span></span>
+    </div>
+
+    <div class="code" aria-label="pseudocode" style="margin-top:6px">
+function fib(n):
+    if n &lt;= 1: return n
+    return fib(n-1) + fib(n-2)
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  // ---------- helpers ----------
+  const $ = (s,el=document)=>el.querySelector(s);
+  const create = (name, attrs={})=>{
+    const el = document.createElementNS('http://www.w3.org/2000/svg', name);
+    for(const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  };
+
+  // ---------- controls ----------
+  const nRange = $('#n'), nVal = $('#n-val');
+  const spRange = $('#sp'), spVal = $('#sp-val');
+  const btnStep = $('#btn-step'), btnPlay = $('#btn-play'), btnReset = $('#btn-reset');
+  const svg = $('#svg');
+  const statTotal = $('#stat-total'), statUniq = $('#stat-uniq'), statDup = $('#stat-dup'), resultEl = $('#result');
+
+  let N = parseInt(nRange.value,10);
+  let speed = parseInt(spRange.value,10);
+  let timer = null;
+
+  // tree state
+  let root=null, plan=[], idx=0, nodesById=new Map(), edgesByKey=new Map();
+
+  // ---------- build recursion tree ----------
+  function buildTree(n){
+    let autoId = 0;
+    function node(k,depth){
+      const id = autoId++;
+      const obj = { id, n:k, depth, x:0, y:0, left:null, right:null };
+      if(k>1){
+        obj.left = node(k-1, depth+1);
+        obj.right = node(k-2, depth+1);
+        obj.left.parent = obj; obj.right.parent = obj;
+      }
+      return obj;
+    }
+    return node(n,0);
+  }
+
+  // tidy layout: assign x via in-order, y by depth
+  function layout(root){
+    let xCursor = 0;
+    const levelGap = 90; // vertical gap
+    const horizGap = 60; // minimum horizontal gap
+
+    function dfs(v){
+      if(!v) return;
+      dfs(v.left);
+      v.x = xCursor++;
+      dfs(v.right);
+    }
+    dfs(root);
+
+    // normalize and scale to SVG space
+    let maxX = 0, maxDepth = 0;
+    (function walk(v){
+      if(!v) return;
+      maxX = Math.max(maxX, v.x);
+      maxDepth = Math.max(maxDepth, v.depth);
+      walk(v.left); walk(v.right);
+    })(root);
+
+    const unitW = Math.max(horizGap, 900 / Math.max(1, maxX));
+    const unitH = levelGap;
+
+    (function place(v){
+      if(!v) return;
+      v.y = 40 + v.depth * unitH;
+      v.X = 50 + v.x * unitW; // scaled X for SVG
+      v.Y = v.y;
+      place(v.left); place(v.right);
+    })(root);
+
+    // adjust viewBox height to content
+    const vbW = Math.max(1000, 100 + (maxX+1) * unitW);
+    const vbH = Math.max(240, 80 + (maxDepth+1) * unitH);
+    svg.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+  }
+
+  // ---------- draw ----------
+  function draw(root){
+    svg.innerHTML = '';
+    nodesById.clear(); edgesByKey.clear();
+
+    // edges
+    (function drawEdges(v){
+      if(!v) return;
+      if(v.left){
+        const key = `${v.id}-${v.left.id}`;
+        const line = create('line', { x1:v.X, y1:v.Y, x2:v.left.X, y2:v.left.Y, class:'edge' });
+        svg.appendChild(line); edgesByKey.set(key, line);
+      }
+      if(v.right){
+        const key = `${v.id}-${v.right.id}`;
+        const line = create('line', { x1:v.X, y1:v.Y, x2:v.right.X, y2:v.right.Y, class:'edge' });
+        svg.appendChild(line); edgesByKey.set(key, line);
+      }
+      drawEdges(v.left); drawEdges(v.right);
+    })(root);
+
+    // nodes
+    (function drawNodes(v){
+      if(!v) return;
+      const g = create('g', { class:'node', id:`n-${v.id}`, transform:`translate(${v.X},${v.Y})` });
+      const r = 18;
+      const circle = create('circle', { r, cx:0, cy:0 });
+      const label = create('text', { x:0, y:0 },);
+      label.textContent = `f(${v.n})`;
+
+      g.appendChild(circle);
+      g.appendChild(label);
+      svg.appendChild(g);
+      nodesById.set(v.id, g);
+
+      drawNodes(v.left); drawNodes(v.right);
+    })(root);
+  }
+
+  // ---------- build step plan (preorder) ----------
+  function buildPlan(root){
+    const p=[];
+    function walk(v){
+      p.push({t:'enter', id:v.id, n:v.n, parent:v.parent?.id});
+      if(v.n<=1){
+        p.push({t:'leaf', id:v.id, n:v.n, val:v.n, parent:v.parent?.id});
+      }else{
+        walk(v.left);
+        walk(v.right);
+        // when both done:
+        p.push({t:'done', id:v.id, n:v.n, parent:v.parent?.id});
+      }
+    }
+    walk(root);
+    // final value computed by simulation when root done
+    return p;
+  }
+
+  // ---------- stats ----------
+  function updateStats(progressIndex){
+    const seen = new Set();
+    let total=0;
+    for(let i=0;i<=progressIndex && i<plan.length;i++){
+      if(plan[i].t==='enter'){ total++; seen.add(plan[i].n); }
+    }
+    statTotal.textContent = String(total);
+    statUniq.textContent = String(seen.size);
+    statDup.textContent = String(Math.max(0, total - seen.size));
+  }
+
+  // ---------- simulation step ----------
+  function nodeSetState(id, state, value){
+    const g = nodesById.get(id); if(!g) return;
+    g.classList.remove('current','leaf','done');
+    if(state) g.classList.add(state);
+    const text = g.querySelector('text');
+    if(state==='leaf' || state==='done'){
+      text.textContent = `f(${text.textContent.match(/\d+/)[0]})=${value}`;
+      // add small second line for readability on wide nodes (optional)
+      // (kept single-line for compactness)
+    }else{
+      const n = text.textContent.match(/\d+/)?.[0];
+      text.textContent = `f(${n})`;
+    }
+  }
+
+  function revealEdge(parentId, childId){
+    const line = edgesByKey.get(`${parentId}-${childId}`);
+    if(line) line.classList.add('on');
+  }
+
+  // compute value from children texts (already done)
+  function readValue(id){
+    const g = nodesById.get(id); if(!g) return null;
+    const left = [...edgesByKey.keys()].find(k=>k.startsWith(id+'-'));
+    // not needed; we compute on the fly by reading children nodes
+  }
+
+  function step(){
+    if(idx>=plan.length) return false;
+    const ev = plan[idx++];
+
+    // clear previous "current"
+    nodesById.forEach(g=>g.classList.remove('current'));
+
+    if(ev.t==='enter'){
+      // reveal edge from parent to this
+      if(ev.parent!==undefined && ev.parent!==null) revealEdge(ev.parent, ev.id);
+      nodeSetState(ev.id, 'current');
+    }
+    if(ev.t==='leaf'){
+      nodeSetState(ev.id, 'leaf', ev.val);
+    }
+    if(ev.t==='done'){
+      const v = valueFromChildren(ev.id);
+      nodeSetState(ev.id, 'done', v);
+      if(ev.id===root.id){ resultEl.textContent = String(v); }
+    }
+
+    updateStats(idx-1);
+    return true;
+  }
+
+  function valueFromChildren(id){
+    // read children's text contents (which hold the numbers already)
+    // children ids from edges map
+    const childEdges = [...edgesByKey.keys()].filter(k=>k.startsWith(id+'-'));
+    const childIds = childEdges.map(k=>Number(k.split('-')[1]));
+    let sum = 0;
+    childIds.forEach(cid=>{
+      const g = nodesById.get(cid);
+      const t = g?.querySelector('text')?.textContent || '';
+      const m = t.match(/=(\d+)/);
+      if(m) sum += Number(m[1]);
+    });
+    return sum;
+  }
+
+  // ---------- control wiring ----------
+  function resetAll(){
+    clearTimer();
+    idx=0; resultEl.textContent='—';
+    root = buildTree(N);
+    layout(root);
+    draw(root);
+    plan = buildPlan(root);
+    updateStats(-1);
+    btnPlay.textContent = '▶️ Play';
+  }
+  function clearTimer(){ if(timer){ clearInterval(timer); timer=null; } }
+  function play(){
+    if(timer){ clearTimer(); btnPlay.textContent='▶️ Play'; return; }
+    timer = setInterval(()=>{
+      if(!step()){ clearTimer(); btnPlay.textContent='▶️ Play'; }
+    }, Math.max(60, speed));
+    btnPlay.textContent='⏸️ Pause';
+  }
+
+  // UI events
+  nRange.addEventListener('input', e=>{ N=parseInt(e.target.value,10); nVal.textContent=String(N); });
+  nRange.addEventListener('change', resetAll);
+  spRange.addEventListener('input', e=>{
+    speed=parseInt(e.target.value,10); spVal.textContent = speed+'ms';
+    if(timer){ clearTimer(); play(); }
+  });
+  btnStep.addEventListener('click', step);
+  btnPlay.addEventListener('click', play);
+  btnReset.addEventListener('click', resetAll);
+
+  // ---------- init ----------
+  resetAll();
+})();
+</script>
+</body>
+</html>
