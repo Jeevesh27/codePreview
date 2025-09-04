@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Matrix Chain Multiplication — DP Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --accent:#6cf3ff; --good:#8ae9c1; --warn:#ffd166; --bad:#ff7b7b;
+    --edge:#556; --edge-try:#e3b84a; --edge-best:#6fae97;
+    --outline: rgba(255,255,255,0.08);
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #1a1f3a 0%, transparent 70%),
+      radial-gradient(1000px 700px at 120% 10%, #1d2548 0%, transparent 70%),
+      var(--bg);
+  }
+  header{ padding:24px clamp(16px,4vw,36px) 8px; }
+  h1{ margin:0 0 6px; font-size: clamp(20px, 2.6vw, 32px); }
+  .sub{ color:var(--muted); font-size:14px; }
+
+  .wrap{ display:grid; gap:16px; grid-template-columns:360px 1fr; padding:0 clamp(16px,4vw,36px) 32px; }
+  @media (max-width:980px){ .wrap{ grid-template-columns:1fr; } }
+
+  .card{ background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--outline); border-radius:14px; box-shadow:var(--shadow); }
+  .controls{ padding:16px; display:grid; gap:12px; align-content:start; }
+  .controls h2{ margin:4px 0 6px; font-size:16px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.12em; }
+  .row{ display:grid; gap:8px; }
+  .row.inline{ grid-template-columns:1fr 1fr; gap:10px; }
+  label{ font-size:12px; color:var(--muted); }
+  input,button{
+    background:#0f1330; color:var(--text); border:1px solid #2b315b; border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input::placeholder{ color:#778; }
+  button{ cursor:pointer; transition: transform .06s ease, background .2s ease, border-color .2s ease; }
+  button:hover{ transform: translateY(-1px); }
+  button.primary{ background:linear-gradient(180deg,#2d3a8f,#263277); border-color:#3846a4; }
+  button.ghost{ background:transparent; border-color:#2b315b; }
+  button.warn{ background:linear-gradient(180deg,#6c1d2a,#521522); border-color:#7d2030; }
+
+  .pills{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pill{ font-size:12px; padding:6px 10px; border-radius:999px; border:1px dashed #3a4070; color:var(--muted); cursor:pointer; }
+  .pill:hover{ border-style:solid; color:var(--text); }
+
+  .viz{ position:relative; padding:16px; display:grid; gap:16px; grid-template-rows:auto auto 1fr auto; min-height:520px; }
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
+  .d-cur{ background:var(--accent); }
+  .d-try{ background:var(--warn); }
+  .d-best{ background:var(--good); }
+
+  .panel{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:980px){ .panel{ grid-template-columns:1fr; } }
+  .explain{ background:#0d1230; border:1px solid var(--outline); border-radius:12px; padding:12px; font-size:14px; line-height:1.45; min-height:82px; }
+  .note{ font-size:12px; color:var(--muted); }
+  .kbd{ border:1px solid #435; background:#0b0f28; padding:2px 6px; border-radius:6px; font-size:12px; }
+
+  .lane-wrap{ border:1px solid var(--outline); border-radius:12px; background:#0b0e23; padding:12px; overflow:auto; position:relative; }
+  .grid{ display:grid; gap:2px; align-items:stretch; }
+  .cell{
+    min-width:70px; min-height:52px; border:1px solid #222a55; background:#141a39; border-radius:10px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative;
+    font-variant-numeric:tabular-nums;
+  }
+  .cell .subv{ font-size:11px; color:#b9c3ff; position:absolute; top:4px; left:6px; }
+  .cell.header{ background:#0f1431; color:var(--muted); font-weight:600; }
+  .cell.header.sticky{ position:sticky; z-index:3; }
+  .cell.header.top{ top:0; }
+  .cell.header.left{ left:0; }
+  .cell.inactive{ background:#0c1030; color:#334; border-style:dashed; }
+  .cell.active{ outline:2px solid var(--accent); box-shadow:0 0 0 3px rgba(108,243,255,.18) inset; }
+  .cell.try{ box-shadow:0 0 0 2px rgba(255,209,102,.25) inset; }
+  .cell.best{ box-shadow:0 0 0 2px rgba(138,233,193,.25) inset; }
+  .cell.empty{ color:#445; }
+
+  .items{ display:flex; flex-wrap:wrap; gap:8px; }
+  .mat{
+    padding:6px 10px; border-radius:999px; border:1px solid #3a4070; background:#0f1330; color:var(--muted); font-size:12px;
+  }
+  .mat.cur{ outline:2px solid var(--accent); color:var(--text); }
+
+  .footer{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .svg-layer{
+    position:absolute;
+    inset:0;            /* flush with container; arrows stay aligned on scroll */
+    pointer-events:none;
+    z-index:2;
+  }
+  .svg-layer path{ stroke-width:2.5; fill:none; }
+  .edge-try{ stroke:var(--edge-try); }
+  .edge-best{ stroke:var(--edge-best); stroke-width:3.2; filter: drop-shadow(0 0 4px rgba(111,174,151,.35)); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Matrix Chain Multiplication — DP Visualizer</h1>
+  <div class="sub">Try all splits <code>k</code> for each interval <code>[i..j]</code>, minimize <code>dp[i][j]</code>, and backtrack to get the optimal parenthesization.</div>
+</header>
+
+<div class="wrap">
+  <!-- Controls -->
+  <section class="card controls" aria-label="Controls">
+    <h2>Input</h2>
+    <div class="row">
+      <label>Dimensions (n+1 numbers for n matrices)</label>
+      <input id="dimsInput" value="30,35,15,5,10,20,25" placeholder="e.g. 10,30,5,60 means A1:10×30, A2:30×5, A3:5×60"/>
+    </div>
+    <div class="row">
+      <div class="pills">
+        <span class="pill" data-ex="30,35,15,5,10,20,25">Classic</span>
+        <span class="pill" data-ex="5,10,3,12,5,50,6">Random</span>
+        <span class="pill" data-ex="10,20,30,40,30">4 matrices</span>
+      </div>
+    </div>
+    <div class="row inline">
+      <button id="buildBtn" class="primary">Build Table</button>
+      <button id="resetBtn" class="warn">↺ Reset</button>
+    </div>
+
+    <h2>Playback</h2>
+    <div class="row">
+      <div class="btns">
+        <button id="prevBtn" class="ghost">⟵ Prev</button>
+        <button id="nextBtn" class="ghost">Next ⟶</button>
+        <button id="playBtn" class="primary">▶ Play</button>
+        <button id="finishBtn" class="ghost">⤓ Fill All</button>
+        <button id="backtrackBtn" class="ghost" disabled>🔎 Show Parenthesization</button>
+        <button id="clearBtn" class="ghost" disabled>Clear Highlight</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="note">Speed <input id="speed" type="range" min="0.2" max="2.0" step="0.1" value="1.0"/> <span id="speedLbl" class="note">1.0×</span></span>
+    </div>
+
+    <h2>Formula</h2>
+    <div class="row">
+      <div class="explain">
+        <div><code>dp[i][j] = min over k∈[i..j-1] { dp[i][k] + dp[k+1][j] + p[i-1]·p[k]·p[j] }</code></div>
+        <div class="note">Base: <code>dp[i][i]=0</code>. Indices <code>i,j</code> are matrix indices 1..n for matrices A<sub>i</sub>=p[i-1]×p[i].</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Visualization -->
+  <section class="card viz" aria-label="Visualization">
+    <div class="legend">
+      <span><span class="dot d-cur"></span>Current cell dp[i][j]</span>
+      <span><span class="dot d-try"></span>Trying split k</span>
+      <span><span class="dot d-best"></span>Chosen best split</span>
+    </div>
+
+    <div class="panel">
+      <div class="explain" id="explainBox">Enter dimensions then build the table.</div>
+      <div class="explain" id="resultBox">Optimal cost & parenthesization will show here after backtracking.</div>
+    </div>
+
+    <div class="lane-wrap">
+      <div id="grid" class="grid"></div>
+      <svg id="svg" class="svg-layer" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker></defs>
+      </svg>
+    </div>
+
+    <div class="footer">
+      <div class="note">Tip: <span class="kbd">←</span>/<span class="kbd">→</span> to step • <span class="kbd">Space</span> to play/pause</div>
+      <div class="items" id="items"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ===== Helpers ===== */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ===== State ===== */
+let p = [30,35,15,5,10,20,25]; // dims, length n+1
+let n = p.length - 1;          // number of matrices
+
+let dp = [];     // (n+1) x (n+1)
+let split = [];  // to backtrack optimal k
+let steps = [];  // sequence of steps: begin cell, try k, finish cell
+let currentStep = -1;
+let playing=false;
+let pathShown=false;
+
+const gridEl = $("#grid");
+const svgEl  = $("#svg");
+const explainBox = $("#explainBox");
+const resultBox  = $("#resultBox");
+
+/* ===== Build inputs/labels ===== */
+function buildItems(){
+  const box = $("#items");
+  box.innerHTML = "";
+  for(let i=1;i<=n;i++){
+    const tag = document.createElement("div");
+    tag.className = "mat";
+    tag.textContent = `A${i}: ${p[i-1]}×${p[i]}`;
+    box.appendChild(tag);
+  }
+}
+
+/* ===== Grid ===== */
+function mkCell(cls, text){
+  const d = document.createElement("div");
+  d.className = `cell ${cls||""}`;
+  if (text!==undefined) d.innerHTML = text;
+  return d;
+}
+function buildGrid(){
+  gridEl.innerHTML = "";
+  // grid with headers: top row j=0..n, left col i=0..n (we'll use i,j 1..n)
+  gridEl.style.gridTemplateColumns = `repeat(${n+2}, minmax(70px, auto))`;
+  gridEl.style.gridTemplateRows    = `repeat(${n+2}, auto)`;
+
+  // corner
+  gridEl.appendChild(mkCell("header sticky left top",""));
+  // top header labels j
+  gridEl.appendChild(mkCell("header sticky top","j→"));
+  for(let j=1;j<=n;j++){
+    const c = mkCell("header sticky top", `j=${j}`);
+    c.dataset.top = j;
+    gridEl.appendChild(c);
+  }
+  // rows
+  for(let i=1;i<=n;i++){
+    // left header
+    const rh = mkCell("header sticky left", `i=${i}`);
+    rh.dataset.left = i;
+    gridEl.appendChild(rh);
+    // row label "i→"
+    if (i===1) gridEl.appendChild(mkCell("header sticky left", "i↓"));
+    else gridEl.appendChild(mkCell("header left inactive",""));
+
+    for(let j=1;j<=n;j++){
+      const d = mkCell("cell empty","");
+      d.dataset.i=i; d.dataset.j=j;
+      if (j<i) {
+        d.classList.add("inactive");
+        d.innerHTML = "<span class='subv'>—</span>";
+      } else if (i===j){
+        d.textContent = "0";
+        d.classList.remove("empty");
+      }
+      gridEl.appendChild(d);
+    }
+  }
+}
+
+/* ===== Steps plan ===== */
+function planSteps(){
+  steps = [];
+  for (let len=2; len<=n; len++){
+    for (let i=1; i<=n-len+1; i++){
+      const j = i + len - 1;
+      steps.push({type:"begin", i,j, len});
+      for (let k=i; k<=j-1; k++){
+        steps.push({type:"try", i,j,k});
+      }
+      steps.push({type:"finish", i,j});
+    }
+  }
+}
+
+/* ===== Compute up to step (for explanations/values) ===== */
+function initTables(){
+  dp = Array.from({length:n+1},()=>Array(n+1).fill(Infinity));
+  split = Array.from({length:n+1},()=>Array(n+1).fill(-1));
+  for(let i=1;i<=n;i++) dp[i][i]=0;
+}
+function posOf(el){
+  const wrapEl = document.querySelector(".lane-wrap");
+  const wrapR  = wrapEl.getBoundingClientRect();
+  const r      = el.getBoundingClientRect();
+  return {
+    x:(r.left - wrapR.left) + wrapEl.scrollLeft + r.width/2,
+    y:(r.top  - wrapR.top ) + wrapEl.scrollTop  + r.height/2
+  };
+}
+function updateSvgFrame(){
+  const wrapEl = document.querySelector(".lane-wrap");
+  const r = wrapEl.getBoundingClientRect();
+  svgEl.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`);
+  svgEl.setAttribute("width",  r.width);
+  svgEl.setAttribute("height", r.height);
+}
+function clearSvg(){
+  svgEl.innerHTML = `
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path>
+      </marker>
+    </defs>`;
+}
+function drawEdge(fromCell, toCell, chosen=false){
+  if(!fromCell || !toCell) return;
+  const {x:fx,y:fy} = posOf(fromCell);
+  const {x:tx,y:ty} = posOf(toCell);
+  const dx=tx-fx, dy=ty-fy;
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  const cx1 = fx + dx*0.35, cy1 = fy + dy*0.10;
+  const cx2 = fx + dx*0.70, cy2 = fy + dy*0.90;
+  path.setAttribute("d", `M ${fx} ${fy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`);
+  path.setAttribute("marker-end","url(#arrow)");
+  path.setAttribute("class", chosen ? "edge-best" : "edge-try");
+  svgEl.appendChild(path);
+}
+
+/* ===== Execution of a step ===== */
+function setCell(i,j,val,markBest=false){
+  const c = getCell(i,j);
+  if (!c) return;
+  c.textContent = (val===Infinity ? "∞" : val);
+  c.classList.remove("empty");
+  c.classList.toggle("best", markBest);
+}
+function getCell(i,j){ return $(`.cell[data-i="${i}"][data-j="${j}"]`); }
+function clearClasses(){
+  $$(".cell").forEach(c=> c.classList.remove("active","try","best"));
+  $$(".mat").forEach(m=> m.classList.remove("cur"));
+}
+
+function executeStep(s){
+  clearClasses(); clearSvg(); updateSvgFrame();
+
+  if (s.type==="begin"){
+    const {i,j,len} = s;
+    const cur = getCell(i,j);
+    cur?.classList.add("active");
+    setCell(i,j,Infinity);
+    // highlight matrices span
+    highlightMatrices(i,j);
+    explainBox.innerHTML = `
+      <div><strong>Start dp[${i}][${j}]</strong> (length ${len}): try all splits k = ${i}..${j-1}</div>
+      <div class="note">Current best: ∞</div>
+    `;
+  } else if (s.type==="try"){
+    const {i,j,k} = s;
+    const left  = getCell(i,k);
+    const right = getCell(k+1,j);
+    const cur   = getCell(i,j);
+    left?.classList.add("try");
+    right?.classList.add("try");
+    cur?.classList.add("active");
+
+    const cost = dp[i][k] + dp[k+1][j] + p[i-1]*p[k]*p[j];
+    const improved = cost < dp[i][j];
+    drawEdge(left, cur, improved);
+    drawEdge(right, cur, improved);
+
+    if (improved){
+      dp[i][j] = cost;
+      split[i][j] = k;
+      setCell(i,j,cost,true);
+    }
+
+    highlightMatrices(i,j,k);
+    explainBox.innerHTML = `
+      <div><strong>Try k=${k}</strong> → (A${i}..A${k}) · (A${k+1}..A${j})</div>
+      <div>cost = dp[${i}][${k}] (${dp[i][k]}) + dp[${k+1}][${j}] (${dp[k+1][j]}) + p[${i-1}]·p[${k}]·p[${j}] = ${p[i-1]}·${p[k]}·${p[j]} = <strong>${cost}</strong></div>
+      <div>best so far dp[${i}][${j}] = <strong>${dp[i][j]===Infinity ? "∞" : dp[i][j]}</strong>${improved ? " (updated)" : ""}</div>
+    `;
+  } else if (s.type==="finish"){
+    const {i,j} = s;
+    const cur = getCell(i,j);
+    cur?.classList.add("best");
+    explainBox.innerHTML = `
+      <div><strong>Finish dp[${i}][${j}]</strong> with best split k=${split[i][j]}.</div>
+      <div>dp[${i}][${j}] = <strong>${dp[i][j]}</strong></div>
+    `;
+  }
+
+  // update header highlights
+  $(`[data-left]`)?.classList.remove("active");
+  $(`[data-top]`)?.classList.remove("active");
+}
+
+function highlightMatrices(i,j,k=null){
+  $$("#items .mat").forEach((m,idx)=>{
+    const t = idx+1; // A1..An
+    if (t>=i && t<=j) m.classList.add("cur");
+  });
+}
+
+/* ===== Playback ===== */
+function render(){
+  $("#prevBtn").disabled = (currentStep<=-1);
+  $("#nextBtn").disabled = (currentStep>=steps.length-1);
+  $("#finishBtn").disabled = (currentStep>=steps.length-1);
+  $("#backtrackBtn").disabled = !(currentStep>=steps.length-1);
+  $("#clearBtn").disabled = !pathShown;
+}
+async function play(){
+  if (playing){ playing=false; $("#playBtn").textContent="▶ Play"; return; }
+  playing=true; $("#playBtn").textContent="⏸ Pause";
+  while(playing && currentStep<steps.length-1){
+    await next();
+    const sp = +$("#speed").value || 1.0;
+    await sleep(500/sp);
+  }
+  playing=false; $("#playBtn").textContent="▶ Play"; render();
+}
+async function next(){
+  if (currentStep>=steps.length-1) return;
+  currentStep++;
+  executeStep(steps[currentStep]);
+  render();
+}
+async function prev(){
+  if (currentStep<=-1) return;
+  // recompute from scratch up to previous step
+  const target = currentStep - 1;
+  initTables();
+  // fill base zeros visually too
+  for(let i=1;i<=n;i++) setCell(i,i,0);
+  clearSvg();
+  for(let s=0; s<=target; s++) executeStep(steps[s]);
+  currentStep = target;
+  render();
+}
+async function finish(){ while(currentStep<steps.length-1){ await next(); } }
+
+/* ===== Backtrack to show parenthesization ===== */
+function parenthesize(i,j){
+  if (i===j) return `A${i}`;
+  const k = split[i][j];
+  return `(${parenthesize(i,k)} × ${parenthesize(k+1,j)})`;
+}
+function backtrack(){
+  clearSvg();
+  // Visual highlight along split tree by drawing chosen edges layer-by-layer.
+  function drawBest(i,j){
+    if (i===j) return;
+    const k = split[i][j];
+    drawEdge(getCell(i,k), getCell(i,j), true);
+    drawEdge(getCell(k+1,j), getCell(i,j), true);
+    getCell(i,j)?.classList.add("best");
+    drawBest(i,k); drawBest(k+1,j);
+  }
+  drawBest(1,n);
+  const expr = parenthesize(1,n);
+  resultBox.innerHTML = `
+    <div><strong>Optimal cost:</strong> ${dp[1][n]}</div>
+    <div><strong>Parenthesization:</strong> <code>${expr}</code></div>
+  `;
+  pathShown = true;
+  $("#clearBtn").disabled = false;
+}
+
+/* ===== Wiring ===== */
+function parseDims(){
+  const raw = $("#dimsInput").value.trim();
+  const nums = raw.split(/[\s,]+/).filter(Boolean).map(Number).filter(x=>Number.isFinite(x) && x>0);
+  if (nums.length < 2){ alert("Enter at least two positive dimensions (n+1 numbers for n matrices)."); return null; }
+  if (nums.length > 30 && !confirm("Large chain will produce a big table. Continue?")) return null;
+  return nums;
+}
+function resetAll(){
+  buildItems();
+  buildGrid();
+  initTables();
+  planSteps();
+  explainBox.textContent = "Table built. Step through each cell to see all k-splits.";
+  resultBox.textContent  = "Click “Show Parenthesization” after it fills.";
+  currentStep = -1; pathShown=false; render();
+}
+$("#buildBtn").addEventListener("click", ()=>{
+  const dims = parseDims(); if (!dims) return;
+  p = dims; n = p.length-1;
+  resetAll();
+});
+$("#resetBtn").addEventListener("click", resetAll);
+$$(".pill").forEach(pill => pill.addEventListener("click", ()=> { $("#dimsInput").value = pill.dataset.ex; }));
+
+$("#prevBtn").addEventListener("click", prev);
+$("#nextBtn").addEventListener("click", next);
+$("#playBtn").addEventListener("click", play);
+$("#finishBtn").addEventListener("click", finish);
+$("#backtrackBtn").addEventListener("click", backtrack);
+$("#clearBtn").addEventListener("click", ()=>{ pathShown=false; clearSvg(); render(); });
+
+$("#speed").addEventListener("input", ()=> $("#speedLbl").textContent = `${(+$("#speed").value).toFixed(1)}×`);
+
+// Keyboard
+window.addEventListener("keydown", e=>{
+  if (["INPUT","TEXTAREA"].includes(e.target.tagName)) return;
+  if (e.key==="ArrowRight"){ e.preventDefault(); next(); }
+  if (e.key==="ArrowLeft"){ e.preventDefault(); prev(); }
+  if (e.key===" "){ e.preventDefault(); play(); }
+});
+
+// Keep SVG aligned on size/scroll
+const ro = new ResizeObserver(updateSvgFrame);
+ro.observe(document.body);
+window.addEventListener("resize", updateSvgFrame, {passive:true});
+document.addEventListener("scroll", updateSvgFrame, {passive:true});
+document.querySelectorAll('.lane-wrap').forEach(w=> w.addEventListener('scroll', updateSvgFrame, {passive:true}));
+
+// Boot with defaults
+buildItems(); buildGrid(); initTables(); planSteps(); render(); updateSvgFrame();
+</script>
+</body>
+</html>
