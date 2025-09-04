@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LCS — Dynamic Programming Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --edge:#556; --edge-pair:#e3b84a; --edge-done:#6fae97;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --outline: rgba(255,255,255,0.08);
+    --bad:#ff7b7b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    color:var(--text);
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #1a1f3a 0%, transparent 70%),
+      radial-gradient(1000px 700px at 120% 10%, #1d2548 0%, transparent 70%),
+      var(--bg);
+  }
+  header{ padding:24px clamp(16px,4vw,36px) 8px;}
+  h1{ margin:0 0 6px; font-size: clamp(20px, 2.6vw, 32px);}
+  .sub{ color:var(--muted); font-size:14px;}
+
+  .wrap{ display:grid; gap:16px; grid-template-columns:360px 1fr;
+    padding:0 clamp(16px,4vw,36px) 32px;}
+  @media (max-width:980px){ .wrap{ grid-template-columns:1fr; } }
+
+  .card{
+    background: linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--outline);
+    border-radius:14px; box-shadow:var(--shadow);
+  }
+  .controls{ padding:16px; display:grid; gap:12px; align-content:start; }
+  .controls h2{ margin:4px 0 6px; font-size:16px; color:var(--muted);
+    font-weight:600; text-transform:uppercase; letter-spacing:.12em; }
+  .row{ display:grid; grid-template-columns:1fr; gap:8px; }
+  .row.inline{ grid-template-columns:1fr 1fr; gap:10px; }
+  label{ font-size:12px; color:var(--muted); }
+  input,button{
+    background:#0f1330; color:var(--text);
+    border:1px solid #2b315b; border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input::placeholder{ color:#778; }
+  button{ cursor:pointer; transition: transform .06s ease, background .2s ease, border-color .2s ease;}
+  button:hover{ transform: translateY(-1px); }
+  button.primary{ background: linear-gradient(180deg,#2d3a8f,#263277); border-color:#3846a4; }
+  button.ghost{ background:transparent; border-color:#2b315b; }
+  button.warn{ background: linear-gradient(180deg,#6c1d2a,#521522); border-color:#7d2030; }
+
+  .viz{ position:relative; padding:16px; display:grid; gap:16px; grid-template-rows:auto auto 1fr auto; min-height:420px; }
+
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+  .legend .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle;}
+  .d-active{ background:var(--active); }
+  .d-done{ background:var(--done); }
+  .d-pair{ background:var(--pair); }
+
+  .panel{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:980px){ .panel{ grid-template-columns:1fr; } }
+  .explain{ background:#0d1230; border:1px solid var(--outline); border-radius:12px; padding:12px; font-size:14px; line-height:1.45; }
+  .note{ font-size:12px; color:var(--muted); }
+  .kbd{ border:1px solid #435; background:#0b0f28; padding:2px 6px; border-radius:6px; font-size:12px; }
+
+  .grid-wrap{ position:relative; border-radius:12px; border:1px solid var(--outline); overflow:auto; background:#0b0e23; padding:12px; }
+  .grid{ position:relative; display:grid; gap:2px; align-items:stretch; }
+
+  .cell{
+    min-width:48px; min-height:42px; display:flex; align-items:center; justify-content:center;
+    border-radius:8px; background:#141a39; border:1px solid #222a55; font-variant-numeric:tabular-nums; position:relative;
+  }
+  .cell.header{ background:#0f1431; color:var(--muted); font-weight:600; }
+  .cell.header.sticky{ position:sticky; z-index:3; }
+  .cell.header.top{ top:0; }
+  .cell.header.left{ left:0; }
+  .cell.active{ outline:2px solid var(--active); box-shadow:0 0 0 3px rgba(108,243,255,.18) inset; }
+  .cell.source{ box-shadow:0 0 0 2px rgba(255,209,102,.25) inset; }
+  .cell.choice{ box-shadow:0 0 0 2px rgba(138,233,193,.25) inset; }
+  .cell.empty{ color:#445; }
+
+  .char{ font-weight:700; color:#cfd7ff; }
+
+  .svg-layer{ position:absolute; inset:12px; pointer-events:none; z-index:2; }
+  .svg-layer path{ stroke-width:2.5; fill:none; }
+  .edge-diag{ stroke:var(--edge-pair); }
+  .edge-up, .edge-left{ stroke:var(--edge); }
+  .edge-chosen{ stroke:var(--edge-done); stroke-width:3.2; filter: drop-shadow(0 0 4px rgba(111,174,151,.35)); }
+  .footer{ display:flex; gap:8px; justify-content:space-between; align-items:center; padding-top:6px; }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  .range{ display:flex; gap:8px; align-items:center; color:var(--muted); font-size:12px; }
+  input[type="range"]{ width:180px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Longest Common Subsequence — DP Visualizer</h1>
+  <div class="sub">Step through <span class="kbd">dp[i][j]</span>, see transitions (↖ match, ↑, ←), and backtrack to reveal the LCS.</div>
+</header>
+
+<div class="wrap">
+  <!-- Controls -->
+  <section class="card controls" aria-label="Controls">
+    <h2>Input</h2>
+    <div class="row">
+      <label>String A</label>
+      <input id="AInput" value="ABCBDAB" placeholder="e.g. ABCBDAB" />
+    </div>
+    <div class="row">
+      <label>String B</label>
+      <input id="BInput" value="BDCABA" placeholder="e.g. BDCABA" />
+    </div>
+    <div class="row inline">
+      <button id="buildBtn" class="primary">Build Table</button>
+      <button id="resetBtn" class="warn">↺ Reset</button>
+    </div>
+
+    <h2>Playback</h2>
+    <div class="row">
+      <div class="btns">
+        <button id="prevBtn" class="ghost">⟵ Prev</button>
+        <button id="nextBtn" class="ghost">Next ⟶</button>
+        <button id="playBtn" class="primary">▶ Play</button>
+        <button id="finishBtn" class="ghost">⤓ Fill All</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="range">
+        <span>Speed</span>
+        <input id="speed" type="range" min="0.2" max="2.0" step="0.1" value="1.0" />
+        <span class="muted" id="speedLabel">1.0×</span>
+      </div>
+    </div>
+
+    <h2>How it works</h2>
+    <div class="row">
+      <div class="explain">
+        <div><strong>Recurrence:</strong></div>
+        <code>If A[i-1] == B[j-1] → dp[i][j] = 1 + dp[i-1][j-1]</code><br/>
+        <code>Else → dp[i][j] = max(dp[i-1][j], dp[i][j-1])</code>
+        <div class="note" style="margin-top:8px">Rows: <code>i = 0..n</code>, Cols: <code>j = 0..m</code> (0 = empty prefix). Base row/col are zeros. Time <code>O(n·m)</code>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Visualization -->
+  <section class="card viz" aria-label="Visualization">
+    <div class="legend">
+      <span><span class="dot d-active"></span>Current cell</span>
+      <span><span class="dot d-pair"></span>Match (↖)</span>
+      <span><span class="dot d-done"></span>Chosen transition</span>
+    </div>
+
+    <div class="panel">
+      <div class="explain" id="explainBox" aria-live="polite">Build the table, then step to begin.</div>
+      <div class="explain" id="resultBox" aria-live="polite">LCS will appear here after backtracking.</div>
+    </div>
+
+    <div class="grid-wrap" id="gridWrap">
+      <div id="grid" class="grid" aria-label="DP grid"></div>
+      <svg id="svg" class="svg-layer" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker></defs>
+      </svg>
+    </div>
+
+    <div class="footer">
+      <div class="btns">
+        <button id="backtrackBtn" class="ghost" disabled>🔎 Show LCS & Path</button>
+        <button id="clearPathBtn" class="ghost" disabled>Clear Highlight</button>
+      </div>
+      <div class="note">Tip: Use keyboard <span class="kbd">←</span>/<span class="kbd">→</span> to step, <span class="kbd">Space</span> to play/pause.</div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ======= Helpers ======= */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp = (v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ======= State ======= */
+let A = "ABCBDAB";
+let B = "BDCABA";
+let n = A.length, m = B.length;
+
+let steps = [];         // [{i,j}]
+let currentStep = -1;
+let playing = false;
+let pathShown = false;
+
+const gridEl = $("#grid");
+const svgEl = $("#svg");
+const gridWrap = $("#gridWrap");
+const explainBox = $("#explainBox");
+const resultBox = $("#resultBox");
+
+/* ======= Build grid & steps ======= */
+function buildSteps(){
+  steps = [];
+  for(let i=0;i<=n;i++){
+    for(let j=0;j<=m;j++){
+      steps.push({i,j}); // row-wise fill
+    }
+  }
+}
+function buildGrid(){
+  gridEl.innerHTML = "";
+  // Grid includes headers: (n+2) x (m+2)
+  gridEl.style.gridTemplateColumns = `repeat(${m+2}, minmax(48px, auto))`;
+  gridEl.style.gridTemplateRows    = `repeat(${n+2}, auto)`;
+
+  // Top-left 2 headers: empty + top header "B"
+  gridEl.appendChild(mkCell("header sticky left top",""));
+  gridEl.appendChild(mkCell("header sticky top", "B→"));
+  for(let j=0;j<=m;j++){
+    const label = j===0 ? "j=0" : `B${j}=${B[j-1]}`;
+    const c = mkCell("header sticky top", label);
+    c.dataset.top = j;
+    gridEl.appendChild(c);
+  }
+
+  // Rows
+  for(let i=0;i<=n;i++){
+    // Row headers: left label column (A chars) + "A↓" in first row
+    const rowHead = mkCell("header sticky left", i===0 ? "i=0" : `A${i}=${A[i-1]}`);
+    rowHead.dataset.left = i;
+    gridEl.appendChild(rowHead);
+
+    // Data cells
+    for(let j=0;j<=m;j++){
+      const d = mkCell("cell empty","");
+      d.dataset.i = i; d.dataset.j = j;
+      gridEl.appendChild(d);
+    }
+  }
+  queueMicrotask(updateSvgFrame);
+}
+function mkCell(cls, text){
+  const d = document.createElement("div");
+  d.className = `cell ${cls||""}`;
+  if (text!==undefined) d.innerHTML = text;
+  return d;
+}
+
+/* ======= DP compute ======= */
+function computeUpTo(stepIdx){
+  const dp = Array.from({length:n+1},()=>Array(m+1).fill(0));
+  for(let s=0; s<=stepIdx; s++){
+    const {i,j} = steps[s];
+    if(i===0 || j===0){ dp[i][j]=0; continue; }
+    if (A[i-1] === B[j-1]){
+      dp[i][j] = 1 + dp[i-1][j-1];
+    } else {
+      dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  return dp;
+}
+function cellInfo(dp,i,j){
+  if (i===0 || j===0){
+    return { base:true, val:0, i,j };
+  }
+  const a = A[i-1], b = B[j-1];
+  if (a===b){
+    return {
+      base:false, match:true, i,j, val:dp[i][j],
+      from:"diag", diag:dp[i-1][j-1], a, b
+    };
+  } else {
+    const up = dp[i-1][j], left = dp[i][j-1];
+    const from = (up >= left) ? "up" : "left";
+    return { base:false, match:false, i,j, val:dp[i][j], from, up,left, a,b };
+  }
+}
+
+/* ======= Render ======= */
+function render(){
+  const s = clamp(currentStep,-1,steps.length-1); currentStep=s;
+  const dp = (s>=0) ? computeUpTo(s) : Array.from({length:n+1},()=>Array(m+1).fill(null));
+
+  // Fill values
+  const dataCells = $$("#grid .cell:not(.header)");
+  for(const c of dataCells){
+    const i=+c.dataset.i, j=+c.dataset.j;
+    if (s>=0){
+      const reached = steps.findIndex(t=>t.i===i && t.j===j) <= s;
+      if (reached && dp[i][j]!=null){
+        c.textContent = dp[i][j];
+        c.classList.remove("empty");
+      }else{
+        c.textContent = "";
+        c.classList.add("empty");
+      }
+    }else{
+      c.textContent="";
+      c.classList.add("empty");
+    }
+    c.classList.remove("active","source","choice");
+  }
+  // headers off
+  $$("#grid .cell.header").forEach(h=>h.classList.remove("active"));
+
+  clearSvg();
+  if (s>=0){
+    const {i,j} = steps[s];
+    highlight(dp,i,j);
+  }
+
+  $("#prevBtn").disabled = (currentStep<=-1);
+  $("#nextBtn").disabled = (currentStep>=steps.length-1);
+  $("#finishBtn").disabled = (currentStep>=steps.length-1);
+  $("#backtrackBtn").disabled = !(currentStep>=steps.length-1);
+  $("#clearPathBtn").disabled = !pathShown;
+}
+
+function highlight(dp,i,j){
+  const cur = getCell(i,j);
+  cur.classList.add("active");
+  const hRow = $(`[data-left="${i}"]`);
+  const hCol = $(`[data-top="${j}"]`);
+  hRow?.classList.add("active");
+  hCol?.classList.add("active");
+
+  const info = cellInfo(dp,i,j);
+  explainBox.innerHTML = toExplanation(info);
+
+  if (!info.base){
+    if (info.match){
+      const src = getCell(i-1,j-1);
+      src?.classList.add("source");
+      drawArrow(src, cur, "diag", true);
+    } else {
+      if (info.from==="up"){
+        const src = getCell(i-1,j);
+        src?.classList.add("source");
+        drawArrow(src, cur, "up", true);
+        const alt = getCell(i,j-1);
+        drawArrow(alt, cur, "left", false);
+      } else {
+        const src = getCell(i,j-1);
+        src?.classList.add("source");
+        drawArrow(src, cur, "left", true);
+        const alt = getCell(i-1,j);
+        drawArrow(alt, cur, "up", false);
+      }
+    }
+  }
+}
+
+function toExplanation(info){
+  if (info.base){
+    if (info.i===0 && info.j===0) return `<strong>Base:</strong> dp[0][0]=0 (empty prefixes).`;
+    if (info.i===0) return `<strong>Base row:</strong> dp[0][${info.j}]=0 (A is empty).`;
+    return `<strong>Base col:</strong> dp[${info.i}][0]=0 (B is empty).`;
+  }
+  if (info.match){
+    return `
+      <div><strong>Match:</strong> A[${info.i-1}] = B[${info.j-1}] = <span class="char">${info.a}</span></div>
+      <div>dp[${info.i}][${info.j}] = 1 + dp[${info.i-1}][${info.j-1}] = ${1+info.diag}</div>
+    `;
+  }
+  const chooseUp = info.from==="up";
+  return `
+    <div><strong>No match:</strong> A[${info.i-1}]=<span class="char">${info.a}</span>, B[${info.j-1}]=<span class="char">${info.b}</span></div>
+    <div>up=dp[${info.i-1}][${info.j}] = ${info.up}, left=dp[${info.i}][${info.j-1}] = ${info.left}</div>
+    <div>Choose <strong>${chooseUp?"up":"left"}</strong> ⇒ dp[${info.i}][${info.j}] = ${info.val}</div>
+  `;
+}
+
+function getCell(i,j){ return $(`.cell[data-i="${i}"][data-j="${j}"]`); }
+
+function clearSvg(){ svgEl.innerHTML = `
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker></defs>
+`; }
+
+function updateSvgFrame(){
+  const inner = gridEl.getBoundingClientRect();
+  svgEl.setAttribute("viewBox", `0 0 ${inner.width} ${inner.height}`);
+  svgEl.setAttribute("width", inner.width);
+  svgEl.setAttribute("height", inner.height);
+}
+
+function drawArrow(fromCell, toCell, kind, chosen){
+  if (!fromCell || !toCell) return;
+  const from = fromCell.getBoundingClientRect();
+  const to   = toCell.getBoundingClientRect();
+  const grid = gridEl.getBoundingClientRect();
+
+  const fx = from.left - grid.left + from.width/2;
+  const fy = from.top  - grid.top  + from.height/2;
+  const tx = to.left   - grid.left + to.width/2;
+  const ty = to.top    - grid.top  + to.height/2;
+
+  // slight curved path
+  const dx = tx - fx, dy = ty - fy;
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  const cx1 = fx + dx*0.35, cy1 = fy + dy*0.10;
+  const cx2 = fx + dx*0.70, cy2 = fy + dy*0.90;
+  path.setAttribute("d", `M ${fx} ${fy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`);
+  path.setAttribute("marker-end","url(#arrow)");
+  let cls = (kind==="diag") ? "edge-diag" : (kind==="up" ? "edge-up" : "edge-left");
+  if (chosen) cls += " edge-chosen";
+  path.setAttribute("class", cls);
+  svgEl.appendChild(path);
+}
+
+/* ======= Playback ======= */
+function reset(){
+  playing=false; pathShown=false; currentStep=-1;
+  buildSteps(); buildGrid();
+  explainBox.innerHTML = "Build the table, then step to begin.";
+  resultBox.innerHTML = "LCS will appear here after backtracking.";
+  render();
+}
+async function play(){
+  if (playing){ playing=false; $("#playBtn").textContent="▶ Play"; return; }
+  playing=true; $("#playBtn").textContent="⏸ Pause";
+  while(playing && currentStep<steps.length-1){
+    await next();
+    const speed = +$("#speed").value || 1.0;
+    await sleep(450/speed);
+  }
+  playing=false; $("#playBtn").textContent="▶ Play"; render();
+}
+async function next(){ if (currentStep>=steps.length-1) return; currentStep++; pathShown=false; render(); }
+async function prev(){ if (currentStep<=-1) return; currentStep--; pathShown=false; render(); }
+async function finish(){ currentStep = steps.length-1; render(); }
+
+/* ======= Backtrack LCS ======= */
+function computeFullDP(){
+  const dp = Array.from({length:n+1},()=>Array(m+1).fill(0));
+  for(let i=1;i<=n;i++){
+    for(let j=1;j<=m;j++){
+      if (A[i-1]===B[j-1]) dp[i][j]=1+dp[i-1][j-1];
+      else dp[i][j]=Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  return dp;
+}
+function backtrack(){
+  const dp = computeFullDP();
+  clearSvg();
+  $$(".cell").forEach(c=>c.classList.remove("choice"));
+
+  let i=n, j=m; let lcsChars=[];
+  while(i>0 && j>0){
+    if (A[i-1]===B[j-1]){
+      lcsChars.push(A[i-1]);
+      const from = getCell(i-1,j-1), to = getCell(i,j);
+      drawArrow(from,to,"diag",true);
+      getCell(i,j)?.classList.add("choice");
+      i--; j--;
+    } else if (dp[i-1][j] >= dp[i][j-1]){
+      const from = getCell(i-1,j), to = getCell(i,j);
+      drawArrow(from,to,"up",true);
+      getCell(i,j)?.classList.add("choice");
+      i--;
+    } else {
+      const from = getCell(i,j-1), to = getCell(i,j);
+      drawArrow(from,to,"left",true);
+      getCell(i,j)?.classList.add("choice");
+      j--;
+    }
+  }
+  lcsChars.reverse();
+  const lcsStr = lcsChars.join("");
+  resultBox.innerHTML = `
+    <div><strong>LCS length:</strong> ${dp[n][m]}</div>
+    <div><strong>LCS string:</strong> "${lcsStr}"</div>
+    <div class="note">Path highlighted from bottom-right.</div>
+  `;
+  pathShown = true;
+  $("#clearPathBtn").disabled = false;
+}
+function clearPath(){ pathShown=false; render(); }
+
+/* ======= Wiring ======= */
+$("#buildBtn").addEventListener("click",()=>{
+  const a = $("#AInput").value;
+  const b = $("#BInput").value;
+  if (a.length>80 || b.length>80){
+    if (!confirm("Large strings create a very big grid. Continue?")) return;
+  }
+  A = a; B = b; n=A.length; m=B.length;
+  reset();
+});
+$("#resetBtn").addEventListener("click", reset);
+$("#prevBtn").addEventListener("click", prev);
+$("#nextBtn").addEventListener("click", next);
+$("#playBtn").addEventListener("click", play);
+$("#finishBtn").addEventListener("click", finish);
+$("#backtrackBtn").addEventListener("click", backtrack);
+$("#clearPathBtn").addEventListener("click", clearPath);
+
+$("#speed").addEventListener("input",()=> $("#speedLabel").textContent = `${(+$("#speed").value).toFixed(1)}×`);
+
+// Keyboard
+window.addEventListener("keydown",e=>{
+  if (e.target.tagName==="INPUT") return;
+  if (e.key==="ArrowRight"){ e.preventDefault(); next(); }
+  if (e.key==="ArrowLeft"){ e.preventDefault(); prev(); }
+  if (e.key===" "){ e.preventDefault(); play(); }
+});
+
+// Observe size changes to align SVG overlay
+const ro = new ResizeObserver(updateSvgFrame);
+ro.observe(gridEl); ro.observe(gridWrap);
+window.addEventListener("resize",updateSvgFrame,{passive:true});
+window.addEventListener("scroll",updateSvgFrame,{passive:true});
+
+// Init
+reset();
+</script>
+</body>
+</html>
