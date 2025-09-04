@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LIS — Dynamic Programming & Binary Search Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --accent:#6cf3ff; --good:#8ae9c1; --warn:#ffd166; --bad:#ff7b7b;
+    --edge:#556; --edge-chosen:#6fae97; --edge-try:#e3b84a;
+    --outline: rgba(255,255,255,0.08);
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #1a1f3a 0%, transparent 70%),
+      radial-gradient(1000px 700px at 120% 10%, #1d2548 0%, transparent 70%),
+      var(--bg);
+  }
+  header{ padding:24px clamp(16px,4vw,36px) 8px; }
+  h1{ margin:0 0 6px; font-size: clamp(20px, 2.6vw, 32px); }
+  .sub{ color:var(--muted); font-size:14px; }
+
+  .wrap{ display:grid; gap:16px; grid-template-columns:360px 1fr; padding:0 clamp(16px,4vw,36px) 32px; }
+  @media (max-width:980px){ .wrap{ grid-template-columns:1fr; } }
+
+  .card{ background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--outline); border-radius:14px; box-shadow:var(--shadow); }
+  .controls{ padding:16px; display:grid; gap:12px; align-content:start; }
+  .controls h2{ margin:4px 0 6px; font-size:16px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.12em; }
+  .row{ display:grid; gap:8px; }
+  .row.inline{ grid-template-columns:1fr 1fr; gap:10px; }
+  label{ font-size:12px; color:var(--muted); }
+  input,button,select{
+    background:#0f1330; color:var(--text); border:1px solid #2b315b; border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input::placeholder{ color:#778; }
+  button{ cursor:pointer; transition: transform .06s ease, background .2s ease, border-color .2s ease; }
+  button:hover{ transform: translateY(-1px); }
+  button.primary{ background:linear-gradient(180deg,#2d3a8f,#263277); border-color:#3846a4; }
+  button.ghost{ background:transparent; border-color:#2b315b; }
+  button.warn{ background:linear-gradient(180deg,#6c1d2a,#521522); border-color:#7d2030; }
+
+  .pills{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pill{ font-size:12px; padding:6px 10px; border-radius:999px; border:1px dashed #3a4070; color:var(--muted); cursor:pointer; }
+  .pill:hover{ border-style:solid; color:var(--text); }
+
+  .viz{ position:relative; padding:16px; display:grid; gap:16px; grid-template-rows:auto auto 1fr auto; min-height:480px; }
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
+  .d-cur{ background:var(--accent); }
+  .d-try{ background:var(--warn); }
+  .d-best{ background:var(--good); }
+
+  .tabs{ display:flex; gap:8px; }
+  .tab{ padding:8px 12px; border-radius:10px; border:1px solid #2b315b; cursor:pointer; background:#0f1330; }
+  .tab.active{ outline:2px solid var(--accent); }
+
+  .panel{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:980px){ .panel{ grid-template-columns:1fr; } }
+  .explain{ background:#0d1230; border:1px solid var(--outline); border-radius:12px; padding:12px; font-size:14px; line-height:1.45; min-height:82px; }
+
+  .lane-wrap{ border:1px solid var(--outline); border-radius:12px; background:#0b0e23; padding:12px; overflow:auto; position:relative; }
+  .lane{ display:flex; gap:10px; align-items:flex-end; min-height:72px; }
+  .node{
+    min-width:46px; min-height:46px; border:1px solid #222a55; background:#141a39; border-radius:10px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative;
+    font-variant-numeric:tabular-nums;
+  }
+  .node small{ color:var(--muted); font-size:11px; position:absolute; top:2px; left:6px; }
+  .node.active{ outline:2px solid var(--accent); box-shadow:0 0 0 3px rgba(108,243,255,.18) inset; }
+  .node.best{ box-shadow:0 0 0 2px rgba(138,233,193,.25) inset; }
+  .node.try{ box-shadow:0 0 0 2px rgba(255,209,102,.25) inset; }
+  .node.pick{ box-shadow:0 0 0 2px rgba(111,174,151,.35) inset; }
+  .badge{ font-size:11px; padding:2px 6px; border-radius:999px; border:1px solid #3f6b5d; color:#9cd8be; position:absolute; bottom:4px; right:4px; }
+
+  .dp-lane{ margin-top:8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .dpbox{ min-width:46px; min-height:36px; border:1px solid #222a55; background:#111635; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+  .dpbox.active{ outline:2px solid var(--accent); }
+  .dpbox.updated{ box-shadow:0 0 0 2px rgba(138,233,193,.25) inset; }
+
+  .tails{ display:flex; gap:10px; }
+  .tails .slot{ min-width:56px; min-height:44px; border:1px dashed #3a4070; border-radius:8px; display:flex; align-items:center; justify-content:center; background:#101638; position:relative; }
+  .tails .slot.fill{ border-style:solid; border-color:#2b315b; background:#141a39; }
+  .tails .slot.cur{ outline:2px solid var(--accent); }
+  .tails .slot.swap{ box-shadow:0 0 0 2px rgba(255,209,102,.25) inset; }
+  .note{ font-size:12px; color:var(--muted); }
+  .kbd{ border:1px solid #435; background:#0b0f28; padding:2px 6px; border-radius:6px; font-size:12px; }
+  .footer{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* FIX: SVG overlay flush with container */
+  .svg-layer{
+    position:absolute;
+    inset:0;           /* was: inset:12px; */
+    pointer-events:none;
+    z-index:2;
+  }
+  .svg-layer path{ stroke-width:2.5; fill:none; }
+  .edge-try{ stroke:var(--edge-try); }
+  .edge-best{ stroke:var(--edge-chosen); stroke-width:3.2; filter: drop-shadow(0 0 4px rgba(111,174,151,.35)); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Longest Increasing Subsequence — Visualizer</h1>
+  <div class="sub">See both <strong>O(n²) DP</strong> and <strong>O(n log n)</strong> (patience/tails) step-by-step.</div>
+</header>
+
+<div class="wrap">
+  <!-- Controls -->
+  <section class="card controls" aria-label="Controls">
+    <h2>Input</h2>
+    <div class="row">
+      <label>Array (comma / space separated)</label>
+      <input id="arrInput" value="10, 9, 2, 5, 3, 7, 101, 18" placeholder="e.g. 0,8,4,12,2"/>
+    </div>
+    <div class="row">
+      <div class="pills">
+        <span class="pill" data-ex="10,9,2,5,3,7,101,18">Classic</span>
+        <span class="pill" data-ex="0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15">Long</span>
+        <span class="pill" data-ex="3,4,-1,0,6,2,3">Negatives</span>
+        <span class="pill" data-ex="1,1,1,1,1">All equal</span>
+        <span class="pill" data-ex="1,2,3,4,5,6">Already increasing</span>
+      </div>
+    </div>
+    <div class="row inline">
+      <button id="buildBtn" class="primary">Load Array</button>
+      <button id="resetBtn" class="warn">↺ Reset</button>
+    </div>
+
+    <h2>Mode</h2>
+    <div class="row">
+      <div class="tabs">
+        <button class="tab active" id="tabDP">O(n²) DP</button>
+        <button class="tab" id="tabTails">O(n log n) Tails</button>
+      </div>
+    </div>
+
+    <h2>Playback</h2>
+    <div class="row">
+      <div class="btns">
+        <button id="prevBtn" class="ghost">⟵ Prev</button>
+        <button id="nextBtn" class="ghost">Next ⟶</button>
+        <button id="playBtn" class="primary">▶ Play</button>
+        <button id="finishBtn" class="ghost">⤓ Fill All</button>
+        <button id="backtrackBtn" class="ghost" disabled>🔎 Show LIS</button>
+        <button id="clearBtn" class="ghost" disabled>Clear Highlight</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="note">Speed <input id="speed" type="range" min="0.2" max="2.0" step="0.1" value="1.0"/> <span id="speedLbl" class="note">1.0×</span></span>
+    </div>
+
+    <h2>Formulas</h2>
+    <div class="row">
+      <div class="explain">
+        <div><strong>DP:</strong> <code>dp[i] = 1 + max(dp[j])</code> for <code>j&lt;i</code> and <code>arr[j] &lt; arr[i]</code>, else 1.</div>
+        <div><strong>Tails:</strong> <code>tails[k]</code> = smallest tail of an increasing subsequence of length <code>k+1</code>. Place each <code>x</code> at the first <code>k</code> with <code>tails[k] ≥ x</code>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Visualization -->
+  <section class="card viz" aria-label="Visualization">
+    <div class="legend">
+      <span><span class="dot d-cur"></span>Current index / step</span>
+      <span><span class="dot d-try"></span>Trying candidate</span>
+      <span><span class="dot d-best"></span>Chosen update / path</span>
+    </div>
+
+    <div class="panel">
+      <div class="explain" id="explainBox">Load the array, pick a mode, then step/play.</div>
+      <div class="explain" id="resultBox">Result will appear here (LIS length, and one subsequence).</div>
+    </div>
+
+    <div class="lane-wrap">
+      <!-- DP lane -->
+      <div id="laneDP">
+        <div class="note">Numbers (top) with <code>dp[i]</code> boxes (bottom). We iterate pairs <code>(j&lt;i)</code>.</div>
+        <div class="lane" id="numLane"></div>
+        <div class="dp-lane" id="dpLane"></div>
+      </div>
+
+      <!-- Tails lane -->
+      <div id="laneTails" style="display:none;">
+        <div class="note">We scan array once; for each number <code>x</code> find position <code>k</code> = lower_bound in <code>tails</code> and set <code>tails[k]=x</code>.</div>
+        <div class="lane" id="numLaneT"></div>
+        <div style="margin-top:10px;">
+          <div class="tails" id="tailsLane"></div>
+        </div>
+      </div>
+
+      <svg id="svg" class="svg-layer" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker></defs>
+      </svg>
+    </div>
+
+    <div class="footer">
+      <div class="note">Tip: <span class="kbd">←</span>/<span class="kbd">→</span> to step • <span class="kbd">Space</span> to play/pause</div>
+      <div class="note">Time: DP <code>O(n²)</code>, Tails <code>O(n log n)</code></div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ================== Helpers ================== */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ================== State ================== */
+let arr = [10,9,2,5,3,7,101,18];
+let n = arr.length;
+
+let mode = "dp"; // "dp" | "tails"
+let steps = [];  // dp: sequence of steps; tails: one per element
+let currentStep = -1;
+let playing = false;
+let pathShown = false;
+
+let dp = [];
+let prevIdx = [];
+let tails = [];
+let tailsPos = [];
+let tailsLen = 0;
+
+const explainBox = $("#explainBox");
+const resultBox  = $("#resultBox");
+const svgEl      = $("#svg");
+
+/* ================== Build UI Lanes ================== */
+function mkNode(val, idx){
+  const d = document.createElement("div");
+  d.className = "node";
+  d.dataset.idx = idx;
+  d.innerHTML = `<small>i=${idx}</small><div>${val}</div>`;
+  return d;
+}
+function mkDpBox(val, idx){
+  const d = document.createElement("div");
+  d.className = "dpbox";
+  d.dataset.idx = idx;
+  d.textContent = val;
+  return d;
+}
+function buildDPLanes(){
+  $("#numLane").innerHTML = "";
+  $("#dpLane").innerHTML = "";
+  arr.forEach((v,i)=>{
+    $("#numLane").appendChild(mkNode(v,i));
+    $("#dpLane").appendChild(mkDpBox(1,i));
+  });
+}
+function buildTailsLanes(){
+  $("#numLaneT").innerHTML = "";
+  arr.forEach((v,i)=> $("#numLaneT").appendChild(mkNode(v,i)));
+  renderTails();
+}
+function renderTails(highlight={}){ // {k, swap}
+  const tl = $("#tailsLane");
+  tl.innerHTML = "";
+  const L = Math.max(tailsLen, 1, tails.length);
+  for(let k=0;k<L;k++){
+    const d = document.createElement("div");
+    d.className = "slot" + ((k<tailsLen)?" fill":"");
+    if (k===highlight.k) d.classList.add("cur");
+    if (highlight.swap && k===highlight.k) d.classList.add("swap");
+    d.dataset.k = k;
+    d.textContent = (k<tailsLen ? tails[k] : "—");
+    tl.appendChild(d);
+  }
+}
+
+/* ================== Step Plans ================== */
+function planStepsDP(){
+  steps = [];
+  for (let i=0;i<n;i++){
+    steps.push({type:"dp-begin-i", i});
+    for (let j=0;j<i;j++){
+      steps.push({type:"dp-pair", i, j});
+    }
+    steps.push({type:"dp-finish-i", i});
+  }
+}
+function planStepsTails(){
+  steps = [];
+  for (let t=0;t<n;t++) steps.push({type:"tails-one", t});
+}
+
+/* ================== Init State ================== */
+function resetCore(){
+  currentStep = -1;
+  pathShown = false;
+  dp = Array(n).fill(1);
+  prevIdx = Array(n).fill(-1);
+
+  tails = Array(n).fill(null);
+  tailsPos = Array(n).fill(-1);
+  tailsLen = 0;
+
+  clearSvg();
+}
+function resetUI(){
+  if (mode==="dp"){
+    $("#laneDP").style.display = "";
+    $("#laneTails").style.display = "none";
+    buildDPLanes();
+  }else{
+    $("#laneDP").style.display = "none";
+    $("#laneTails").style.display = "";
+    buildTailsLanes();
+  }
+  resultBox.textContent = "Result will appear here (LIS length, and one subsequence).";
+  explainBox.textContent = "Ready.";
+}
+
+/* ================== Rendering helpers (FIXED) ================== */
+function clearClasses(){
+  $$(".node, .dpbox, .tails .slot").forEach(el=>{
+    el.classList.remove("active","try","best","updated","pick","cur","swap");
+  });
+}
+function clearSvg(){ svgEl.innerHTML = `
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker></defs>
+`; }
+function updateSvgFrame(){
+  const wrapEl = document.querySelector(".lane-wrap");
+  const r = wrapEl.getBoundingClientRect();
+  svgEl.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`);
+  svgEl.setAttribute("width",  r.width);
+  svgEl.setAttribute("height", r.height);
+}
+function posOf(el){
+  const wrapEl = document.querySelector(".lane-wrap");
+  const wrapR  = wrapEl.getBoundingClientRect();
+  const r      = el.getBoundingClientRect();
+  // include scrollLeft/Top so arrows align while scrolling
+  const x = (r.left - wrapR.left) + wrapEl.scrollLeft + r.width / 2;
+  const y = (r.top  - wrapR.top ) + wrapEl.scrollTop  + r.height/ 2;
+  return { x, y };
+}
+function drawEdge(fromEl, toEl, chosen=false){
+  if (!fromEl || !toEl) return;
+  const {x:fx,y:fy} = posOf(fromEl);
+  const {x:tx,y:ty} = posOf(toEl);
+  const dx = tx-fx, dy=ty-fy;
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  const cx1 = fx + dx*0.35, cy1 = fy + dy*0.10;
+  const cx2 = fx + dx*0.70, cy2 = fy + dy*0.90;
+  path.setAttribute("d", `M ${fx} ${fy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`);
+  path.setAttribute("marker-end","url(#arrow)");
+  path.setAttribute("class", chosen ? "edge-best" : "edge-try");
+  svgEl.appendChild(path);
+}
+
+/* Keep SVG sized correctly */
+const ro = new ResizeObserver(updateSvgFrame);
+ro.observe(document.body);
+window.addEventListener("resize", updateSvgFrame, {passive:true});
+window.addEventListener("load", updateSvgFrame, {once:true});
+document.addEventListener("DOMContentLoaded", updateSvgFrame);
+document.addEventListener("scroll", updateSvgFrame, {passive:true});
+document.addEventListener("readystatechange", updateSvgFrame);
+document.addEventListener("visibilitychange", updateSvgFrame);
+document.querySelectorAll('.lane-wrap').forEach(w=>{
+  w.addEventListener('scroll', updateSvgFrame, {passive:true});
+});
+
+/* ================== Step Execution (DP) ================== */
+function renderDPState(){
+  $$("#dpLane .dpbox").forEach((d,i)=> d.textContent = dp[i]);
+}
+function executeStepDP(s){
+  clearClasses(); clearSvg(); updateSvgFrame();  // ensure frame is correct before drawing
+  if (s.type==="dp-begin-i"){
+    const i = s.i;
+    const nodeI = $(`#numLane .node[data-idx="${i}"]`);
+    const dpI = $(`#dpLane .dpbox[data-idx="${i}"]`);
+    nodeI?.classList.add("active");
+    dpI?.classList.add("active");
+    explainBox.innerHTML = `<strong>i=${i}</strong>: Start with dp[i]=1. Compare all previous j &lt; i where arr[j] &lt; arr[i].`;
+    renderDPState();
+  } else if (s.type==="dp-pair"){
+    const {i,j} = s;
+    const nodeI = $(`#numLane .node[data-idx="${i}"]`);
+    const nodeJ = $(`#numLane .node[data-idx="${j}"]`);
+    const dpI   = $(`#dpLane .dpbox[data-idx="${i}"]`);
+    nodeI?.classList.add("active");
+    nodeJ?.classList.add("try");
+    dpI?.classList.add("active");
+
+    const can = arr[j] < arr[i];
+    if (can){
+      const cand = dp[j] + 1;
+      drawEdge(nodeJ, nodeI, cand > dp[i]);
+      if (cand > dp[i]){
+        dp[i] = cand; prevIdx[i] = j;
+        dpI?.classList.add("updated");
+      }
+      explainBox.innerHTML = `
+        <div><strong>Compare (j=${j} → i=${i})</strong>: arr[j]=${arr[j]} &lt; arr[i]=${arr[i]} ✓</div>
+        <div>Candidate = dp[j]+1 = ${dp[j]}+1 = <strong>${dp[j]+1}</strong> → dp[i]=max(current, candidate)</div>
+      `;
+    }else{
+      drawEdge(nodeJ, nodeI, false);
+      explainBox.innerHTML = `
+        <div><strong>Compare (j=${j} → i=${i})</strong>: arr[j]=${arr[j]} ≮ arr[i]=${arr[i]} ✗</div>
+        <div>Skip. dp[i] stays <strong>${dp[i]}</strong>.</div>
+      `;
+    }
+    renderDPState();
+  } else if (s.type==="dp-finish-i"){
+    const i = s.i;
+    const nodeI = $(`#numLane .node[data-idx="${i}"]`);
+    const dpI   = $(`#dpLane .dpbox[data-idx="${i}"]`);
+    nodeI?.classList.add("best");
+    dpI?.classList.add("best");
+    explainBox.innerHTML = `<strong>Finish i=${i}</strong>: dp[${i}] = <strong>${dp[i]}</strong>.`;
+    renderDPState();
+  }
+}
+
+/* ================== Backtrack (DP) ================== */
+function backtrackDP(){
+  clearClasses(); clearSvg(); updateSvgFrame();
+  // find index with max dp
+  let bestLen = 0, bestI = 0;
+  for (let i=0;i<n;i++){ if (dp[i] > bestLen){ bestLen = dp[i]; bestI = i; } }
+  // collect chain
+  const seqIdx = [];
+  let k = bestI;
+  while (k !== -1){ seqIdx.push(k); k = prevIdx[k]; }
+  seqIdx.reverse();
+
+  // highlight chain
+  for (let t=0;t<seqIdx.length;t++){
+    const idx = seqIdx[t];
+    const node = $(`#numLane .node[data-idx="${idx}"]`);
+    node?.classList.add("pick");
+    node?.insertAdjacentHTML("beforeend", `<span class="badge">#${t+1}</span>`);
+    if (t>0){
+      const prev = $(`#numLane .node[data-idx="${seqIdx[t-1]}"]`);
+      drawEdge(prev, node, true);
+    }
+  }
+  pathShown = true;
+  $("#clearBtn").disabled = false;
+
+  resultBox.innerHTML = `
+    <div><strong>LIS length:</strong> ${bestLen}</div>
+    <div><strong>One LIS:</strong> [${seqIdx.map(i=>arr[i]).join(", ")}]</div>
+  `;
+}
+
+/* ================== Step Execution (Tails) ================== */
+function lowerBoundInTails(x){
+  // first k in [0, tailsLen) with tails[k] >= x
+  let lo=0, hi=tailsLen;
+  while(lo<hi){
+    const mid = (lo + hi) >> 1;
+    if (tails[mid] >= x) hi = mid; else lo = mid + 1;
+  }
+  return lo;
+}
+function executeStepTails(s){
+  clearClasses(); clearSvg(); updateSvgFrame();
+  const t = s.t;
+  const x = arr[t];
+  const nodeT = $(`#numLaneT .node[data-idx="${t}"]`);
+  nodeT?.classList.add("active");
+
+  let k = lowerBoundInTails(x);
+  const isExtend = (k === tailsLen);
+  explainBox.innerHTML = `
+    <div><strong>Take x = arr[${t}] = ${x}</strong></div>
+    <div>Find first k with tails[k] ≥ ${x} → k = <strong>${k}</strong> ${isExtend ? "(extend)" : "(replace)"}</div>
+  `;
+
+  if (isExtend){
+    tails[k] = x; tailsPos[k] = t; tailsLen++;
+  } else {
+    tails[k] = x; tailsPos[k] = t;
+  }
+  renderTails({k, swap:true});
+
+  resultBox.innerHTML = `<strong>Current LIS length:</strong> ${tailsLen}`;
+}
+
+/* ================== Playback ================== */
+function render(){
+  $("#prevBtn").disabled = (currentStep<=-1);
+  $("#nextBtn").disabled = (currentStep>=steps.length-1);
+  $("#finishBtn").disabled = (currentStep>=steps.length-1);
+  $("#backtrackBtn").disabled = !(mode==="dp" && currentStep>=steps.length-1);
+  $("#clearBtn").disabled = !pathShown;
+}
+async function play(){
+  if (playing){ playing=false; $("#playBtn").textContent="▶ Play"; return; }
+  playing=true; $("#playBtn").textContent="⏸ Pause";
+  while(playing && currentStep<steps.length-1){
+    await next();
+    const sp = +$("#speed").value || 1.0;
+    await sleep(450/sp);
+  }
+  playing=false; $("#playBtn").textContent="▶ Play";
+  render();
+}
+async function next(){
+  if (currentStep>=steps.length-1) return;
+  currentStep++;
+  const s = steps[currentStep];
+  if (mode==="dp") executeStepDP(s); else executeStepTails(s);
+  render();
+}
+async function prev(){
+  if (currentStep<=-1) return;
+  // Recompute from scratch up to step-1 for deterministic state
+  const saveStep = currentStep - 1;
+  resetCore();
+  if (mode==="dp"){
+    for (let k=0;k<=saveStep;k++){ executeStepDP(steps[k]); }
+    renderDPState();
+  }else{
+    for (let k=0;k<=saveStep;k++){ executeStepTails(steps[k]); }
+  }
+  currentStep = saveStep;
+  render();
+}
+async function finish(){
+  while(currentStep<steps.length-1){ await next(); }
+}
+
+/* ================== Wiring ================== */
+function loadArrayFromInput(){
+  const raw = $("#arrInput").value.trim();
+  const tokens = raw.split(/[\s,]+/).filter(Boolean);
+  const A = tokens.map(Number).filter(v=>Number.isFinite(v));
+  if (A.length===0){ alert("Please enter at least one number."); return null; }
+  if (A.length>120 && !confirm("Large array will be heavy to animate. Continue?")) return null;
+  return A;
+}
+$("#buildBtn").addEventListener("click", ()=>{
+  const A = loadArrayFromInput(); if (!A) return;
+  arr = A; n = arr.length;
+  resetCore(); resetUI();
+  if (mode==="dp"){ planStepsDP(); }
+  else { planStepsTails(); }
+  explainBox.textContent = "Array loaded. Press Next/Play.";
+  render();
+});
+$("#resetBtn").addEventListener("click", ()=>{
+  $("#arrInput").value = arr.join(", ");
+  resetCore(); resetUI();
+  if (mode==="dp") planStepsDP(); else planStepsTails();
+  explainBox.textContent = "Reset.";
+  render();
+});
+$$(".pill").forEach(p=> p.addEventListener("click", ()=> { $("#arrInput").value = p.dataset.ex; }));
+
+// Mode tabs
+$("#tabDP").addEventListener("click", ()=>{
+  mode="dp"; $("#tabDP").classList.add("active"); $("#tabTails").classList.remove("active");
+  resetCore(); resetUI(); planStepsDP(); render();
+});
+$("#tabTails").addEventListener("click", ()=>{
+  mode="tails"; $("#tabTails").classList.add("active"); $("#tabDP").classList.remove("active");
+  resetCore(); resetUI(); planStepsTails(); render();
+});
+
+// Playback
+$("#prevBtn").addEventListener("click", prev);
+$("#nextBtn").addEventListener("click", next);
+$("#playBtn").addEventListener("click", play);
+$("#finishBtn").addEventListener("click", finish);
+$("#backtrackBtn").addEventListener("click", ()=>{
+  if (mode==="dp") backtrackDP();
+});
+$("#clearBtn").addEventListener("click", ()=>{ pathShown=false; clearClasses(); clearSvg(); render(); });
+
+$("#speed").addEventListener("input", ()=> $("#speedLbl").textContent = `${(+$("#speed").value).toFixed(1)}×`);
+
+// Keyboard shortcuts
+window.addEventListener("keydown", e=>{
+  if (["INPUT","TEXTAREA"].includes(e.target.tagName)) return;
+  if (e.key==="ArrowRight"){ e.preventDefault(); next(); }
+  if (e.key==="ArrowLeft"){ e.preventDefault(); prev(); }
+  if (e.key===" "){ e.preventDefault(); play(); }
+});
+
+// Initial boot
+resetCore(); resetUI(); planStepsDP(); render(); updateSvgFrame();
+</script>
+</body>
+</html>
