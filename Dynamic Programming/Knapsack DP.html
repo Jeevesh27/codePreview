@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>0/1 Knapsack DP — Step-by-Step Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#161a2d; --panel-2:#1e2340;
+    --text:#ecf2ff; --muted:#a6b0cf;
+    --pair:#ffd166; --active:#6cf3ff; --done:#8ae9c1;
+    --edge:#556; --edge-pair:#e3b84a; --edge-done:#6fae97;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --bad:#ff7b7b;
+    --accent:#9aa7ff;
+    --outline: rgba(255,255,255,0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  body{
+    margin:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #1a1f3a 0%, transparent 70%),
+      radial-gradient(1000px 700px at 120% 10%, #1d2548 0%, transparent 70%),
+      var(--bg);
+  }
+
+  header{
+    padding: 24px clamp(16px, 4vw, 36px) 8px;
+  }
+  h1{ margin:0 0 6px; font-size: clamp(20px, 2.6vw, 32px); letter-spacing:.2px;}
+  .sub{ color: var(--muted); font-size: 14px; }
+
+  .wrap{
+    display:grid; gap:16px;
+    grid-template-columns: 360px 1fr;
+    padding: 0 clamp(16px, 4vw, 36px) 32px;
+  }
+  @media (max-width: 980px){
+    .wrap{ grid-template-columns: 1fr; }
+  }
+
+  .card{
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--outline);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .controls{ padding:16px; display:grid; gap:12px; align-content:start; }
+  .controls h2{ margin: 4px 0 6px; font-size: 16px; color: var(--muted); font-weight:600; text-transform: uppercase; letter-spacing:.12em; }
+  .row{ display:grid; grid-template-columns: 1fr; gap:8px; }
+  .row.inline{ grid-template-columns: 1fr 1fr; }
+  label{ font-size:12px; color: var(--muted); }
+  input, button, select{
+    background: #0f1330;
+    color: var(--text);
+    border: 1px solid #2b315b;
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+  }
+  input::placeholder{ color:#778; }
+
+  button{
+    cursor:pointer;
+    transition: transform .06s ease, background .2s ease, border-color .2s ease;
+  }
+  button:hover{ transform: translateY(-1px); }
+  button.primary{
+    background: linear-gradient(180deg,#2d3a8f,#263277);
+    border-color:#3846a4;
+  }
+  button.ghost{
+    background: transparent;
+    border-color:#2b315b;
+  }
+  button.warn{
+    background: linear-gradient(180deg,#6c1d2a,#521522);
+    border-color:#7d2030;
+  }
+
+  .example-pills{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pill{
+    font-size:12px; padding:6px 10px; border-radius:999px; border:1px dashed #3a4070;
+    cursor:pointer; color: var(--muted);
+  }
+  .pill:hover{ border-style:solid; color:var(--text); }
+
+  .viz{
+    position: relative; padding: 16px; overflow: hidden;
+    display:grid; gap:16px; grid-template-rows: auto auto 1fr auto;
+    min-height: 420px;
+  }
+
+  .legend{
+    display:flex; gap:12px; flex-wrap:wrap;
+    font-size:12px; color:var(--muted);
+  }
+  .legend .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
+  .d-active{ background: var(--active); }
+  .d-pair{ background: var(--pair); }
+  .d-done{ background: var(--done); }
+  .d-block{ background: var(--bad); }
+
+  .grid-wrap{
+    position: relative;
+    border-radius: 12px;
+    border:1px solid var(--outline);
+    overflow:auto;
+    background: #0b0e23;
+    padding:12px;
+  }
+
+  .grid{
+    position: relative;
+    display: grid;
+    gap:2px;
+    align-items: stretch;
+  }
+  .cell{
+    min-width: 52px;
+    min-height: 42px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:8px;
+    background: #141a39;
+    border: 1px solid #222a55;
+    font-variant-numeric: tabular-nums;
+    position: relative;
+  }
+  .cell.header{
+    background:#0f1431;
+    color: var(--muted);
+    font-weight:600;
+  }
+  .cell.header.sticky{
+    position: sticky; z-index: 3;
+  }
+  .cell.header.col{ top:0; }
+  .cell.header.row{ left:0; }
+  .cell.active{
+    outline:2px solid var(--active);
+    box-shadow: 0 0 0 3px rgba(108,243,255,0.18) inset;
+  }
+  .cell.source{ box-shadow: 0 0 0 2px rgba(255,209,102,.25) inset; }
+  .cell.choice{ box-shadow: 0 0 0 2px rgba(138,233,193,.25) inset; }
+  .cell.blocked::after{
+    content:"×";
+    color: var(--bad); font-weight:700; position:absolute; right:6px; top:3px; opacity:.9;
+  }
+  .cell.empty{ color:#445; }
+
+  .svg-layer{
+    position:absolute; inset:12px; pointer-events:none; z-index:2;
+  }
+  .svg-layer line, .svg-layer path{
+    stroke-width: 2.5;
+    fill:none;
+  }
+  .edge-skip{ stroke: var(--edge); opacity:.9; }
+  .edge-take{ stroke: var(--edge-pair); opacity:.95; }
+  .edge-chosen{ stroke: var(--edge-done); stroke-width:3.2; filter: drop-shadow(0 0 4px rgba(111,174,151,.35)); }
+
+  .panel{
+    display:grid; grid-template-columns: 1fr 1fr; gap:12px;
+  }
+  @media (max-width:980px){ .panel{ grid-template-columns: 1fr; } }
+
+  .explain{
+    background: #0d1230;
+    border:1px solid var(--outline);
+    border-radius: 12px; padding:12px;
+    font-size: 14px; line-height:1.45;
+  }
+  code, pre{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  .formula{ font-size: 13px; color: var(--muted); }
+
+  .footer{
+    display:flex; gap:8px; justify-content:space-between; align-items:center;
+    padding-top:6px;
+  }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .range{ display:flex; gap:8px; align-items:center; color: var(--muted); font-size:12px; }
+  input[type="range"]{ width: 180px; }
+
+  .items{
+    display:grid; gap:8px; padding:8px; border:1px solid var(--outline); border-radius:12px; background:#0d1230;
+  }
+  .item{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:8px 10px; border-radius:10px; background:#0e1435; border:1px solid #232a57;
+  }
+  .badge{ font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid #39407a; color: var(--muted); }
+  .badge.w{ border-color:#4b527f; }
+  .badge.v{ border-color:#6e76b9; }
+  .badge.pick{ border-color:#3f6b5d; color:#9cd8be; }
+
+  .muted{ color: var(--muted); }
+  .danger{ color: var(--bad); }
+
+  .kbd{
+    border:1px solid #435;
+    background:#0b0f28;
+    padding:2px 6px; border-radius:6px; font-size:12px;
+  }
+
+  .note{ font-size:12px; color:var(--muted); }
+  .right{ text-align:right; }
+</style>
+</head>
+<body>
+<header>
+  <h1>0/1 Knapsack — Dynamic Programming Visualizer</h1>
+  <div class="sub">
+    Step through the DP table <span class="kbd">dp[i][w]</span>, watch “skip vs take” arrows,
+    and backtrack to reveal the optimal set.
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- Controls -->
+  <section class="card controls" aria-label="Controls">
+    <h2>Input</h2>
+    <div class="row">
+      <label>Values (comma-separated)</label>
+      <input id="valuesInput" value="15,10,9,5,3" placeholder="e.g. 15,10,9,5,3" />
+    </div>
+    <div class="row">
+      <label>Weights (comma-separated)</label>
+      <input id="weightsInput" value="1,5,3,4,2" placeholder="e.g. 1,5,3,4,2" />
+    </div>
+    <div class="row inline">
+      <div>
+        <label>Capacity W</label>
+        <input id="capacityInput" type="number" min="0" max="200" value="9" />
+      </div>
+      <div>
+        <label>Preset examples</label>
+        <div class="example-pills">
+          <span class="pill" data-ex="60,100,120|10,20,30|50">Classic (50)</span>
+          <span class="pill" data-ex="15,10,9,5,3|1,5,3,4,2|9">Small (9)</span>
+          <span class="pill" data-ex="20,5,10,40,15,25|1,2,3,8,7,4|10">Greedy-fails</span>
+          <span class="pill" data-ex="6,7,8|3,4,5|6">Tight fit</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button id="buildBtn" class="primary">Build Table</button>
+    </div>
+
+    <h2>Playback</h2>
+    <div class="row">
+      <div class="btns">
+        <button id="prevBtn" class="ghost">⟵ Prev</button>
+        <button id="nextBtn" class="ghost">Next ⟶</button>
+        <button id="playBtn" class="primary">▶ Play</button>
+        <button id="finishBtn" class="ghost">⤓ Fill All</button>
+        <button id="resetBtn" class="warn">↺ Reset</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="range">
+        <span>Speed</span>
+        <input id="speed" type="range" min="0.2" max="2.0" step="0.1" value="1.0" />
+        <span class="muted" id="speedLabel">1.0×</span>
+      </div>
+    </div>
+
+    <h2>How it works</h2>
+    <div class="row">
+      <div class="explain">
+        <div class="formula">
+          <strong>Recurrence:</strong>
+          <div><code>dp[i][w] = max( dp[i-1][w], value[i-1] + dp[i-1][w - weight[i-1]] )</code></div>
+          <div>if <code>weight[i-1] ≤ w</code>, else <code>dp[i][w] = dp[i-1][w]</code></div>
+        </div>
+        <div style="margin-top:8px">
+          <strong>Indices:</strong> rows <code>i = 0..N</code> (0 = no items), columns <code>w = 0..W</code>. Base row/col are zeros.
+        </div>
+        <div class="note" style="margin-top:8px">
+          Time: <code>O(N·W)</code> · Space: <code>O(N·W)</code> (can be optimized to <code>O(W)</code>).
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Visualization -->
+  <section class="card viz" aria-label="Visualization">
+    <div class="legend">
+      <span><span class="dot d-active"></span>Current cell</span>
+      <span><span class="dot d-pair"></span>Candidate (take/skip)</span>
+      <span><span class="dot d-done"></span>Chosen branch</span>
+      <span><span class="dot d-block"></span>Take not allowed</span>
+    </div>
+
+    <div class="panel">
+      <div class="items" id="itemsList" aria-live="polite"></div>
+      <div class="explain" id="explainBox" aria-live="polite">
+        Build the table, then step to begin.
+      </div>
+    </div>
+
+    <div class="grid-wrap" id="gridWrap">
+      <div id="grid" class="grid" aria-label="DP grid"></div>
+      <svg id="svg" class="svg-layer" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="footer">
+      <div class="btns">
+        <button id="backtrackBtn" class="ghost" disabled>🔎 Show Optimal Set</button>
+        <button id="clearPathBtn" class="ghost" disabled>Clear Highlight</button>
+      </div>
+      <div class="right">
+        <div class="note">Tip: Use keyboard <span class="kbd">←</span> / <span class="kbd">→</span> to step.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ===========================
+   Utilities
+=========================== */
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ===========================
+   State
+=========================== */
+let values = [15,10,9,5,3];
+let weights = [1,5,3,4,2];
+let W = 9;
+let N = values.length;
+
+let currentStep = -1;          // -1 = before start
+let steps = [];                // array of {i,w}
+let playing = false;
+let pathShown = false;
+
+const gridEl = $("#grid");
+const svgEl = $("#svg");
+const gridWrap = $("#gridWrap");
+const explainBox = $("#explainBox");
+const itemsList = $("#itemsList");
+
+const speedEl = $("#speed");
+const speedLabel = $("#speedLabel");
+
+/* ===========================
+   Build Grid + Items
+=========================== */
+function buildSteps(){
+  steps = [];
+  for(let i=0;i<=N;i++){
+    for(let w=0; w<=W; w++){
+      steps.push({i, w});
+    }
+  }
+}
+
+function buildItemsPanel(){
+  itemsList.innerHTML = "";
+  for (let idx=0; idx<N; idx++){
+    const div = document.createElement("div");
+    div.className = "item";
+    div.dataset.index = idx;
+    div.innerHTML = `
+      <div><strong>Item ${idx+1}</strong></div>
+      <div>
+        <span class="badge v">v=${values[idx]}</span>
+        <span class="badge w">w=${weights[idx]}</span>
+      </div>`;
+    itemsList.appendChild(div);
+  }
+}
+
+function buildGrid(){
+  // Create (N+2) x (W+2) grid: headers + data
+  gridEl.innerHTML = "";
+  const cols = W + 2; // row header + W+1 columns
+  const rows = N + 2; // col header + N+1 rows
+  gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(52px, auto))`;
+  gridEl.style.gridTemplateRows    = `repeat(${rows}, auto)`;
+
+  // Top-left corner empty
+  const corner = mkCell("header sticky row col", "");
+  gridEl.appendChild(corner);
+
+  // Column headers: w=0..W
+  for(let w=0; w<=W; w++){
+    const c = mkCell("header sticky col", `w=${w}`);
+    c.dataset.headerCol = w;
+    gridEl.appendChild(c);
+  }
+
+  // Rows
+  for(let i=0; i<=N; i++){
+    // Row header
+    const rh = mkCell("header sticky row", `i=${i}`);
+    rh.dataset.headerRow = i;
+    gridEl.appendChild(rh);
+
+    // Data cells
+    for(let w=0; w<=W; w++){
+      const cell = mkCell("cell empty", "");
+      cell.dataset.i = i;
+      cell.dataset.w = w;
+      gridEl.appendChild(cell);
+    }
+  }
+
+  // Resize SVG to match inner scroll area
+  queueMicrotask(updateSvgFrame);
+}
+
+function mkCell(cls, text){
+  const d = document.createElement("div");
+  d.className = `cell ${cls||""}`;
+  if (text !== undefined) d.textContent = text;
+  return d;
+}
+
+/* ===========================
+   DP Computation Helpers
+=========================== */
+
+function computeUpTo(stepIndex){
+  // Build a fresh dp table and fill up to stepIndex inclusive
+  const dp = Array.from({length: N+1}, () => Array(W+1).fill(0));
+  for(let s=0; s<=stepIndex; s++){
+    const {i, w} = steps[s];
+    if (i === 0 || w === 0){
+      dp[i][w] = 0;
+    } else {
+      const val = values[i-1];
+      const wt  = weights[i-1];
+      const skip = dp[i-1][w];
+      if (wt <= w){
+        const take = val + dp[i-1][w - wt];
+        dp[i][w] = Math.max(skip, take);
+      } else {
+        dp[i][w] = skip;
+      }
+    }
+  }
+  return dp;
+}
+
+function stepDetails(dp, i, w){
+  // Returns detailed info for explaining this cell
+  if (i === 0 || w === 0){
+    return {
+      i, w, base:true, value:0,
+      skip:0, canTake:false, take:null, choice:"base",
+      srcSkip: [i-1, w], srcTake: null
+    };
+  }
+  const val = values[i-1], wt = weights[i-1];
+  const skip = dp[i-1][w];
+  if (wt <= w){
+    const take = val + dp[i-1][w - wt];
+    const choice = (take >= skip) ? "take" : "skip";
+    return {
+      i, w, base:false, value:dp[i][w],
+      skip, canTake:true, take, choice,
+      srcSkip:[i-1, w], srcTake:[i-1, w-wt], val, wt
+    };
+  } else {
+    return {
+      i, w, base:false, value:dp[i][w],
+      skip, canTake:false, take:null, choice:"skip",
+      srcSkip:[i-1, w], srcTake:[i-1, w-wt], val, wt
+    };
+  }
+}
+
+/* ===========================
+   Rendering
+=========================== */
+function render(){
+  if (steps.length === 0) return;
+  const s = clamp(currentStep, -1, steps.length-1);
+  currentStep = s;
+
+  // Fill dp up to current
+  const dp = (s >= 0) ? computeUpTo(s) : Array.from({length: N+1}, () => Array(W+1).fill(null));
+
+  // Fill cell texts & classes
+  const allCells = $$("#grid .cell:not(.header)");
+  for(const c of allCells){
+    const i = +c.dataset.i, w = +c.dataset.w;
+    let val = null;
+    let idx = i*(W+1) + w;
+    if (idx <= s && s >= 0){
+      val = dp[i][w];
+      c.textContent = val;
+      c.classList.remove("empty");
+    } else {
+      c.textContent = "";
+      c.classList.add("empty");
+    }
+    c.classList.remove("active","source","choice","blocked");
+  }
+
+  // Highlight headers
+  $$("#grid .cell.header").forEach(h=> h.classList.remove("active"));
+
+  // Draw edges & explanation for current cell
+  clearSvg();
+  if (s >= 0){
+    const {i, w} = steps[s];
+    highlight(i, w, dp);
+  }
+
+  // Enable/disable buttons
+  $("#prevBtn").disabled = (currentStep <= -1);
+  $("#nextBtn").disabled = (currentStep >= steps.length-1);
+  $("#finishBtn").disabled = (currentStep >= steps.length-1);
+  $("#backtrackBtn").disabled = !(currentStep >= steps.length-1);
+  $("#clearPathBtn").disabled = !pathShown;
+}
+
+function highlight(i, w, dp){
+  const cur = getCell(i, w);
+  cur.classList.add("active");
+
+  // Sticky headers
+  const hRow = $(`[data-header-row="${i}"]`);
+  const hCol = $(`[data-header-col="${w}"]`);
+  if (hRow) hRow.classList.add("active");
+  if (hCol) hCol.classList.add("active");
+
+  const info = stepDetails(dp, i, w);
+
+  // Update items list highlighting
+  $$("#itemsList .item").forEach(el => el.querySelector(".badge.pick")?.remove());
+  if (i > 0){
+    const it = itemsList.querySelector(`[data-index="${i-1}"]`);
+    if (it){
+      const pill = document.createElement("span");
+      pill.className = "badge pick";
+      pill.textContent = "considering";
+      it.appendChild(pill);
+    }
+  }
+
+  // Update explanation text
+  explainBox.innerHTML = toExplanation(info);
+
+  // Draw arrows
+  if (!info.base){
+    // Source: skip
+    const [si, sw] = info.srcSkip;
+    const srcA = getCell(si, sw);
+    if (srcA){ srcA.classList.add("source"); drawArrow(srcA, cur, "skip", info.choice==="skip"); }
+
+    // Source: take (if allowed)
+    if (info.canTake){
+      const [ti, tw] = info.srcTake;
+      const srcB = getCell(ti, tw);
+      if (srcB){ srcB.classList.add("source"); drawArrow(srcB, cur, "take", info.choice==="take"); }
+    } else {
+      // show blocked indicator on weight too big
+      cur.classList.add("blocked");
+    }
+  }
+}
+
+function toExplanation(info){
+  if (info.base){
+    if (info.i===0 && info.w===0){
+      return `<strong>Base:</strong> <code>dp[0][0] = 0</code> (no items or capacity).`;
+    } else if (info.i===0){
+      return `<strong>Base row:</strong> <code>dp[0][${info.w}] = 0</code> (no items ⇒ 0 value).`;
+    } else {
+      return `<strong>Base col:</strong> <code>dp[${info.i}][0] = 0</code> (capacity 0 ⇒ 0 value).`;
+    }
+  }
+  const {i,w,skip,canTake,take,choice,val,wt} = info;
+  if (!canTake){
+    return `
+      <div><strong>dp[${i}][${w}]</strong> — Item ${i} (v=${values[i-1]}, w=${weights[i-1]})</div>
+      <div class="muted" style="margin:.4em 0 .6em">weight ${wt} &gt; capacity ${w} → cannot take</div>
+      <div>So: <code>dp[${i}][${w}] = dp[${i-1}][${w}] = ${skip}</code></div>
+    `;
+  }
+  const chooseTake = (choice==="take");
+  return `
+    <div><strong>dp[${i}][${w}]</strong> — Item ${i} (v=${val}, w=${wt})</div>
+    <div style="margin:.5em 0;">
+      <code>skip = dp[${i-1}][${w}] = ${skip}</code><br/>
+      <code>take = v(${val}) + dp[${i-1}][${w}-${wt}] = ${val} + ${take - val} = ${take}</code>
+    </div>
+    <div>
+      We choose <strong class="${chooseTake?'':'muted'}">max(take=${take}</strong><span class="muted">,</span>
+      <strong class="${!chooseTake?'':'muted'}">skip=${skip}</strong>) ⇒
+      <strong style="color:${chooseTake? 'var(--done)':'var(--done)'}">dp[${i}][${w}] = ${Math.max(skip, take)}</strong>
+    </div>
+  `;
+}
+
+function getCell(i,w){
+  return $(`.cell[data-i="${i}"][data-w="${w}"]`);
+}
+
+function clearSvg(){ svgEl.innerHTML = `
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path>
+    </marker>
+  </defs>`; }
+
+function updateSvgFrame(){
+  // Fit SVG to scrollable content area
+  const pad = 12; // matches .grid-wrap inset for svg
+  const inner = gridEl.getBoundingClientRect();
+  const wrap = gridWrap.getBoundingClientRect();
+  const w = inner.width;
+  const h = inner.height;
+  svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svgEl.setAttribute("width", w);
+  svgEl.setAttribute("height", h);
+}
+
+function drawArrow(fromCell, toCell, kind, chosen=false){
+  const from = fromCell.getBoundingClientRect();
+  const to   = toCell.getBoundingClientRect();
+  const grid = gridEl.getBoundingClientRect();
+
+  // centers in SVG coords
+  const fx = from.left - grid.left + from.width/2;
+  const fy = from.top  - grid.top  + from.height/2;
+  const tx = to.left   - grid.left + to.width/2;
+  const ty = to.top    - grid.top  + to.height/2;
+
+  // small bezier curve
+  const dx = (tx - fx);
+  const dy = (ty - fy);
+  const cx1 = fx + dx*0.35;
+  const cy1 = fy + dy*0.10;
+  const cx2 = fx + dx*0.70;
+  const cy2 = fy + dy*0.90;
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", `M ${fx} ${fy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`);
+  path.setAttribute("marker-end", "url(#arrow)");
+  path.setAttribute("class",
+    chosen ? "edge-chosen" : (kind==="take" ? "edge-take" : "edge-skip")
+  );
+  svgEl.appendChild(path);
+}
+
+/* ===========================
+   Playback
+=========================== */
+function reset(){
+  playing = false;
+  pathShown = false;
+  currentStep = -1;
+  buildSteps();
+  buildItemsPanel();
+  buildGrid();
+  explainBox.innerHTML = "Build the table, then step to begin.";
+  render();
+}
+
+async function play(){
+  if (playing) { playing = false; $("#playBtn").textContent = "▶ Play"; return; }
+  playing = true;
+  $("#playBtn").textContent = "⏸ Pause";
+
+  while (playing && currentStep < steps.length-1){
+    await next();
+    const speed = parseFloat(speedEl.value) || 1.0;
+    await sleep(450 / speed);
+  }
+  playing = false;
+  $("#playBtn").textContent = "▶ Play";
+  render();
+}
+
+async function next(){
+  if (currentStep >= steps.length-1) return;
+  currentStep++;
+  pathShown = false;
+  render();
+}
+async function prev(){
+  if (currentStep <= -1) return;
+  currentStep--;
+  pathShown = false;
+  render();
+}
+async function finish(){
+  currentStep = steps.length-1;
+  render();
+}
+
+/* ===========================
+   Backtracking optimal set
+=========================== */
+function computeFullDP(){
+  const dp = Array.from({length: N+1}, () => Array(W+1).fill(0));
+  for(let i=1;i<=N;i++){
+    for(let w=0; w<=W; w++){
+      const val = values[i-1], wt = weights[i-1];
+      const skip = dp[i-1][w];
+      if (wt<=w){
+        dp[i][w] = Math.max(skip, val + dp[i-1][w-wt]);
+      } else {
+        dp[i][w] = skip;
+      }
+    }
+  }
+  return dp;
+}
+
+function backtrack(){
+  const dp = computeFullDP();
+  // Clear previous highlight
+  $$(".cell").forEach(c=> c.classList.remove("choice"));
+  clearSvg();
+
+  let i=N, w=W;
+  const chosenIdx = [];
+  while (i>0 && w>=0){
+    if (dp[i][w] !== dp[i-1][w]){
+      // Took item i-1
+      chosenIdx.push(i-1);
+      const fromCell = getCell(i-1, w-weights[i-1]);
+      const toCell   = getCell(i, w);
+      if (fromCell && toCell) drawArrow(fromCell, toCell, "take", true);
+      w -= weights[i-1];
+      i--;
+    } else {
+      // Skipped
+      const fromCell = getCell(i-1, w);
+      const toCell   = getCell(i, w);
+      if (fromCell && toCell) drawArrow(fromCell, toCell, "skip", true);
+      i--;
+    }
+    const curCell = getCell(i+1, w + (chosenIdx.at(-1)===i ? weights[i] : 0));
+    if (curCell) curCell.classList.add("choice");
+  }
+  // Mark chosen items
+  $$("#itemsList .item").forEach((el, idx) => {
+    el.querySelector(".badge.pick")?.remove();
+    if (chosenIdx.includes(idx)){
+      const tag = document.createElement("span");
+      tag.className = "badge pick";
+      tag.textContent = "picked";
+      el.appendChild(tag);
+    }
+  });
+
+  // Summary
+  const totalV = chosenIdx.reduce((s,idx)=> s+values[idx],0);
+  const totalW = chosenIdx.reduce((s,idx)=> s+weights[idx],0);
+  explainBox.innerHTML = `
+    <div><strong>Optimal value:</strong> ${dp[N][W]}</div>
+    <div style="margin:.3em 0 .6em"><strong>Picked items:</strong>
+      ${chosenIdx.length? chosenIdx.map(i=>`#${i+1}(v=${values[i]}, w=${weights[i]})`).join(", ") : "none"}
+    </div>
+    <div class="muted">Total weight ${totalW} ≤ W=${W}</div>
+  `;
+  pathShown = true;
+  $("#clearPathBtn").disabled = false;
+}
+
+function clearPath(){
+  pathShown = false;
+  render();
+}
+
+/* ===========================
+   Wiring
+=========================== */
+$("#buildBtn").addEventListener("click", () => {
+  // Parse inputs
+  const vStr = $("#valuesInput").value.trim();
+  const wStr = $("#weightsInput").value.trim();
+  const VV = vStr ? vStr.split(",").map(s=>+s.trim()).filter(n=>!Number.isNaN(n)) : [];
+  const WW = wStr ? wStr.split(",").map(s=>+s.trim()).filter(n=>!Number.isNaN(n)) : [];
+  const cap = +$("#capacityInput").value;
+
+  if (VV.length === 0 || WW.length === 0 || VV.length !== WW.length){
+    alert("Please provide equal-length value & weight lists (comma-separated).");
+    return;
+  }
+  if (cap < 0 || !Number.isFinite(cap)){
+    alert("Please provide a non-negative capacity W.");
+    return;
+  }
+  if (VV.length > 40){
+    alert("For visualization, please use ≤ 40 items.");
+    return;
+  }
+  if (cap > 80){
+    if (!confirm("Large capacity makes a very wide grid. Continue?")){
+      return;
+    }
+  }
+
+  values = VV; weights = WW; W = Math.floor(cap); N = values.length;
+  reset();
+});
+
+$("#prevBtn").addEventListener("click", prev);
+$("#nextBtn").addEventListener("click", next);
+$("#playBtn").addEventListener("click", play);
+$("#finishBtn").addEventListener("click", finish);
+$("#resetBtn").addEventListener("click", reset);
+$("#backtrackBtn").addEventListener("click", backtrack);
+$("#clearPathBtn").addEventListener("click", clearPath);
+
+speedEl.addEventListener("input", () => {
+  speedLabel.textContent = `${(+speedEl.value).toFixed(1)}×`;
+});
+
+// Preset pills
+$$(".pill").forEach(p => p.addEventListener("click", () => {
+  const [v,w,cap] = p.dataset.ex.split("|");
+  $("#valuesInput").value = v;
+  $("#weightsInput").value = w;
+  $("#capacityInput").value = cap;
+}));
+
+// Keyboard navigation
+window.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight"){ e.preventDefault(); next(); }
+  if (e.key === "ArrowLeft"){ e.preventDefault(); prev(); }
+  if (e.key === " "){ e.preventDefault(); play(); }
+});
+
+// Resize handling (recalculate SVG overlay)
+const ro = new ResizeObserver(updateSvgFrame);
+ro.observe(gridEl);
+ro.observe(gridWrap);
+window.addEventListener("scroll", updateSvgFrame, {passive:true});
+window.addEventListener("resize", updateSvgFrame);
+
+// Initial render
+reset();
+</script>
+</body>
+</html>
