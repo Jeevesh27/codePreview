@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sales Tax Problem — Interactive Visualizer</title>
+<style>
+  :root{
+    --bg: #0f1220;
+    --card: #171a2b;
+    --ink: #e8eaf6;
+    --sub: #b6b9cc;
+    --accent: #8a7dff;
+    --accent-2:#24d2ff;
+    --muted:#2a2f47;
+    --ok:#00c27a;
+    --danger:#ff6b6b;
+    --warn:#f6b73c;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+    --radius: 14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 800px at 10% -10%, rgba(138,125,255,.08), transparent 60%),
+      radial-gradient(1200px 800px at 110% 10%, rgba(36,210,255,.08), transparent 60%),
+      var(--bg);
+    min-height:100svh;
+  }
+
+  header{
+    padding:28px clamp(16px,5vw,40px);
+    display:flex; align-items:center; gap:16px; justify-content:space-between;
+  }
+  .brand{
+    display:flex; align-items:center; gap:14px;
+  }
+  .logo{
+    width:44px; height:44px; border-radius:12px;
+    background:
+      radial-gradient(120% 120% at 10% 10%, rgba(255,255,255,.25), rgba(255,255,255,0)),
+      linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: var(--shadow);
+  }
+  h1{
+    margin:0; font-size:clamp(18px, 2.6vw, 28px); letter-spacing:.3px;
+  }
+  .tagline{
+    color:var(--sub); font-size:14px;
+  }
+
+  .container{
+    display:grid;
+    grid-template-columns: 1.3fr .9fr;
+    gap:22px;
+    padding: 0 clamp(16px,5vw,40px) 40px;
+  }
+  @media (max-width: 980px){
+    .container{ grid-template-columns: 1fr; }
+  }
+
+  .card{
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00));
+    border:1px solid var(--muted);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .card h2{
+    margin:0; padding:18px 18px 0 18px; font-size:18px;
+  }
+  .card .body{
+    padding:18px;
+  }
+
+  .grid{
+    display:grid;
+    gap:12px;
+  }
+  .controls{
+    display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;
+  }
+  button, .btn{
+    appearance:none; border:0; cursor:pointer;
+    border-radius:10px; padding:10px 14px; font-weight:600;
+    color:#0d1020; background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: var(--shadow);
+  }
+  button.secondary{
+    background:#232744; color: var(--ink); border:1px solid var(--muted);
+  }
+  button.ghost{
+    background:transparent; color:var(--ink); border:1px dashed var(--muted);
+  }
+  button.warn{ background: linear-gradient(135deg, var(--warn), #ffd36e); color:#241f00; }
+  button.danger{ background: linear-gradient(135deg, #ff7a7a, #ff3b3b); color:white; }
+
+  table{
+    width:100%; border-collapse:collapse; overflow:hidden;
+    border-radius: 12px; border:1px solid var(--muted);
+  }
+  th, td{
+    padding:12px 10px; text-align:left; font-size:14px;
+  }
+  thead th{
+    background:#14172a; color:#cfd3f7; position:sticky; top:0; z-index:1;
+  }
+  tbody tr:nth-child(odd){ background: rgba(255,255,255,.02); }
+  tbody tr:hover{ background: rgba(255,255,255,.04); }
+  td.actions{ text-align:right; }
+
+  input[type="text"], input[type="number"], select{
+    width:100%; background:#111427; color:var(--ink); border:1px solid var(--muted);
+    border-radius:10px; padding:9px 10px; outline:none;
+  }
+  input[type="checkbox"]{ transform: scale(1.1); }
+  .pill{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:7px 10px; border-radius:999px; background:#111427; border:1px solid var(--muted);
+    color: var(--sub);
+  }
+
+  .receipt{
+    background: #0f1220; border-radius: 12px; border:1px dashed #2d3252;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    padding:16px;
+  }
+  .receipt .line{
+    display:flex; justify-content:space-between; padding:4px 0;
+  }
+  .muted{ color:var(--sub); }
+  .total{ border-top:1px dashed #2d3252; margin-top:10px; padding-top:10px; }
+  .rule{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px; border:1px solid var(--muted); border-radius:10px;
+    background:#101330;
+  }
+
+  .footer-hints{
+    margin-top:14px; color:var(--sub); font-size:13px; line-height:1.6;
+    border-top:1px solid var(--muted); padding-top:12px;
+  }
+
+  .chip{
+    display:inline-block; font-size:12px; padding:3px 8px; border-radius:999px;
+    border:1px solid #2c3150; color:#b8bde9; background:#121532;
+  }
+  .badge{
+    font-size:12px; padding:3px 6px; border-radius:6px; border:1px solid #2c3150; color:#9bbcff;
+  }
+
+  .inline-help{ font-size:12px; color:#9aa2cd; }
+  .sum{
+    font-weight:700;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>Sales Tax Problem — Interactive Visualizer</h1>
+        <div class="tagline">OOP + Strategy Rules + Proper 0.05 Rounding • ThoughtWorks practice</div>
+      </div>
+    </div>
+    <div class="pill">
+      <span class="badge">Rules</span>
+      <span>Basic 10% (non-exempt) • Import 5% (imported)</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- LEFT: Items / Input -->
+    <section class="card">
+      <h2>🛒 Basket</h2>
+      <div class="body grid">
+        <div class="controls">
+          <button id="addRowBtn">+ Add Item</button>
+          <button id="sample1" class="secondary">Load Sample #1</button>
+          <button id="sample2" class="secondary">Load Sample #2</button>
+          <button id="sample3" class="secondary">Load Sample #3</button>
+          <button id="clearAll" class="ghost">Reset</button>
+        </div>
+        <div class="inline-help">Tip: Edit any field below — the receipt updates live.</div>
+
+        <table id="itemsTable" aria-label="Items Table">
+          <thead>
+            <tr>
+              <th style="min-width:160px">Name</th>
+              <th>Category</th>
+              <th>Imported</th>
+              <th>Unit Price</th>
+              <th>Qty</th>
+              <th class="actions">—</th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody">
+            <!-- rows injected -->
+          </tbody>
+        </table>
+
+        <div class="footer-hints">
+          <div>💡 <strong>Rounding rule:</strong> Total tax per item is <em>rounded up</em> to the nearest 0.05.</div>
+          <div>🧩 <strong>Exempt categories:</strong> Books, Food, Medical (no 10% basic tax).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Rules & Receipt -->
+    <section class="card">
+      <h2>🧠 Rules & Receipt</h2>
+      <div class="body grid" style="gap:16px">
+        <!-- Rules -->
+        <div class="grid" style="gap:10px">
+          <div class="rule">
+            <label for="ruleBasic"><strong>Basic Sales Tax</strong> (10% on non-exempt)</label>
+            <div>
+              <input type="checkbox" id="ruleBasic" checked />
+            </div>
+          </div>
+          <div class="rule">
+            <label for="ruleImport"><strong>Import Duty</strong> (5% if imported)</label>
+            <div>
+              <input type="checkbox" id="ruleImport" checked />
+            </div>
+          </div>
+        </div>
+
+        <!-- Receipt -->
+        <div class="receipt" id="receipt">
+          <!-- receipt lines injected -->
+        </div>
+
+        <div class="inline-help">Try toggling rules above to see Strategy/OCP in action.</div>
+      </div>
+    </section>
+  </main>
+
+<script>
+/* ================================
+   Money helpers — integer cents
+   ================================ */
+class Money {
+  // value in cents (integer)
+  constructor(cents = 0){
+    this.cents = Math.round(cents);
+  }
+  static fromNumber(amount){ // amount in decimal number
+    return new Money(Math.round(amount * 100));
+  }
+  static fromString(str){
+    const v = parseFloat(str || "0");
+    return Money.fromNumber(isNaN(v) ? 0 : v);
+  }
+  clone(){ return new Money(this.cents); }
+  add(other){ return new Money(this.cents + other.cents); }
+  sub(other){ return new Money(this.cents - other.cents); }
+  mulInt(k){ return new Money(this.cents * k); }
+  mulRate(percent){ // percent as e.g. 10 => 10%
+    return new Money(this.cents * (percent/100));
+  }
+  // round up to nearest 5 cents (0.05)
+  roundUpTo005(){
+    const rounded = Math.ceil(this.cents / 5) * 5;
+    return new Money(rounded);
+  }
+  toNumber(){ return this.cents / 100; }
+  toString(){
+    return this.toNumber().toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+}
+
+/* ====================================
+   Domain Model (OOP & Strategy pattern)
+   ==================================== */
+const Category = Object.freeze({
+  BOOK: 'BOOK',
+  FOOD: 'FOOD',
+  MEDICAL: 'MEDICAL',
+  OTHER: 'OTHER'
+});
+
+class Product {
+  constructor(name, imported, category, unitPriceMoney){
+    this.name = name;
+    this.imported = imported;
+    this.category = category;
+    this.price = unitPriceMoney; // Money
+  }
+}
+
+class LineItem {
+  constructor(product, qty){
+    this.product = product;
+    this.qty = qty;
+  }
+  subtotal(){
+    return this.product.price.mulInt(this.qty);
+  }
+}
+
+// TaxRule "interface"
+class TaxRule {
+  name(){ return 'Rule'; }
+  // returns Money (tax per unit, unrounded, or partial)
+  taxForUnit(product){ return new Money(0); }
+}
+
+class BasicSalesTax extends TaxRule {
+  constructor(ratePercent = 10){
+    super(); this.rate = ratePercent;
+    this.exempt = new Set([Category.BOOK, Category.FOOD, Category.MEDICAL]);
+  }
+  name(){ return `Basic ${this.rate}%`; }
+  taxForUnit(product){
+    if(this.exempt.has(product.category)) return new Money(0);
+    return product.price.mulRate(this.rate);
+  }
+}
+
+class ImportDuty extends TaxRule {
+  constructor(ratePercent = 5){ super(); this.rate = ratePercent; }
+  name(){ return `Import ${this.rate}%`; }
+  taxForUnit(product){
+    return product.imported ? product.price.mulRate(this.rate) : new Money(0);
+  }
+}
+
+class TaxCalculator {
+  constructor(rules = []){
+    this.rules = rules; // array of TaxRule
+  }
+  taxPerUnit(product){
+    // Sum unrounded partial taxes first, then round up per 0.05
+    const raw = this.rules.reduce((acc, rule) => acc.add(rule.taxForUnit(product)), new Money(0));
+    return raw.roundUpTo005();
+  }
+  taxForLine(lineItem){
+    return this.taxPerUnit(lineItem.product).mulInt(lineItem.qty);
+  }
+}
+
+class ReceiptLine {
+  constructor(displayName, lineTotal, lineTax, unitTax){
+    this.displayName = displayName;
+    this.lineTotal = lineTotal;
+    this.lineTax = lineTax;
+    this.unitTax = unitTax; // for tooltip
+  }
+}
+
+class Receipt {
+  constructor(lines, salesTaxes, grandTotal){
+    this.lines = lines;
+    this.salesTaxes = salesTaxes;
+    this.grandTotal = grandTotal;
+  }
+  toText(){
+    let s = '';
+    this.lines.forEach(l => { s += `${l.displayName}: ${l.lineTotal.toString()}\n`; });
+    s += `Sales Taxes: ${this.salesTaxes.toString()}\n`;
+    s += `Total: ${this.grandTotal.toString()}`;
+    return s;
+  }
+}
+
+class Checkout {
+  constructor(taxCalc){ this.taxCalc = taxCalc; }
+  generate(lineItems){
+    let taxes = new Money(0), total = new Money(0);
+    const lines = [];
+    for(const li of lineItems){
+      const unitTax = this.taxCalc.taxPerUnit(li.product);
+      const lineTax = unitTax.mulInt(li.qty);
+      const lineTotal = li.subtotal().add(lineTax);
+      taxes = taxes.add(lineTax);
+      total = total.add(lineTotal);
+      lines.push(new ReceiptLine(
+        `${li.qty} ${li.product.name}`,
+        lineTotal,
+        lineTax,
+        unitTax
+      ));
+    }
+    return new Receipt(lines, taxes, total);
+  }
+}
+
+/* ======================
+   UI Wiring & Utilities
+   ====================== */
+const dom = {
+  itemsBody: document.getElementById('itemsBody'),
+  addRowBtn: document.getElementById('addRowBtn'),
+  receipt: document.getElementById('receipt'),
+  ruleBasic: document.getElementById('ruleBasic'),
+  ruleImport: document.getElementById('ruleImport'),
+  sample1: document.getElementById('sample1'),
+  sample2: document.getElementById('sample2'),
+  sample3: document.getElementById('sample3'),
+  clearAll: document.getElementById('clearAll'),
+};
+
+let rows = []; // UI rows state
+
+function newRow(data = {}){
+  const tr = document.createElement('tr');
+
+  const tdName = document.createElement('td');
+  const tdCat = document.createElement('td');
+  const tdImp = document.createElement('td');
+  const tdPrice = document.createElement('td');
+  const tdQty = document.createElement('td');
+  const tdAct = document.createElement('td');
+  tdAct.className = 'actions';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'e.g., book / music CD';
+  nameInput.value = data.name || '';
+
+  const catSel = document.createElement('select');
+  for(const [key, label] of [
+    [Category.BOOK, 'Book'],
+    [Category.FOOD, 'Food'],
+    [Category.MEDICAL, 'Medical'],
+    [Category.OTHER, 'Other'],
+  ]){
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = label;
+    catSel.appendChild(opt);
+  }
+  catSel.value = data.category || Category.OTHER;
+
+  const imported = document.createElement('input');
+  imported.type = 'checkbox';
+  imported.checked = !!data.imported;
+
+  const price = document.createElement('input');
+  price.type = 'number'; price.min = '0'; price.step = '0.01';
+  price.placeholder = '0.00';
+  price.value = (typeof data.price === 'number') ? data.price.toFixed(2) : (data.price || '');
+
+  const qty = document.createElement('input');
+  qty.type = 'number'; qty.min = '1'; qty.step = '1';
+  qty.value = data.qty || 1;
+
+  const del = document.createElement('button');
+  del.className = 'danger';
+  del.textContent = 'Remove';
+  del.addEventListener('click', () => {
+    tr.remove();
+    rows = rows.filter(r => r.tr !== tr);
+    renderReceipt();
+  });
+
+  tdName.appendChild(nameInput);
+  tdCat.appendChild(catSel);
+  tdImp.appendChild(imported);
+  tdPrice.appendChild(price);
+  tdQty.appendChild(qty);
+  tdAct.appendChild(del);
+
+  tr.append(tdName, tdCat, tdImp, tdPrice, tdQty, tdAct);
+  dom.itemsBody.appendChild(tr);
+
+  const onChange = () => renderReceipt();
+  [nameInput, catSel, imported, price, qty].forEach(el => el.addEventListener('input', onChange));
+
+  const rowObj = { tr, nameInput, catSel, imported, price, qty };
+  rows.push(rowObj);
+  return rowObj;
+}
+
+function getActiveRules(){
+  const active = [];
+  if(dom.ruleBasic.checked) active.push(new BasicSalesTax(10));
+  if(dom.ruleImport.checked) active.push(new ImportDuty(5));
+  return active;
+}
+
+function gatherLineItems(){
+  const items = [];
+  for(const r of rows){
+    const name = (r.nameInput.value || '').trim();
+    const category = r.catSel.value;
+    const imported = r.imported.checked;
+    const unitPrice = Money.fromString(r.price.value);
+    const qty = Math.max(1, parseInt(r.qty.value || '1', 10));
+    if(!name || unitPrice.cents <= 0){ continue; }
+    const prod = new Product(name, imported, category, unitPrice);
+    items.push(new LineItem(prod, qty));
+  }
+  return items;
+}
+
+function renderReceipt(){
+  const rules = getActiveRules();
+  const calc = new TaxCalculator(rules);
+  const checkout = new Checkout(calc);
+  const lineItems = gatherLineItems();
+  const receipt = checkout.generate(lineItems);
+
+  // Build receipt DOM
+  const frag = document.createDocumentFragment();
+
+  if(receipt.lines.length === 0){
+    const p = document.createElement('div');
+    p.className = 'muted';
+    p.textContent = 'No items yet. Add items on the left to see the receipt.';
+    frag.appendChild(p);
+  } else {
+    receipt.lines.forEach(line => {
+      const row = document.createElement('div');
+      row.className = 'line';
+      const name = document.createElement('div');
+      name.textContent = line.displayName;
+
+      const price = document.createElement('div');
+      price.innerHTML = `${line.lineTotal.toString()} <span class="inline-help">(${line.unitTax.toString()} tax/unit)</span>`;
+      row.append(name, price);
+      frag.appendChild(row);
+    });
+
+    const taxes = document.createElement('div');
+    taxes.className = 'line total';
+    taxes.innerHTML = `<div>Sales Taxes</div><div class="sum">${receipt.salesTaxes.toString()}</div>`;
+    frag.appendChild(taxes);
+
+    const total = document.createElement('div');
+    total.className = 'line';
+    total.innerHTML = `<div>Total</div><div class="sum">${receipt.grandTotal.toString()}</div>`;
+    frag.appendChild(total);
+  }
+
+  // Rules summary
+  const ruleNote = document.createElement('div');
+  ruleNote.style.marginTop = '10px';
+  ruleNote.className = 'muted';
+  ruleNote.textContent = 'Active rules: ' + (rules.length ? rules.map(r => r.name()).join(' + ') : 'None');
+  frag.appendChild(ruleNote);
+
+  dom.receipt.innerHTML = '';
+  dom.receipt.appendChild(frag);
+}
+
+/* ======================
+   Sample Inputs (classic)
+   ====================== */
+const samples = {
+  // From the well-known Sales Tax kata variants
+  one: [
+    { name: 'book', category: Category.BOOK, imported: false, price: 12.49, qty: 1 },
+    { name: 'music CD', category: Category.OTHER, imported: false, price: 14.99, qty: 1 },
+    { name: 'chocolate bar', category: Category.FOOD, imported: false, price: 0.85, qty: 1 },
+  ],
+  two: [
+    { name: 'imported box of chocolates', category: Category.FOOD, imported: true, price: 10.00, qty: 1 },
+    { name: 'imported bottle of perfume', category: Category.OTHER, imported: true, price: 47.50, qty: 1 },
+  ],
+  three: [
+    { name: 'imported bottle of perfume', category: Category.OTHER, imported: true, price: 27.99, qty: 1 },
+    { name: 'bottle of perfume', category: Category.OTHER, imported: false, price: 18.99, qty: 1 },
+    { name: 'packet of headache pills', category: Category.MEDICAL, imported: false, price: 9.75, qty: 1 },
+    { name: 'box of imported chocolates', category: Category.FOOD, imported: true, price: 11.25, qty: 1 },
+  ],
+};
+
+function loadSample(arr){
+  dom.itemsBody.innerHTML = '';
+  rows = [];
+  for(const it of arr){ newRow(it); }
+  renderReceipt();
+}
+
+/* ===============
+   Event bindings
+   =============== */
+dom.addRowBtn.addEventListener('click', () => { newRow(); renderReceipt(); });
+dom.ruleBasic.addEventListener('change', renderReceipt);
+dom.ruleImport.addEventListener('change', renderReceipt);
+dom.clearAll.addEventListener('click', () => { dom.itemsBody.innerHTML=''; rows=[]; renderReceipt(); });
+dom.sample1.addEventListener('click', () => loadSample(samples.one));
+dom.sample2.addEventListener('click', () => loadSample(samples.two));
+dom.sample3.addEventListener('click', () => loadSample(samples.three));
+
+/* ==========
+   Boot
+   ========== */
+newRow({ name:'book', category:Category.BOOK, imported:false, price:12.49, qty:1 });
+newRow({ name:'music CD', category:Category.OTHER, imported:false, price:14.99, qty:1 });
+renderReceipt();
+</script>
+</body>
+</html>
