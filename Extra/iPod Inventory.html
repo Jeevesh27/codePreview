@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>iPod Inventory — Interactive Visualizer</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#171a2b; --ink:#e8eaf6; --sub:#b6b9cc; --muted:#2a2f47;
+    --accent:#8a7dff; --accent2:#24d2ff; --ok:#00c27a; --warn:#f6b73c; --danger:#ff6b6b;
+    --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; color:var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background:
+      radial-gradient(1200px 800px at 10% -10%, rgba(138,125,255,.08), transparent 60%),
+      radial-gradient(1200px 800px at 110% 10%, rgba(36,210,255,.08), transparent 60%),
+      var(--bg);
+    min-height:100svh;
+  }
+  header{
+    padding:28px clamp(16px,5vw,40px);
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .logo{ width:44px; height:44px; border-radius:12px; background:
+      radial-gradient(120% 120% at 10% 10%, rgba(255,255,255,.25), rgba(255,255,255,0)),
+      linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: var(--shadow);
+  }
+  h1{ margin:0; font-size: clamp(18px,2.6vw,28px); letter-spacing:.3px; }
+  .tagline{ color:var(--sub); font-size:14px; }
+
+  .container{
+    display:grid; gap:22px;
+    grid-template-columns: 1.15fr .85fr;
+    padding: 0 clamp(16px,5vw,40px) 30px;
+  }
+  @media (max-width: 1100px){ .container{ grid-template-columns: 1fr; } }
+
+  .card{
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00));
+    border:1px solid var(--muted);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .card h2{ margin:0; padding:18px 18px 0 18px; font-size:18px; }
+  .card .body{ padding:18px; }
+  .grid{ display:grid; gap:12px; }
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+
+  input[type="text"], input[type="number"]{
+    width:100%; background:#111427; color:var(--ink); border:1px solid var(--muted);
+    border-radius:10px; padding:9px 10px; outline:none;
+  }
+  select{
+    width:100%; background:#111427; color:var(--ink); border:1px solid var(--muted);
+    border-radius:10px; padding:9px 10px; outline:none;
+  }
+  button{
+    appearance:none; border:0; cursor:pointer; border-radius:10px; padding:10px 14px; font-weight:600;
+    color:#0d1020; background:linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: var(--shadow);
+  }
+  button.secondary{ background:#232744; color:var(--ink); border:1px solid var(--muted); }
+  button.ghost{ background:transparent; color:var(--ink); border:1px dashed var(--muted); }
+  button.warn{ background: linear-gradient(135deg, var(--warn), #ffd36e); color:#241f00; }
+  button.danger{ background: linear-gradient(135deg, #ff7a7a, #ff3b3b); color:white; }
+
+  table{ width:100%; border-collapse:collapse; border:1px solid var(--muted); border-radius:12px; overflow:hidden; }
+  th, td{ padding:12px 10px; text-align:left; font-size:14px; }
+  thead th{ background:#14172a; color:#cfd3f7; position:sticky; top:0; z-index:1; }
+  tbody tr:nth-child(odd){ background: rgba(255,255,255,.02); }
+  tbody tr:hover{ background: rgba(255,255,255,.04); }
+  td.actions{ text-align:right; white-space:nowrap; }
+
+  .stat-bar{
+    display:flex; gap:12px; flex-wrap:wrap;
+  }
+  .stat{
+    background:#111427; border:1px solid #2a2f47; border-radius:12px; padding:10px 12px; min-width:160px;
+  }
+  .stat .label{ color:var(--sub); font-size:12px; }
+  .stat .value{ font-size:18px; font-weight:700; }
+
+  .pill{ display:inline-flex; align-items:center; gap:8px; padding:7px 10px; border-radius:999px; background:#111427; border:1px solid var(--muted); color:var(--sub); }
+  .muted{ color:var(--sub); }
+  .log{
+    background:#0f1220; border:1px dashed #2d3252; border-radius:12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding:12px; max-height:240px; overflow:auto; white-space:pre-wrap;
+  }
+  .ok{ color:#8ef1c3; } .warnTxt{ color:#ffd291; } .err{ color:#ff9e9e; }
+  .chip{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:3px 8px; border-radius:999px; border:1px solid #2c3150; color:#b8bde9; background:#121532;
+    font-size:12px;
+  }
+  .spark{
+    width:100px; height:24px; display:inline-block; vertical-align:middle;
+  }
+  .qty-badge{
+    font-size:12px; padding:2px 6px; border-radius:6px; border:1px solid #2c3150; color:#b8c0ff;
+  }
+  .low{ color:#ffb2b2; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>iPod Inventory — Interactive Visualizer</h1>
+        <div class="tagline">Domain model • Transactions (IN/OUT) • Ledger • Valuation • Low-stock alerts</div>
+      </div>
+    </div>
+    <div class="pill">Uses OOP classes: <b>Item</b>, <b>Stock</b>, <b>Txn</b>, <b>Inventory</b></div>
+  </header>
+
+  <main class="container">
+    <!-- LEFT: Inventory & Transactions -->
+    <section class="card">
+      <h2>📦 Items & Transactions</h2>
+      <div class="body grid">
+        <!-- Stats -->
+        <div class="stat-bar">
+          <div class="stat"><div class="label">Total SKUs</div><div class="value" id="statSkus">0</div></div>
+          <div class="stat"><div class="label">Total Units On-Hand</div><div class="value" id="statUnits">0</div></div>
+          <div class="stat"><div class="label">Inventory Valuation</div><div class="value" id="statVal">$0.00</div></div>
+        </div>
+
+        <!-- Add/Update Item -->
+        <div class="grid" style="grid-template-columns: repeat(5, minmax(0,1fr)); gap:10px;">
+          <input id="sku" type="text" placeholder="SKU (e.g., IP7-32-GRY)">
+          <input id="name" type="text" placeholder="Name (e.g., iPod Classic 160GB)">
+          <input id="price" type="number" step="0.01" min="0" placeholder="Unit Price">
+          <input id="reorder" type="number" step="1" min="0" placeholder="Reorder level (alert)">
+          <button id="upsert" class="secondary">Upsert Item</button>
+        </div>
+
+        <!-- Txn -->
+        <div class="grid" style="grid-template-columns: repeat(6, minmax(0,1fr)); gap:10px;">
+          <select id="txnSku"><option value="">— select SKU —</option></select>
+          <select id="txnType">
+            <option value="IN">IN (purchase)</option>
+            <option value="OUT">OUT (sale)</option>
+          </select>
+          <input id="txnQty" type="number" step="1" min="1" placeholder="Quantity">
+          <input id="txnNote" type="text" placeholder="Note (optional)">
+          <button id="applyTxn">Apply Txn</button>
+          <button id="undo" class="ghost">Undo Last</button>
+        </div>
+        <div class="muted">Tip: add items first, then select a SKU to apply stock IN/OUT transactions.</div>
+
+        <!-- Items table -->
+        <table aria-label="Inventory Table">
+          <thead>
+            <tr>
+              <th>SKU</th><th>Name</th><th>Unit Price</th><th>On-Hand</th><th>Reorder</th><th>History</th><th class="actions">—</th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+        <div class="controls">
+          <button id="seed" class="secondary">Load Sample iPods</button>
+          <button id="export" class="secondary">Export JSON</button>
+          <input id="importFile" type="file" accept="application/json" style="display:none">
+          <button id="importBtn" class="ghost">Import JSON</button>
+          <button id="clearAll" class="danger">Reset All</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Ledger & Detail -->
+    <section class="card">
+      <h2>🧾 Ledger & Detail</h2>
+      <div class="body grid">
+        <div class="controls">
+          <span class="chip">Last action shows at top</span>
+          <span class="chip">Click “History” for per-SKU timeline</span>
+        </div>
+        <div class="log" id="log"></div>
+
+        <div class="card" style="border:none; background:transparent;">
+          <div class="body grid">
+            <div class="muted">SKU Detail</div>
+            <div id="detail"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+/* ===============================
+   Domain Model (OOP)
+   =============================== */
+class Item {
+  constructor(sku, name, unitPrice, reorderLevel=0){
+    this.sku = sku;
+    this.name = name;
+    this.unitPrice = Number(unitPrice) || 0;
+    this.reorderLevel = Math.max(0, parseInt(reorderLevel||0,10));
+  }
+}
+
+const TxnType = Object.freeze({ IN:'IN', OUT:'OUT' });
+class Txn {
+  constructor(sku, type, qty, note=''){
+    this.sku = sku;
+    this.type = type;                // IN or OUT
+    this.qty = Math.max(1, parseInt(qty,10));
+    this.note = note || '';
+    this.at = new Date().toISOString();
+    this.id = `${this.at}-${Math.random().toString(36).slice(2,8)}`;
+  }
+}
+
+class Stock {
+  constructor(item){ this.item = item; this.qty = 0; this.history = []; } // history holds Txn
+  in(q){ this.qty += q; }
+  out(q){
+    if(q > this.qty) throw new Error(`Insufficient stock for ${this.item.sku}`);
+    this.qty -= q;
+  }
+  valuation(){ return this.qty * this.item.unitPrice; }
+}
+
+class Inventory {
+  constructor(){
+    this.store = new Map();   // sku -> Stock
+    this.ledger = [];         // all Txns
+    this.undoStack = [];      // for undo
+  }
+  upsertItem(item){
+    if(!this.store.has(item.sku)) this.store.set(item.sku, new Stock(item));
+    else {
+      // update name/price/reorder
+      const s = this.store.get(item.sku);
+      s.item.name = item.name; s.item.unitPrice = item.unitPrice; s.item.reorderLevel = item.reorderLevel;
+    }
+  }
+  addStock(sku, qty, note=''){
+    const s = this.require(sku);
+    s.in(qty);
+    const t = new Txn(sku, TxnType.IN, qty, note);
+    s.history.push(t); this.ledger.unshift(t);
+    this.undoStack.push({undo:()=>this._forceOut(sku, qty)});
+    return t;
+  }
+  sell(sku, qty, note=''){
+    const s = this.require(sku);
+    s.out(qty);
+    const t = new Txn(sku, TxnType.OUT, qty, note);
+    s.history.push(t); this.ledger.unshift(t);
+    this.undoStack.push({undo:()=>this._forceIn(sku, qty)});
+    return t;
+  }
+  _forceIn(sku, qty){ const s=this.require(sku); s.in(qty); }
+  _forceOut(sku, qty){ const s=this.require(sku); if(qty>s.qty) s.qty=0; else s.out(qty); }
+  undo(){
+    const entry = this.undoStack.pop();
+    if(!entry) throw new Error('Nothing to undo');
+    entry.undo();
+  }
+  onHand(sku){ return this.require(sku).qty; }
+  valuation(){
+    let sum = 0;
+    for(const s of this.store.values()) sum += s.valuation();
+    return sum;
+  }
+  require(sku){
+    if(!this.store.has(sku)) throw new Error(`Unknown SKU: ${sku}`);
+    return this.store.get(sku);
+  }
+  serialize(){
+    const items = Array.from(this.store.values()).map(s=>({
+      sku: s.item.sku, name: s.item.name, unitPrice: s.item.unitPrice, reorderLevel: s.item.reorderLevel, qty: s.qty,
+      history: s.history
+    }));
+    return JSON.stringify({ items, ledger: this.ledger }, null, 2);
+  }
+  static hydrate(json){
+    const inv = new Inventory();
+    for(const it of json.items){
+      const item = new Item(it.sku, it.name, it.unitPrice, it.reorderLevel);
+      const stock = new Stock(item); stock.qty = it.qty; stock.history = it.history || [];
+      inv.store.set(item.sku, stock);
+    }
+    inv.ledger = json.ledger || [];
+    return inv;
+  }
+}
+
+/* ===============================
+   Helpers (money, format, spark)
+   =============================== */
+const money = (n)=> Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+function el(tag, cls, text){
+  const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e;
+}
+function sparkline(canvas, points){
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if(points.length<2){ return; }
+  const min = Math.min(...points), max = Math.max(...points);
+  const norm = v => max===min ? H/2 : H - ((v-min)/(max-min))*H;
+  ctx.lineWidth=2; ctx.strokeStyle='#9bbcff';
+  ctx.beginPath();
+  points.forEach((v,i)=>{
+    const x = (i/(points.length-1))*W;
+    const y = norm(v);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+/* ===============================
+   UI State
+   =============================== */
+const els = {
+  statSkus: document.getElementById('statSkus'),
+  statUnits: document.getElementById('statUnits'),
+  statVal: document.getElementById('statVal'),
+  sku: document.getElementById('sku'),
+  name: document.getElementById('name'),
+  price: document.getElementById('price'),
+  reorder: document.getElementById('reorder'),
+  upsert: document.getElementById('upsert'),
+  txnSku: document.getElementById('txnSku'),
+  txnType: document.getElementById('txnType'),
+  txnQty: document.getElementById('txnQty'),
+  txnNote: document.getElementById('txnNote'),
+  applyTxn: document.getElementById('applyTxn'),
+  undo: document.getElementById('undo'),
+  itemsBody: document.getElementById('itemsBody'),
+  seed: document.getElementById('seed'),
+  export: document.getElementById('export'),
+  importBtn: document.getElementById('importBtn'),
+  importFile: document.getElementById('importFile'),
+  clearAll: document.getElementById('clearAll'),
+  log: document.getElementById('log'),
+  detail: document.getElementById('detail'),
+};
+
+let inv = new Inventory();
+
+/* ===============================
+   Rendering
+   =============================== */
+function refreshStats(){
+  els.statSkus.textContent = inv.store.size;
+  let units = 0; for(const s of inv.store.values()) units += s.qty;
+  els.statUnits.textContent = units;
+  els.statVal.textContent = '$' + money(inv.valuation());
+}
+
+function refreshSkuDropdown(){
+  const cur = els.txnSku.value;
+  els.txnSku.innerHTML = '<option value="">— select SKU —</option>';
+  for(const s of inv.store.values()){
+    const opt = el('option','',`${s.item.sku} — ${s.item.name}`);
+    opt.value = s.item.sku;
+    els.txnSku.appendChild(opt);
+  }
+  if(inv.store.has(cur)) els.txnSku.value = cur;
+}
+
+function drawItemsTable(){
+  els.itemsBody.innerHTML = '';
+  for(const s of inv.store.values()){
+    const tr = document.createElement('tr');
+
+    const tdSku = el('td','',s.item.sku);
+    const tdName = el('td','',s.item.name);
+    const tdPrice = el('td','',`$${money(s.item.unitPrice)}`);
+
+    const tdQty = document.createElement('td');
+    const qtySpan = el('span','qty-badge', s.qty);
+    if(s.item.reorderLevel>0 && s.qty <= s.item.reorderLevel) qtySpan.classList.add('low');
+    tdQty.appendChild(qtySpan);
+    const spark = document.createElement('canvas');
+    spark.className='spark'; spark.width=100; spark.height=24;
+    // build points from history cumulative
+    let cum=0, pts=[];
+    for(const t of s.history){
+      cum += (t.type===TxnType.IN? t.qty : -t.qty);
+      pts.push(cum);
+    }
+    if(pts.length===0) pts=[0, s.qty];
+    else pts.push(s.qty);
+    setTimeout(()=>sparkline(spark, pts), 0);
+    tdQty.appendChild(spark);
+
+    const tdReorder = el('td','', s.item.reorderLevel.toString());
+
+    const tdHist = document.createElement('td');
+    const hBtn = el('button','secondary','History');
+    hBtn.addEventListener('click', ()=>showDetail(s.item.sku));
+    tdHist.appendChild(hBtn);
+
+    const tdAct = el('td','actions');
+    const edit = el('button','secondary','Edit');
+    edit.addEventListener('click', ()=>{
+      els.sku.value = s.item.sku;
+      els.name.value = s.item.name;
+      els.price.value = s.item.unitPrice;
+      els.reorder.value = s.item.reorderLevel;
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+    const del = el('button','danger','Delete');
+    del.addEventListener('click', ()=>{
+      if(!confirm(`Delete ${s.item.sku}? This removes item (keeps ledger in export only).`)) return;
+      inv.store.delete(s.item.sku);
+      refreshAll();
+      logLine(`− Deleted SKU ${s.item.sku}`, 'warnTxt');
+    });
+    tdAct.append(edit, document.createTextNode(' '), del);
+
+    tr.append(tdSku, tdName, tdPrice, tdQty, tdReorder, tdHist, tdAct);
+    els.itemsBody.appendChild(tr);
+  }
+}
+
+function showDetail(sku){
+  let s;
+  try{ s = inv.require(sku); }catch(e){ els.detail.textContent=''; return; }
+  const wrap = document.createElement('div');
+  wrap.className='grid';
+  wrap.style.gap='8px';
+
+  wrap.appendChild(el('div','chip',`SKU: ${s.item.sku}`));
+  wrap.appendChild(el('div','chip',`Name: ${s.item.name}`));
+  wrap.appendChild(el('div','chip',`Unit: $${money(s.item.unitPrice)}`));
+  wrap.appendChild(el('div','chip',`On-Hand: ${s.qty}`));
+
+  const list = document.createElement('div');
+  list.className='log';
+  list.style.maxHeight='300px';
+  if(s.history.length===0) list.textContent='No transactions yet.';
+  else{
+    list.innerHTML='';
+    for(const t of [...s.history].reverse()){
+      const line = document.createElement('div');
+      const when = new Date(t.at).toLocaleString();
+      line.textContent = `${when}  ${t.type.padEnd(3,' ')}  qty=${t.qty}  ${t.note||''}`;
+      list.appendChild(line);
+    }
+  }
+  els.detail.innerHTML='';
+  els.detail.appendChild(wrap);
+  els.detail.appendChild(list);
+}
+
+function refreshAll(){
+  refreshStats();
+  refreshSkuDropdown();
+  drawItemsTable();
+}
+
+/* ===============================
+   Logging
+   =============================== */
+function logLine(text, cls='ok'){
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = text;
+  els.log.prepend(div);
+}
+
+/* ===============================
+   Actions
+   =============================== */
+els.upsert.addEventListener('click', ()=>{
+  const sku = (els.sku.value||'').trim();
+  const name = (els.name.value||'').trim();
+  const price = parseFloat(els.price.value||'0');
+  const reorder = parseInt(els.reorder.value||'0',10);
+  if(!sku || !name || isNaN(price)){ alert('Please fill SKU, Name and Price'); return; }
+  inv.upsertItem(new Item(sku, name, price, reorder));
+  refreshAll();
+  logLine(`↻ Upserted ${sku} — ${name} @ $${money(price)} (reorder: ${reorder})`);
+  // keep form values; user may chain transactions
+});
+
+els.applyTxn.addEventListener('click', ()=>{
+  const sku = els.txnSku.value;
+  const type = els.txnType.value;
+  const qty  = parseInt(els.txnQty.value||'0',10);
+  const note = els.txnNote.value||'';
+  if(!sku){ alert('Select a SKU'); return; }
+  if(qty<=0){ alert('Quantity must be positive'); return; }
+  try{
+    let t;
+    if(type===TxnType.IN) t = inv.addStock(sku, qty, note);
+    else t = inv.sell(sku, qty, note);
+    refreshAll();
+    showDetail(sku);
+    logLine(`${type==='IN'?'➕':'➖'} ${type} ${qty} units of ${sku} (${t.note||'no note'})`);
+    // low stock hint
+    const s = inv.require(sku);
+    if(s.item.reorderLevel>0 && s.qty<=s.item.reorderLevel){
+      logLine(`⚠ ${sku} reached reorder level (on-hand ${s.qty} ≤ ${s.item.reorderLevel})`, 'warnTxt');
+    }
+  }catch(e){
+    alert(e.message);
+    logLine(`✖ ${e.message}`, 'err');
+  }
+});
+
+els.undo.addEventListener('click', ()=>{
+  try{
+    inv.undo();
+    refreshAll();
+    logLine('⮪ Undid last transaction');
+  }catch(e){
+    logLine('Nothing to undo', 'warnTxt');
+  }
+});
+
+els.seed.addEventListener('click', ()=>{
+  const sample = [
+    new Item('IPOD-CL-160', 'iPod Classic 160GB', 279.99, 2),
+    new Item('IPOD-NANO-16', 'iPod Nano 16GB', 149.99, 3),
+    new Item('IPOD-SHUF-2', 'iPod Shuffle 2GB', 49.99, 5),
+  ];
+  for(const it of sample) inv.upsertItem(it);
+  inv.addStock('IPOD-CL-160', 5, 'initial batch');
+  inv.addStock('IPOD-NANO-16', 10, 'initial batch');
+  inv.addStock('IPOD-SHUF-2', 20, 'initial batch');
+  inv.sell('IPOD-NANO-16', 3, 'retail');
+  inv.sell('IPOD-SHUF-2', 4, 'retail');
+  refreshAll();
+  logLine('Loaded sample iPod catalog & starter stock');
+});
+
+els.export.addEventListener('click', ()=>{
+  const blob = new Blob([inv.serialize()], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'inventory.json'; a.click();
+  URL.revokeObjectURL(url);
+  logLine('⬇ Exported inventory to JSON');
+});
+
+els.importBtn.addEventListener('click', ()=> els.importFile.click());
+els.importFile.addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      inv = Inventory.hydrate(data);
+      refreshAll();
+      logLine('⬆ Imported inventory from JSON');
+    }catch(err){
+      alert('Invalid JSON'); logLine('Invalid JSON import', 'err');
+    }
+  };
+  reader.readAsText(file);
+});
+
+els.clearAll.addEventListener('click', ()=>{
+  if(!confirm('Reset inventory, ledger and UI?')) return;
+  inv = new Inventory();
+  refreshAll();
+  els.detail.innerHTML='';
+  els.log.innerHTML='';
+});
+
+/* ===============================
+   Boot
+   =============================== */
+function boot(){
+  refreshAll();
+  logLine('Ready. Upsert items, then add IN/OUT transactions. Click “History” for details.');
+}
+boot();
+</script>
+</body>
+</html>
