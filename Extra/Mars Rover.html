@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mars Rover — Interactive Visualizer</title>
+<style>
+  :root{
+    --bg: #0f1220;
+    --card: #171a2b;
+    --ink: #e8eaf6;
+    --sub: #b6b9cc;
+    --accent: #8a7dff;
+    --accent2:#24d2ff;
+    --muted:#2a2f47;
+    --ok:#00c27a;
+    --warn:#f6b73c;
+    --danger:#ff6b6b;
+    --radius: 14px;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; color:var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background:
+      radial-gradient(1200px 800px at 10% -10%, rgba(138,125,255,.08), transparent 60%),
+      radial-gradient(1200px 800px at 110% 10%, rgba(36,210,255,.08), transparent 60%),
+      var(--bg);
+    min-height:100svh;
+  }
+  header{
+    padding:28px clamp(16px,5vw,40px);
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .logo{ width:44px; height:44px; border-radius:12px; background:
+      radial-gradient(120% 120% at 10% 10%, rgba(255,255,255,.25), rgba(255,255,255,0)),
+      linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: var(--shadow);
+  }
+  h1{ margin:0; font-size: clamp(18px,2.6vw,28px); letter-spacing:.3px; }
+  .tagline{ color:var(--sub); font-size:14px; }
+
+  .container{
+    display:grid; gap:22px;
+    grid-template-columns: 1.1fr .9fr;
+    padding: 0 clamp(16px,5vw,40px) 30px;
+  }
+  @media (max-width: 1100px){ .container{ grid-template-columns: 1fr; } }
+
+  .card{
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00));
+    border:1px solid var(--muted);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .card h2{ margin:0; padding:18px 18px 0 18px; font-size:18px; }
+  .card .body{ padding:18px; }
+
+  .grid{ display:grid; gap:12px; }
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .row{ display:grid; gap:10px; grid-template-columns: repeat(9, minmax(0,1fr)); align-items:center; }
+  .row > *:last-child{ justify-self:end; }
+
+  input[type="number"], input[type="text"], select{
+    width:100%; background:#111427; color:var(--ink); border:1px solid var(--muted);
+    border-radius:10px; padding:9px 10px; outline:none;
+  }
+  input[type="checkbox"]{ transform: scale(1.1); }
+
+  button{
+    appearance:none; border:0; cursor:pointer;
+    border-radius:10px; padding:10px 14px; font-weight:600;
+    color:#0d1020;
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: var(--shadow);
+  }
+  button.secondary{ background:#232744; color:var(--ink); border:1px solid var(--muted); }
+  button.ghost{ background:transparent; color:var(--ink); border:1px dashed var(--muted); }
+  button.warn{ background: linear-gradient(135deg, var(--warn), #ffd36e); color:#241f00; }
+  button.danger{ background: linear-gradient(135deg, #ff7a7a, #ff3b3b); color:white; }
+
+  .pill{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:7px 10px; border-radius:999px; background:#111427; border:1px solid var(--muted);
+    color: var(--sub);
+  }
+  .muted{ color:var(--sub); }
+  .small{ font-size:12px; }
+
+  /* Canvas wrapper */
+  .canvas-wrap{
+    position:relative; border-radius:14px; overflow:hidden;
+    border:1px solid var(--muted); background:#0c1024; min-height:360px;
+  }
+  .legend{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .chip{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:3px 8px; border-radius:999px; border:1px solid #2c3150; color:#b8bde9; background:#121532;
+    font-size:12px;
+  }
+  .swatch{ width:12px; height:12px; border-radius:3px; display:inline-block; }
+
+  .log{
+    background:#0f1220; border:1px dashed #2d3252; border-radius:12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding:12px; max-height:260px; overflow:auto; white-space:pre-wrap;
+  }
+  .ok{ color: #8ef1c3; }
+  .error{ color: #ff9e9e; }
+  .warn{ color: #ffd291; }
+
+  .row-head{ font-weight:700; }
+  .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; padding:2px 6px; border:1px solid #2c3150; border-radius:6px; background:#111533; color:#aeb7ec; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>Mars Rover — Interactive Visualizer</h1>
+        <div class="tagline">Commands <span class="kbd">L</span>/<span class="kbd">R</span>/<span class="kbd">M</span> • Multiple rovers • Boundaries • (Optional) Collisions</div>
+      </div>
+    </div>
+    <div class="pill small">Grid origin at (0,0) lower-left • Directions: N, E, S, W</div>
+  </header>
+
+  <main class="container">
+    <!-- LEFT: Controls -->
+    <section class="card">
+      <h2>🧭 Setup</h2>
+      <div class="body grid">
+        <div class="controls">
+          <label class="pill">Plateau maxX <input id="maxX" type="number" min="1" value="5" style="width:80px;margin-left:8px"></label>
+          <label class="pill">maxY <input id="maxY" type="number" min="1" value="5" style="width:80px;margin-left:8px"></label>
+          <label class="pill"><input id="collide" type="checkbox" checked style="margin-right:8px"> Prevent collisions</label>
+          <button id="apply" class="secondary">Apply</button>
+          <button id="sample" class="secondary">Load Sample</button>
+          <button id="reset" class="ghost">Reset</button>
+        </div>
+
+        <div class="row row-head">
+          <div>Name</div><div>X</div><div>Y</div><div>Dir</div><div>Commands</div><div colspan="3">—</div>
+        </div>
+        <div id="roversArea" class="grid" style="gap:10px;"></div>
+        <div class="controls">
+          <button id="addRover">+ Add Rover</button>
+        </div>
+
+        <div class="controls">
+          <button id="run">▶ Run</button>
+          <button id="step" class="warn">⏭ Step</button>
+          <button id="stop" class="danger">⏹ Stop</button>
+        </div>
+        <div class="muted small">Tip: “Run” animates all rovers in round-robin order; “Step” advances a single command.</div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Canvas + Logs -->
+    <section class="card">
+      <h2>🛰️ Simulation</h2>
+      <div class="body grid">
+        <div class="canvas-wrap"><canvas id="canvas" width="720" height="480"></canvas></div>
+        <div id="legend" class="legend"></div>
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
+
+<script>
+/* ================================
+   Core domain (OOP)
+   ================================ */
+const DIRS = ['N','E','S','W'];
+const DIR_VEC = { N:{dx:0,dy:1}, E:{dx:1,dy:0}, S:{dx:0,dy:-1}, W:{dx:-1,dy:0} };
+
+class Plateau {
+  constructor(maxX, maxY){
+    this.maxX = maxX; this.maxY = maxY;
+  }
+  inBounds(x,y){ return x>=0 && y>=0 && x<=this.maxX && y<=this.maxY; }
+}
+
+class Rover {
+  constructor(name, x, y, dir, cmds, color){
+    this.name=name;
+    this.x=x; this.y=y; this.dir=dir;
+    this.cmds = cmds.toUpperCase().replace(/[^LRM]/g,''); // sanitize
+    this.pc = 0; // program counter
+    this.color = color || '#fff';
+    this.crashed = false;
+  }
+  left(){ this.dir = DIRS[(DIRS.indexOf(this.dir)+3)%4]; }
+  right(){ this.dir = DIRS[(DIRS.indexOf(this.dir)+1)%4]; }
+  nextPos(){
+    const v = DIR_VEC[this.dir]; return { nx:this.x+v.dx, ny:this.y+v.dy };
+  }
+  move(){ const {nx,ny}=this.nextPos(); this.x=nx; this.y=ny; }
+  done(){ return this.pc >= this.cmds.length; }
+  step(sim){
+    if(this.done() || this.crashed) return {type:'noop'};
+    const c = this.cmds[this.pc++];
+    if(c==='L'){ this.left(); return {type:'turn', dir:this.dir}; }
+    if(c==='R'){ this.right(); return {type:'turn', dir:this.dir}; }
+    if(c==='M'){
+      const {nx,ny} = this.nextPos();
+      // boundary
+      if(!sim.plateau.inBounds(nx,ny)){
+        this.crashed = true;
+        return {type:'error', msg:`${this.name} would leave plateau at (${nx},${ny}).`};
+      }
+      // collisions
+      if(sim.preventCollisions){
+        if(sim.occupied(nx,ny)){
+          this.crashed = true;
+          return {type:'error', msg:`${this.name} collided at (${nx},${ny}).`};
+        }
+      }
+      // move
+      sim.vacate(this.x,this.y);
+      this.move();
+      sim.occupy(this.x,this.y);
+      return {type:'move', x:this.x, y:this.y};
+    }
+    return {type:'noop'};
+  }
+  pose(){ return `${this.x} ${this.y} ${this.dir}`; }
+}
+
+class Simulation {
+  constructor(plateau, rovers, preventCollisions=true){
+    this.plateau = plateau;
+    this.rovers = rovers;
+    this.preventCollisions = preventCollisions;
+    this.cells = new Set(); // occupied cells as "x,y"
+    // initial occupancy
+    for(const r of rovers){
+      const key = `${r.x},${r.y}`;
+      if(this.cells.has(key) && preventCollisions){ r.crashed=true; }
+      this.cells.add(key);
+    }
+  }
+  key(x,y){ return `${x},${y}`; }
+  occupied(x,y){ return this.cells.has(this.key(x,y)); }
+  occupy(x,y){ this.cells.add(this.key(x,y)); }
+  vacate(x,y){ this.cells.delete(this.key(x,y)); }
+
+  allDone(){ return this.rovers.every(r=>r.done() || r.crashed); }
+
+  stepRoundRobin(){
+    for(const r of this.rovers){
+      const before = r.pose();
+      const res = r.step(this);
+      if(res.type==='error'){ return { rover:r, result:res, before }; }
+      if(res.type!=='noop'){ return { rover:r, result:res, before }; }
+    }
+    return { rover:null, result:{type:'noop'}, before:null };
+  }
+}
+
+/* ================================
+   Rendering (Canvas)
+   ================================ */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function drawGrid(sim){
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  // margins for labels
+  const marginL = 40, marginB = 40, marginR=10, marginT=10;
+  const cols = sim.plateau.maxX+1;
+  const rows = sim.plateau.maxY+1;
+  const cellW = (W - marginL - marginR) / cols;
+  const cellH = (H - marginT - marginB) / rows;
+
+  // grid
+  ctx.strokeStyle = '#2a2f47';
+  ctx.lineWidth = 1;
+  for(let i=0;i<=cols;i++){
+    const x = marginL + i*cellW;
+    ctx.beginPath(); ctx.moveTo(x, marginT); ctx.lineTo(x, H - marginB); ctx.stroke();
+  }
+  for(let j=0;j<=rows;j++){
+    const y = H - marginB - j*cellH;
+    ctx.beginPath(); ctx.moveTo(marginL, y); ctx.lineTo(W - marginR, y); ctx.stroke();
+  }
+
+  // axes labels
+  ctx.fillStyle = '#9aa2cd';
+  ctx.font = '12px ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  for(let i=0;i<cols;i++){
+    const x = marginL + i*cellW + cellW/2;
+    ctx.fillText(i, x, H - marginB + 16);
+  }
+  ctx.textAlign = 'right';
+  for(let j=0;j<rows;j++){
+    const y = H - marginB - j*cellH - cellH/2 + 4;
+    ctx.fillText(j, marginL - 8, y);
+  }
+
+  // rovers
+  for(const r of sim.rovers){
+    drawRover(r, sim, marginL, marginT, cellW, cellH, H - marginB);
+  }
+}
+
+function cellCenter(marginL, marginT, cellW, cellH, bottomY, x, y){
+  const cx = marginL + x*cellW + cellW/2;
+  const cy = bottomY - y*cellH - cellH/2;
+  return {cx, cy};
+}
+
+function drawRover(r, sim, marginL, marginT, cellW, cellH, bottomY){
+  const {cx, cy} = cellCenter(marginL, marginT, cellW, cellH, bottomY, r.x, r.y);
+  const rad = Math.min(cellW, cellH)*0.28;
+
+  // body
+  ctx.beginPath();
+  ctx.fillStyle = r.crashed ? '#ff6b6b' : r.color;
+  ctx.arc(cx, cy, rad, 0, Math.PI*2);
+  ctx.fill();
+
+  // direction arrow
+  ctx.strokeStyle = '#0f1220';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  let dx=0, dy=-rad;
+  if(r.dir==='N'){ dx=0; dy=-rad; }
+  if(r.dir==='E'){ dx=rad; dy=0; }
+  if(r.dir==='S'){ dx=0; dy=rad; }
+  if(r.dir==='W'){ dx=-rad; dy=0; }
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx+dx, cy+dy);
+  ctx.stroke();
+
+  // label
+  ctx.fillStyle = '#0f1220';
+  ctx.font = 'bold 11px ui-sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(r.name, cx, cy+4);
+}
+
+/* ================================
+   UI wiring
+   ================================ */
+const els = {
+  maxX: document.getElementById('maxX'),
+  maxY: document.getElementById('maxY'),
+  collide: document.getElementById('collide'),
+  apply: document.getElementById('apply'),
+  sample: document.getElementById('sample'),
+  reset: document.getElementById('reset'),
+  addRover: document.getElementById('addRover'),
+  roversArea: document.getElementById('roversArea'),
+  run: document.getElementById('run'),
+  step: document.getElementById('step'),
+  stop: document.getElementById('stop'),
+  legend: document.getElementById('legend'),
+  log: document.getElementById('log'),
+};
+
+const niceColors = ['#8a7dff','#24d2ff','#8ef1c3','#ffd36e','#ffa7e1','#9bbcff','#82e0ff','#c7ff7a','#f7c7ff','#ffb092'];
+
+let plateau = new Plateau(5,5);
+let rovers = [];
+let sim = new Simulation(plateau, rovers, true);
+let timer = null;
+
+function appendLog(text, cls=''){
+  const div = document.createElement('div');
+  if(cls) div.classList.add(cls);
+  div.textContent = text;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function clearLog(){ els.log.innerHTML=''; }
+
+function roverRow(data){
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const name = document.createElement('input'); name.type='text'; name.placeholder='Rover A'; name.value = data?.name || `Rover ${rovers.length+1}`;
+  const x = document.createElement('input'); x.type='number'; x.min='0'; x.value = data?.x ?? 0;
+  const y = document.createElement('input'); y.type='number'; y.min='0'; y.value = data?.y ?? 0;
+  const dir = document.createElement('select');
+  for(const d of DIRS){ const o=document.createElement('option'); o.value=d; o.textContent=d; dir.appendChild(o); }
+  dir.value = data?.dir || 'N';
+  const cmds = document.createElement('input'); cmds.type='text'; cmds.placeholder='e.g. LMLMLMM'; cmds.value = data?.cmds || '';
+  const color = document.createElement('input'); color.type='color'; color.value = data?.color || pickColor();
+
+  const addBtn = document.createElement('button'); addBtn.textContent='Add'; addBtn.className='secondary';
+  const updBtn = document.createElement('button'); updBtn.textContent='Update'; updBtn.className='secondary';
+  const delBtn = document.createElement('button'); delBtn.textContent='Remove'; delBtn.className='danger';
+
+  row.append(name,x,y,dir,cmds,color,addBtn,updBtn,delBtn);
+  els.roversArea.appendChild(row);
+
+  let addedIndex = null;
+
+  function add(){
+    const rv = makeRoverFromInputs();
+    if(rv){
+      rovers.push(rv);
+      addedIndex = rovers.length-1;
+      refreshLegend();
+      redraw();
+      appendLog(`+ Added ${rv.name} @ ${rv.pose()}`, 'ok');
+    }
+  }
+  function update(){
+    if(addedIndex===null){ appendLog('Add rover first to update.', 'warn'); return; }
+    const rv = makeRoverFromInputs(rovers[addedIndex].name);
+    if(rv){
+      rovers[addedIndex] = rv;
+      refreshLegend();
+      redraw();
+      appendLog(`↻ Updated ${rv.name} @ ${rv.pose()}`, 'ok');
+    }
+  }
+  function remove(){
+    if(addedIndex===null){ row.remove(); return; }
+    appendLog(`− Removed ${rovers[addedIndex].name}`, 'warn');
+    rovers.splice(addedIndex,1);
+    row.remove();
+    refreshLegend();
+    redraw();
+  }
+
+  function makeRoverFromInputs(nameOverride){
+    const nameVal = (name.value || '').trim() || nameOverride || `Rover ${rovers.length+1}`;
+    const xi = parseInt(x.value,10), yi = parseInt(y.value,10);
+    if(Number.isNaN(xi)||Number.isNaN(yi)){ appendLog('Invalid coordinates', 'error'); return null; }
+    const d = dir.value;
+    const c = (cmds.value || '').toUpperCase().replace(/[^LRM]/g,'');
+    const col = color.value;
+    if(!plateau.inBounds(xi,yi)){ appendLog(`Start out of bounds for ${nameVal}.`, 'error'); return null; }
+    return new Rover(nameVal, xi, yi, d, c, col);
+  }
+
+  addBtn.addEventListener('click', add);
+  updBtn.addEventListener('click', update);
+  delBtn.addEventListener('click', remove);
+}
+
+function pickColor(){ return niceColors[ Math.floor(Math.random()*niceColors.length) ]; }
+
+function resetSim(){
+  clearInterval(timer); timer=null;
+  sim = new Simulation(plateau, rovers, els.collide.checked);
+  redraw();
+}
+
+function redraw(){
+  resetSim(); // rebuild occupancy & crashes
+  drawGrid(sim);
+}
+
+function refreshLegend(){
+  els.legend.innerHTML = '';
+  for(const r of rovers){
+    const chip = document.createElement('div'); chip.className='chip';
+    const sw = document.createElement('span'); sw.className='swatch'; sw.style.background = r.color;
+    chip.appendChild(sw);
+    const txt = document.createTextNode(` ${r.name}: ${r.pose()}  cmds:${r.cmds.length}`);
+    chip.appendChild(txt);
+    els.legend.appendChild(chip);
+  }
+}
+
+/* =======================
+   Simulation controls
+   ======================= */
+els.apply.addEventListener('click', () => {
+  const mx = Math.max(1, parseInt(els.maxX.value,10) || 5);
+  const my = Math.max(1, parseInt(els.maxY.value,10) || 5);
+  plateau = new Plateau(mx, my);
+  appendLog(`Plateau set to (0,0) .. (${mx},${my})`, 'ok');
+  redraw();
+});
+
+els.addRover.addEventListener('click', () => roverRow());
+
+els.sample.addEventListener('click', () => {
+  // Classic sample from kata
+  els.maxX.value = 5; els.maxY.value = 5; plateau = new Plateau(5,5);
+  rovers.length = 0;
+  els.roversArea.innerHTML = '';
+  roverRow({ name:'A', x:1, y:2, dir:'N', cmds:'LMLMLMLMM', color:'#8a7dff' });
+  roverRow({ name:'B', x:3, y:3, dir:'E', cmds:'MMRMMRMRRM', color:'#24d2ff' });
+  appendLog('Loaded sample: A & B on 5x5 plateau. Expected final: A=1 3 N, B=5 1 E', 'ok');
+  redraw();
+});
+
+els.reset.addEventListener('click', () => {
+  rovers.length = 0; els.roversArea.innerHTML='';
+  clearLog();
+  refreshLegend();
+  redraw();
+});
+
+els.collide.addEventListener('change', () => { resetSim(); });
+
+els.step.addEventListener('click', () => {
+  if(rovers.length===0){ appendLog('Add at least one rover.', 'warn'); return; }
+  const {rover, result, before} = sim.stepRoundRobin();
+  if(!rover){ appendLog('Nothing to step.', 'warn'); return; }
+  handleStepLog(rover, result, before);
+  drawGrid(sim);
+  if(sim.allDone()){ appendLog('All rovers finished.', 'ok'); }
+});
+
+els.run.addEventListener('click', () => {
+  if(timer){ return; }
+  if(rovers.length===0){ appendLog('Add at least one rover.', 'warn'); return; }
+  timer = setInterval(() => {
+    if(sim.allDone()){ clearInterval(timer); timer=null; appendLog('All rovers finished.', 'ok'); return; }
+    const {rover, result, before} = sim.stepRoundRobin();
+    if(rover){ handleStepLog(rover, result, before); }
+    drawGrid(sim);
+    if(result.type==='error'){ clearInterval(timer); timer=null; }
+  }, 350);
+});
+
+els.stop.addEventListener('click', () => { clearInterval(timer); timer=null; appendLog('Stopped.', 'warn'); });
+
+function handleStepLog(r, result, before){
+  if(result.type==='turn'){
+    appendLog(`${r.name}: ${before} -> turned ${result.dir}`, 'ok');
+  } else if(result.type==='move'){
+    appendLog(`${r.name}: moved to ${r.pose()}`, 'ok');
+  } else if(result.type==='error'){
+    appendLog(`${r.name}: ERROR ${result.msg}`, 'error');
+  }
+}
+
+/* =======================
+   Boot
+   ======================= */
+function boot(){
+  roverRow({ name:'A', x:0, y:0, dir:'N', cmds:'MMRMM', color: pickColor() });
+  refreshLegend();
+  redraw();
+  appendLog('Ready. Set plateau, add rovers, enter commands (L/R/M), then Step/Run.', 'ok');
+}
+boot();
+</script>
+</body>
+</html>
