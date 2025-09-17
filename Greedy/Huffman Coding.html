@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Huffman Coding — Crisp, Responsive Visualizer</title>
+<style>
+  :root{
+    --bg:#0e1224; --panel:#151a33; --panel-2:#1b2144; --glass:rgba(255,255,255,.06);
+    --text:#eef2ff; --muted:#9aa4d4; --accent:#7be3ff; --accent-2:#9af0c6; --danger:#ff7b7b;
+    --ok:#98f5a1; --chip:#2a305a; --chip-2:#3a4181; --radius:16px; --shadow:0 12px 28px rgba(0,0,0,.35);
+    --ring:0 0 0 2px rgba(123,227,255,.3), 0 0 0 6px rgba(123,227,255,.12);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1200px 800px at 15% -10%, #1a1f3a 0%, #0f1430 45%, var(--bg) 100%);
+  }
+  .wrap{max-width:min(1200px, 100vw); margin-inline:auto; padding:20px clamp(12px,3vw,24px) 64px}
+  header{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:16px}
+  h1{margin:0; font-size:clamp(18px, 2.2vw, 28px)}
+  .tag{padding:6px 10px; border-radius:999px; background:var(--chip); color:var(--muted); font-size:12px; border:1px solid #2b3361}
+
+  /* Layout */
+  .grid{
+    display:grid; gap:16px;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 980px){
+    .grid{ grid-template-columns: 360px 1fr; }
+  }
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid rgba(255,255,255,.06); border-radius:var(--radius); box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .panel h2{ margin:0; padding:14px 16px; color:var(--accent); font-size:clamp(14px,1.6vw,16px);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .content{ padding:14px 16px }
+
+  /* Controls */
+  .controls{ display:grid; gap:10px }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  button, input, textarea{
+    background:var(--chip-2); border:1px solid #4a5290; color:var(--text); border-radius:12px;
+    padding:10px 12px; font-weight:600; cursor:pointer;
+  }
+  button.primary{ background:#1e2a6b; border-color:#5aa5c6; box-shadow:var(--ring) }
+  button:disabled{ opacity:.55; cursor:not-allowed }
+  input[type="range"]{ width:190px }
+  textarea{
+    width:100%; min-height:92px; resize:vertical;
+    background:#0b0f24; border:1px solid #2a2f57; border-radius:12px;
+    color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; padding:10px;
+  }
+  .kbd{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#0b0f24; border:1px solid #2a2f52; border-radius:6px; padding:0 6px }
+  .muted{ color:var(--muted) }
+  .divider{ height:1px; background:rgba(255,255,255,.06); margin:8px 0 4px }
+
+  /* Visual area */
+  .stage-grid{
+    display:grid; gap:16px;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 860px){
+    .stage-grid{ grid-template-columns: 1fr 1fr; }
+  }
+  .legend{ display:flex; gap:10px; flex-wrap:wrap }
+  .chip-sm{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; background:var(--glass);
+    border:1px solid #2a2f57; font-size:12px }
+
+  /* SVG canvases */
+  .canvas {
+    width: 100%; height: auto;
+    aspect-ratio: 16 / 10; /* keeps it responsive */
+    display:block; background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+    border:1px solid rgba(255,255,255,.06); border-radius: 12px;
+  }
+  .explainer{ margin-top:8px; color:var(--muted); min-height:28px; font-size:clamp(12px,1.6vw,14px) }
+  .toast{ margin-top:8px; padding:8px 10px; border-radius:8px; background:rgba(152,245,161,.08); border:1px solid rgba(152,245,161,.25); display:none }
+  .toast.show{ display:block }
+
+  /* Codes table */
+  .codesWrap{ overflow:auto; max-height: 38vh; }
+  table{ width:100%; border-collapse:collapse; font-size:14px }
+  th, td{ padding:8px 10px; border-bottom:1px dashed rgba(255,255,255,.08); text-align:left }
+  th{ color:var(--muted); font-weight:700; position:sticky; top:0; backdrop-filter:saturate(120%) blur(2px); background:rgba(27,33,68,.8) }
+
+  /* Node styles */
+  .node{ transition: transform .18s ease, opacity .18s ease }
+  .node circle{ stroke:#4a5290; stroke-width:2 }
+  .leaf circle{ fill: var(--chip-2) }
+  .internal circle{ fill:#25307a }
+  .pick circle{ filter: drop-shadow(0 0 8px rgba(123,227,255,.65)); }
+  .merge circle{ filter: drop-shadow(0 0 8px rgba(152,245,161,.65)); }
+  .edge{ stroke:rgba(255,255,255,.28); stroke-width:2 }
+  .edgelabel{ fill: var(--accent-2); font-size: 12px }
+
+  /* Tiny helpers */
+  .pad-y{ padding-block:10px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Huffman Coding — Optimal Prefix Codes</h1>
+    <span class="tag">Greedy • min-heap merges → prefix-free</span>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: Controls -->
+    <section class="panel">
+      <h2>Controls</h2>
+      <div class="content controls">
+        <div class="row">
+          <button id="btnPlay" class="primary">▶ Play</button>
+          <button id="btnPause">⏸ Pause</button>
+          <button id="btnStep">⏭ Step</button>
+          <button id="btnReset">↺ Reset</button>
+        </div>
+        <div class="row">
+          <label class="muted">Speed</label>
+          <input id="speed" type="range" min="0" max="100" value="55" />
+          <span id="speedLabel" class="kbd">1.0×</span>
+        </div>
+        <div class="row">
+          <label><input type="radio" name="mode" value="basic" checked> Basic</label>
+          <label><input type="radio" name="mode" value="advanced"> Advanced</label>
+        </div>
+
+        <div class="divider"></div>
+        <strong>Input pairs</strong>
+        <p class="muted" style="margin:.35rem 0;">Use <span class="kbd">char:freq</span>, one per line (or comma-separated). Example already filled.</p>
+        <textarea id="pairs">a:45
+b:13
+c:12
+d:16
+e:9
+f:5</textarea>
+        <div class="row" style="justify-content:space-between;">
+          <div class="row">
+            <button id="btnLoad">Load</button>
+            <button id="btnRandom">Randomize</button>
+          </div>
+          <span class="muted">n = <span id="nOut" class="kbd">6</span></span>
+        </div>
+
+        <div class="divider"></div>
+        <details>
+          <summary><strong>Short theory</strong></summary>
+          <div class="pad-y muted">
+            Always merge the two smallest subtrees first (min-heap). Assign <span class="kbd">0</span> to left edges and <span class="kbd">1</span> to right edges.
+            The result is an optimal prefix-free code (exchange argument / cut property).
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- RIGHT: Visualization -->
+    <section class="panel">
+      <h2>Visualization</h2>
+      <div class="content">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div class="legend">
+            <span class="chip-sm">phase: <span id="phaseOut" class="kbd">Insert</span></span>
+            <span class="chip-sm">heap size: <span id="heapSize" class="kbd">0</span></span>
+            <span class="chip-sm">action: <span id="actionOut" class="kbd">idle</span></span>
+          </div>
+          <div class="legend">
+            <span class="chip-sm"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="var(--chip-2)"/></svg> leaf</span>
+            <span class="chip-sm"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="#25307a"/></svg> internal</span>
+            <span class="chip-sm"><span class="kbd">0</span>/<span class="kbd">1</span> edge labels</span>
+          </div>
+        </div>
+
+        <div class="stage-grid">
+          <div>
+            <h3 style="margin:.2rem 0;">Min-Heap (as a binary tree)</h3>
+            <svg id="heapSvg" class="canvas" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Min-heap"></svg>
+          </div>
+          <div>
+            <h3 style="margin:.2rem 0;">Huffman Tree</h3>
+            <svg id="treeSvg" class="canvas" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Huffman tree"></svg>
+          </div>
+        </div>
+
+        <div class="explainer" id="explainer">Load pairs, then Play or Step. Basic mode shows concise narration; Advanced shows the math.</div>
+        <div class="toast" id="toast">Done! Codes generated below.</div>
+
+        <div class="divider"></div>
+        <h3 style="margin:.2rem 0;">Codes & Stats</h3>
+        <div class="codesWrap">
+          <table id="codesTbl">
+            <thead><tr><th>Char</th><th>Freq</th><th>Code</th><th>Len</th><th>Freq×Len</th></tr></thead>
+            <tbody></tbody>
+            <tfoot>
+              <tr><th colspan="4" style="text-align:right;">Total bits</th><th id="totalBits">0</th></tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ---------- Shortcuts ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const sum = a => a.reduce((x,y)=>x+y,0);
+
+/* ---------- Global state ---------- */
+let mode = 'basic';
+let playing = false, timer = null, finished = false;
+let items = [];         // node store: {id, char, freq, left, right}
+let heap = [];          // min-heap of node ids
+let nextId = 0;
+let rootId = null;
+let phase = 0;          // 0 insert, 1 merge, 2 root, 3 dfs
+let insertIdx = 0;
+let mergeStep = 0;
+let last = { a:null, b:null, merged:null };
+let dfsStack = [];      // stack: {id, code}
+let codes = new Map();
+
+/* ---------- Elements ---------- */
+const heapSvg = $('#heapSvg');
+const treeSvg = $('#treeSvg');
+const explainer = $('#explainer'); const toast = $('#toast');
+const phaseOut = $('#phaseOut'); const heapSize = $('#heapSize'); const actionOut = $('#actionOut');
+const btnPlay = $('#btnPlay'); const btnPause = $('#btnPause');
+const btnStep = $('#btnStep'); const btnReset = $('#btnReset');
+const btnLoad = $('#btnLoad'); const btnRandom = $('#btnRandom');
+const speed = $('#speed'); const speedLabel = $('#speedLabel'); const nOut = $('#nOut');
+
+/* ---------- Heap operations ---------- */
+function hswap(i,j){ [heap[i], heap[j]] = [heap[j], heap[i]]; }
+function hup(i){
+  while(i>0){
+    const p = (i-1)>>1;
+    if (items[heap[i]].freq < items[heap[p]].freq) { hswap(i,p); i=p; } else break;
+  }
+}
+function hdown(i=0){
+  for(;;){
+    const l = 2*i+1, r=2*i+2; let m=i;
+    if (l<heap.length && items[heap[l]].freq < items[heap[m]].freq) m=l;
+    if (r<heap.length && items[heap[r]].freq < items[heap[m]].freq) m=r;
+    if (m!==i){ hswap(i,m); i=m; } else break;
+  }
+}
+function hpush(id){ heap.push(id); hup(heap.length-1); drawHeap(); }
+function hpop(){
+  if (!heap.length) return null;
+  const top = heap[0]; const last = heap.pop();
+  if (heap.length){ heap[0]=last; hdown(0); }
+  drawHeap(); return top;
+}
+
+/* ---------- Parsing & init ---------- */
+function parsePairs(text){
+  const lines = text.split(/\n|,/).map(s=>s.trim()).filter(Boolean);
+  const pairs = [];
+  for (const line of lines){
+    const m = line.match(/^(.+?)\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)$/) || line.match(/^(.+?)\s+([0-9]+(?:\.[0-9]+)?)$/);
+    if (!m) continue;
+    let ch = m[1].trim(); if (ch.length>1) ch = ch[0];
+    const f = +m[2]; if (!Number.isFinite(f) || f<0) continue;
+    pairs.push({char: ch, freq: f});
+  }
+  return pairs;
+}
+
+function init(pairs){
+  // reset
+  playing=false; stop();
+  finished=false; codes.clear(); dfsStack.length=0;
+  heap.length=0; items.length=0; nextId=0; rootId=null;
+  insertIdx=0; mergeStep=0; last={a:null,b:null,merged:null};
+  phase=0;
+
+  // build items
+  for (const p of pairs){
+    items.push({ id: nextId++, char: p.char, freq: p.freq, left:null, right:null });
+  }
+  // stable sort by freq to keep predictable
+  items.sort((a,b)=>a.freq-b.freq || a.char.localeCompare(b.char));
+  // reassign ids
+  items.forEach((n,i)=>n.id=i); nextId = items.length;
+
+  nOut.textContent = items.length;
+  updateHUD('Insert');
+  drawAll();
+  narrate('Phase 0 — Insert leaves into min-heap (smallest on top).');
+}
+
+/* ---------- Drawing (responsive SVG) ---------- */
+function nodeG(svg, id, x, y, labelTop='', labelMain='', isLeaf=true, classExtra=''){
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.classList.add('node', isLeaf?'leaf':'internal'); if (classExtra) g.classList.add(classExtra);
+  g.setAttribute('transform', `translate(${x},${y})`);
+  const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c.setAttribute('r', 18);
+  c.setAttribute('cx', 0); c.setAttribute('cy', 0);
+  g.appendChild(c);
+  const t1 = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t1.setAttribute('x',0); t1.setAttribute('y',-26); t1.setAttribute('fill','#cfe3ff');
+  t1.setAttribute('font-size','12'); t1.setAttribute('text-anchor','middle');
+  t1.textContent = labelTop; g.appendChild(t1);
+  const t2 = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t2.setAttribute('x',0); t2.setAttribute('y',5); t2.setAttribute('fill','#9aa4d4');
+  t2.setAttribute('font-size','13'); t2.setAttribute('text-anchor','middle');
+  t2.textContent = labelMain; g.appendChild(t2);
+  svg.appendChild(g);
+  return g;
+}
+function edge(svg, x1,y1,x2,y2, bit){
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+  ln.setAttribute('x1',x1); ln.setAttribute('y1',y1+18);
+  ln.setAttribute('x2',x2); ln.setAttribute('y2',y2-18);
+  ln.setAttribute('class','edge'); g.appendChild(ln);
+  const midx=(x1+x2)/2, midy=(y1+y2)/2;
+  const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x',midx); t.setAttribute('y',midy-6); t.setAttribute('class','edgelabel'); t.setAttribute('text-anchor','middle');
+  t.textContent = bit; g.appendChild(t);
+  svg.appendChild(g);
+}
+
+/* Heap as binary tree layout */
+function drawHeap(){
+  heapSvg.innerHTML = '';
+  heapSize.textContent = heap.length;
+  const w=1000, top=40, levelGap=86;
+  // positions
+  const pos = new Map();
+  // compute levels
+  if (!heap.length){
+    // show upcoming leaves as faded line for context
+    const note = document.createElementNS('http://www.w3.org/2000/svg','text');
+    note.setAttribute('x', w/2); note.setAttribute('y', 60);
+    note.setAttribute('fill', '#9aa4d4'); note.setAttribute('text-anchor','middle'); note.textContent = 'heap is empty';
+    heapSvg.appendChild(note);
+    return;
+  }
+
+  for (let i=0;i<heap.length;i++){
+    const depth = Math.floor(Math.log2(i+1));
+    const maxNodes = 2**depth;
+    const indexInLevel = i - (maxNodes - 1);
+    const slots = maxNodes + 1;
+    const x = (w/slots)*(indexInLevel+1);
+    const y = top + depth*levelGap;
+    pos.set(i,{x,y});
+  }
+
+  // edges
+  for (let i=0;i<heap.length;i++){
+    const l=2*i+1, r=2*i+2;
+    if (l<heap.length){
+      const a=pos.get(i), b=pos.get(l); edge(heapSvg,a.x,a.y,b.x,b.y,'');
+    }
+    if (r<heap.length){
+      const a=pos.get(i), b=pos.get(r); edge(heapSvg,a.x,a.y,b.x,b.y,'');
+    }
+  }
+  // nodes
+  for (let i=0;i<heap.length;i++){
+    const {x,y} = pos.get(i);
+    const id = heap[i], n = items[id];
+    const g = nodeG(heapSvg, id, x, y, `${n.freq}`, n.char ?? '•', !!n.char,
+      (last.a===id || last.b===id) ? 'pick' : (last.merged===id ? 'merge' : ''));
+    g.title = n.char ? `'${n.char}' • freq ${n.freq}` : `freq ${n.freq}`;
+  }
+}
+
+/* Huffman tree drawing */
+function drawTree(){
+  treeSvg.innerHTML='';
+  if (rootId==null){
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', 500); t.setAttribute('y', 60); t.setAttribute('fill', '#9aa4d4');
+    t.setAttribute('text-anchor','middle'); t.textContent = 'root not built yet';
+    treeSvg.appendChild(t);
+    return;
+  }
+  // BFS to layers
+  const layers=[]; const q=[{id:rootId, d:0}]; const seen=new Set();
+  while(q.length){
+    const {id,d}=q.shift(); if (seen.has(id)) continue; seen.add(id);
+    (layers[d]||(layers[d]=[])).push(id);
+    const n=items[id]; if (n.left!=null) q.push({id:n.left,d:d+1}); if (n.right!=null) q.push({id:n.right,d:d+1});
+  }
+  const w=1000, top=40, levelGap=Math.max(70, 500/Math.max(1,layers.length));
+  const pos=new Map();
+  layers.forEach((layer, d)=>{
+    const gap=w/(layer.length+1);
+    layer.forEach((id,i)=>pos.set(id,{x:gap*(i+1), y: top + d*levelGap}));
+  });
+
+  // edges
+  items.forEach(n=>{
+    if (!n) return;
+    if (n.left!=null){ const a=pos.get(n.id), b=pos.get(n.left); edge(treeSvg,a.x,a.y,b.x,b.y,'0'); }
+    if (n.right!=null){ const a=pos.get(n.id), b=pos.get(n.right); edge(treeSvg,a.x,a.y,b.x,b.y,'1'); }
+  });
+  // nodes
+  items.forEach(n=>{
+    if (!n) return;
+    if (!pos.has(n.id)) return;
+    nodeG(treeSvg, n.id, pos.get(n.id).x, pos.get(n.id).y, `${n.freq}`, n.char ?? '•', !!n.char);
+  });
+}
+
+/* Codes table */
+function drawCodes(){
+  const tbody = $('#codesTbl tbody'); tbody.innerHTML='';
+  const rows=[];
+  codes.forEach((code, id)=>{
+    const n = items[id]; rows.push({char:n.char, freq:n.freq, code});
+  });
+  rows.sort((a,b)=>a.char.localeCompare(b.char));
+  let total=0;
+  for (const r of rows){
+    total += r.freq * r.code.length;
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(r.char)}</td>
+      <td>${r.freq}</td>
+      <td><span class="kbd">${r.code}</span></td>
+      <td>${r.code.length}</td>
+      <td>${r.freq * r.code.length}</td>`;
+    tbody.appendChild(tr);
+  }
+  $('#totalBits').textContent = total;
+}
+
+/* ---------- Render orchestration ---------- */
+function drawAll(){ drawHeap(); drawTree(); drawCodes(); }
+
+/* ---------- Narration / HUD ---------- */
+function narrate(msg){ explainer.innerHTML = msg; }
+function updateHUD(p){ if (p) phaseOut.textContent = p; heapSize.textContent = heap.length; }
+
+/* ---------- Algo steps ---------- */
+function stepOnce(){
+  if (finished) return true;
+
+  // handle 0/1 symbol edge cases on first phase
+  if (phase===0 && items.length<=1){
+    heap.length=0;
+    if (items.length===1){
+      hpush(items[0].id);
+      phase=2; updateHUD('Root'); narrate('Only one symbol → it becomes the root.'); drawAll();
+      return false;
+    } else {
+      narrate('No symbols. Nothing to encode.');
+      finished=true; toast.classList.add('show'); drawAll(); return true;
+    }
+  }
+
+  if (phase===0){ // insert leaves
+    if (insertIdx < items.length){
+      const id = items[insertIdx].id; hpush(id);
+      narrate(mode==='advanced' ? `Insert leaf '${items[id].char}' with freq ${items[id].freq} into heap.` : `Insert '${items[id].char}' (${items[id].freq}).`);
+      insertIdx++; updateHUD('Insert'); drawAll();
+      if (insertIdx === items.length){ phase=1; updateHUD('Merge'); narrate('All leaves inserted. Phase 1: extract two minimums and merge.'); }
+      return false;
+    }
+  }
+
+  if (phase===1){ // merging
+    if (heap.length <= 1){ phase=2; updateHUD('Root'); narrate('Heap reduced to ≤1 node. Extract root.'); drawAll(); return false; }
+    if (mergeStep === 0){
+      last.a = hpop(); last.b = null; last.merged=null;
+      const n = items[last.a];
+      actionOut.textContent = `extract ${n.freq}`; narrate(mode==='advanced' ? `ExtractMin #1 (freq ${n.freq}${n.char?`, '${n.char}'`:''}).` : `Extract #1.`);
+      drawAll(); mergeStep=1; return false;
+    }
+    if (mergeStep === 1){
+      last.b = hpop();
+      const n = items[last.b];
+      actionOut.textContent = `extract ${n.freq}`; narrate(mode==='advanced' ? `ExtractMin #2 (freq ${n.freq}${n.char?`, '${n.char}'`:''}).` : `Extract #2.`);
+      drawAll(); mergeStep=2; return false;
+    }
+    if (mergeStep === 2){
+      const L = items[last.a], R = items[last.b];
+      const id = nextId++; items[id] = { id, char:null, freq:L.freq+R.freq, left:L.id, right:R.id };
+      last.merged = id; actionOut.textContent = `merge ${L.freq}+${R.freq}=${items[id].freq}`;
+      narrate(mode==='advanced' ? `Merge nodes: ${L.freq} + ${R.freq} → ${items[id].freq}.` : `Merge to ${items[id].freq}.`);
+      drawAll(); mergeStep=3; return false;
+    }
+    if (mergeStep === 3){
+      hpush(last.merged);
+      narrate('Insert merged node back to heap.');
+      last={a:null,b:null,merged:null}; mergeStep=0; drawAll(); return false;
+    }
+  }
+
+  if (phase===2){ // root
+    if (heap.length){
+      rootId = hpop();
+      narrate(`Root extracted (total freq ${items[rootId].freq}). Phase 3: DFS to generate codes.`);
+      phase=3; updateHUD('DFS');
+      dfsStack = [{id: rootId, code: ""}];
+      drawAll(); return false;
+    } else { // single symbol scenario fallback
+      if (items.length===1){ rootId = items[0].id; dfsStack=[{id:rootId, code:""}]; phase=3; drawAll(); return false; }
+    }
+  }
+
+  if (phase===3){ // DFS codes
+    if (!dfsStack.length){
+      narrate('Done. Prefix-free codes generated.'); finished=true; toast.classList.add('show');
+      drawAll(); return true;
+    }
+    const {id, code} = dfsStack.pop();
+    const n = items[id];
+    if (n.left==null && n.right==null){
+      const actual = code.length ? code : '0'; // single symbol gets "0"
+      codes.set(id, actual);
+      narrate(mode==='advanced' ? `Leaf '${n.char}' gets code "${actual}".` : `${n.char} → ${actual}`);
+      drawAll(); return false;
+    } else {
+      if (n.right!=null) dfsStack.push({id:n.right, code:code+'1'});
+      if (n.left!=null)  dfsStack.push({id:n.left,  code:code+'0'});
+      narrate(mode==='advanced' ? `Expand node (${n.freq}). Push left "${code}0", right "${code}1".` : 'Expand node.');
+      drawAll(); return false;
+    }
+  }
+
+  return false;
+}
+
+/* ---------- Controls ---------- */
+function play(){ stop(); const d=spd(speed.value); timer=setInterval(()=>{ if(stepOnce()) stop(); }, d); playing=true; btnPlay.disabled=true; btnPause.disabled=false; }
+function stop(){ playing=false; if (timer){ clearInterval(timer); timer=null; } btnPlay.disabled=false; btnPause.disabled=true; }
+function reset(){ stop(); codes.clear(); dfsStack.length=0; rootId=null; insertIdx=0; mergeStep=0; last={a:null,b:null,merged:null}; phase=0; heap.length=0; finished=false; actionOut.textContent='idle'; toast.classList.remove('show'); drawAll(); narrate('Reset. Load and start again.'); }
+function loadFromTextarea(){
+  const pairs = parsePairs($('#pairs').value);
+  if (!pairs.length){ narrate('Provide valid pairs like "a:45" (one per line).'); return; }
+  init(pairs);
+}
+function randomize(){
+  const alphabet='abcdefghijklmnopqrstuvwxyz';
+  const k=5+Math.floor(Math.random()*6); // 5..10
+  const used=new Set(), arr=[];
+  while(arr.length<k){
+    const ch=alphabet[Math.floor(Math.random()*alphabet.length)];
+    if (used.has(ch)) continue; used.add(ch);
+    arr.push({char:ch, freq:1+Math.floor(Math.random()*50)});
+  }
+  $('#pairs').value = arr.map(p=>`${p.char}:${p.freq}`).join('\n');
+  init(arr);
+}
+
+/* ---------- Speed slider ---------- */
+function spd(v){ const t=v/100; return Math.round(1200 - 1040*Math.pow(t,0.65)); }
+speed.addEventListener('input', ()=>{
+  const ms = spd(speed.value);
+  const mult = (400/Math.max(160, ms)).toFixed(1);
+  speedLabel.textContent = `${mult}×`;
+  if (playing) play();
+});
+
+/* ---------- Wire UI ---------- */
+btnPlay.addEventListener('click', play);
+btnPause.addEventListener('click', stop);
+btnStep.addEventListener('click', ()=>{ stop(); stepOnce(); });
+btnReset.addEventListener('click', reset);
+btnLoad.addEventListener('click', loadFromTextarea);
+btnRandom.addEventListener('click', randomize);
+$$('input[name="mode"]').forEach(r=>r.addEventListener('change',e=>{
+  mode=e.target.value; narrate(mode==='advanced' ? 'Advanced: show heap/DFS details.' : 'Basic: concise narration.');
+}));
+
+/* ---------- Keyboard shortcuts ---------- */
+document.addEventListener('keydown', (e)=>{
+  const k = e.key.toLowerCase();
+  if (k===' ') { e.preventDefault(); playing ? stop() : play(); }
+  if (k==='s') { e.preventDefault(); btnStep.click(); }
+  if (k==='r') { e.preventDefault(); btnReset.click(); }
+});
+
+/* ---------- First boot ---------- */
+loadFromTextarea();
+
+/* ---------- Utils ---------- */
+function escapeHtml(s){ return s.replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
+</script>
+</body>
+</html>
