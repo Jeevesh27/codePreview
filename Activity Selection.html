@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Activity Selection — Greedy Algorithm Visualizer</title>
+<style>
+  :root{
+    --bg:#0e1224; --panel:#151a33; --panel-2:#1b2144; --glass:rgba(255,255,255,.06);
+    --text:#eef2ff; --muted:#9aa4d4; --accent:#7be3ff; --accent-2:#9af0c6; --danger:#ff7b7b;
+    --ok:#98f5a1; --chip:#2a305a; --chip-2:#3a4181; --radius:16px; --shadow:0 12px 28px rgba(0,0,0,.35);
+    --ring:0 0 0 2px rgba(123,227,255,.3), 0 0 0 6px rgba(123,227,255,.12);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1200px 800px at 15% -10%, #1a1f3a 0%, #0f1430 45%, var(--bg) 100%);
+    color: var(--text);
+  }
+  .wrap {
+    max-width: 1200px;
+    margin: 32px auto;
+    padding: 0 16px 48px;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 16px;
+  }
+  h1 { font-size: 28px; margin: 0; letter-spacing: .3px; }
+  .tag {
+    padding: 6px 10px; border-radius: 999px; background: var(--chip);
+    color: var(--muted); font-size: 12px; border: 1px solid #2b3361;
+  }
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: 320px 1fr;
+  }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel { background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid rgba(255,255,255,.06); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .panel h2 { font-size: 16px; margin: 0; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.06); color: var(--accent); }
+  .panel .content { padding: 14px 16px; }
+
+  .controls { display: grid; gap: 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, select {
+    background: var(--chip-2); border: 1px solid #4a5290; color: var(--text);
+    padding: 10px 12px; border-radius: 12px; cursor: pointer; font-weight: 600;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: #1e2a6b; border-color: #5aa5c6; box-shadow: var(--ring); }
+  .muted { color: var(--muted); }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #0b0f24; border: 1px solid #2a2f52; border-radius: 6px; padding: 0 6px; }
+
+  .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #0c1128; border: 1px solid #283067; border-radius: 12px; padding: 12px; color: #cfe3ff;
+    white-space: pre; overflow: auto; max-height: 240px;
+  }
+  .highlight { background: rgba(123,227,255,.08); border-radius: 8px; box-shadow: inset var(--ring); }
+
+  /* Table of intervals */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 8px 10px; border-bottom: 1px dashed rgba(255,255,255,.08); text-align: left; }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: linear-gradient(180deg, #151a33 60%, rgba(21,26,51,0) 100%); }
+  .chip-sm { display:inline-flex; align-items:center; gap:6px; padding: 4px 8px; border-radius: 999px; background: var(--glass); border:1px solid #2a2f57; font-size: 12px; }
+  .status { font-weight: 700; }
+  .s-default { color: var(--muted); }
+  .s-picked { color: var(--ok); }
+  .s-rejected { color: var(--danger); }
+
+  /* SVG timeline */
+  .stage {
+    padding: 16px; border-top: 1px solid rgba(255,255,255,.06);
+  }
+  .legend { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 10px; }
+  .legend .chip-sm i { display:inline-block; width:12px; height:12px; border-radius: 3px; background: var(--chip-2); }
+  .legend .picked i { background: var(--ok); }
+  .legend .rejected i { background: var(--danger); }
+  .legend .consider i { background: var(--accent); }
+
+  .explainer { margin-top: 10px; color: var(--muted); min-height: 24px; }
+  .toast { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(152,245,161,.08); border: 1px solid rgba(152,245,161,.25); display:none; }
+  .toast.show { display:block; }
+
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    background: #0b0f24; color: var(--text);
+    border: 1px solid #2a2f57; border-radius: 12px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .divider { height: 1px; background: rgba(255,255,255,.06); margin: 10px 0; }
+
+  /* tiny helper */
+  .sr { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Activity Selection (Maximum Non-Overlapping Intervals)</h1>
+    <span class="tag">Greedy • sort by finish time ↑</span>
+  </header>
+
+  <div class="grid">
+    <!-- Left: Controls -->
+    <section class="panel" aria-labelledby="controls-heading">
+      <h2 id="controls-heading">Controls</h2>
+      <div class="content controls">
+        <div class="row">
+          <button id="btnPlay" class="primary">▶ Play</button>
+          <button id="btnPause">⏸ Pause</button>
+          <button id="btnStep">⏭ Step</button>
+          <button id="btnReset">↺ Reset</button>
+        </div>
+
+        <div class="row">
+          <label for="speed"><span class="muted">Speed</span></label>
+          <input id="speed" type="range" min="0" max="100" value="55" />
+          <span id="speedLabel" class="kbd">1.0×</span>
+        </div>
+
+        <div class="row">
+          <label><input type="radio" name="mode" value="basic" checked> Basic</label>
+          <label><input type="radio" name="mode" value="advanced"> Advanced</label>
+        </div>
+
+        <div class="divider"></div>
+
+        <div>
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <strong>Custom Intervals</strong>
+            <button id="btnLoad">Load</button>
+          </div>
+          <p class="muted" style="margin:.4rem 0;">Enter one interval per line as <span class="kbd">start,finish</span>. Values can be ints or decimals. Example:</p>
+          <textarea id="inputIntervals" spellcheck="false">1, 4
+3, 5
+0, 6
+5, 7
+3, 9
+5, 9
+6, 10
+8, 11
+8, 12
+2, 14
+12, 16</textarea>
+          <div class="row" style="justify-content:space-between;">
+            <button id="btnRandom">Randomize</button>
+            <span class="muted">Max timeline auto-scales.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Visualization -->
+    <section class="panel">
+      <h2>Visualization</h2>
+      <div class="content">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="legend">
+            <span class="chip-sm"><i></i> default</span>
+            <span class="chip-sm consider"><i></i> consider</span>
+            <span class="chip-sm picked"><i></i> picked</span>
+            <span class="chip-sm rejected"><i></i> rejected</span>
+            <span class="chip-sm"><svg width="12" height="12"><line x1="6" y1="0" x2="6" y2="12" stroke="currentColor" stroke-width="2"/></svg> last_end</span>
+          </div>
+          <div class="muted">chosen = <span id="chosenOut" class="kbd">[]</span></div>
+        </div>
+
+        <div id="stage" class="stage panel" style="padding:0;">
+          <svg id="svg" width="100%" height="420" viewBox="0 0 1000 420" preserveAspectRatio="none" role="img" aria-label="Timeline of intervals"></svg>
+        </div>
+
+        <div class="explainer" id="explainer">Algorithm is idle. Press <b>Play</b> or <b>Step</b>.</div>
+        <div class="toast" id="toast">Done! Greedy solution built by earliest finish time.</div>
+
+        <div class="divider"></div>
+
+        <details open>
+          <summary><strong>Pseudo-code</strong> (what we’re animating)</summary>
+          <pre class="code" id="pseudo"><span>// sort intervals by finish time ↑
+last_end ← -∞
+chosen ← []
+for (s, f) in intervals:
+    if s ≥ last_end:
+        chosen.push((s, f))
+        last_end ← f
+return chosen</span></pre>
+        </details>
+
+        <details>
+          <summary><strong>Why this works</strong> (greedy choice)</summary>
+          <div class="content" style="padding-left:0;">
+            The algorithm always picks the interval that finishes earliest among the remaining ones.
+            That leaves the most room for future intervals, and you can prove (by an exchange argument) that any optimal solution can be transformed to this greedy one without reducing the number of intervals.
+          </div>
+        </details>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ---------- Utilities ---------- */
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------- State ---------- */
+let rawIntervals = [];
+let sorted = [];
+let stepIndex = 0; // which interval we're considering in sorted list
+let chosen = [];
+let lastEnd = Number.NEGATIVE_INFINITY;
+let playing = false;
+let mode = 'basic';
+let playTimer = null;
+
+/* ---------- Elements ---------- */
+const svg = $('#svg');
+const explainer = $('#explainer');
+const chosenOut = $('#chosenOut');
+const toast = $('#toast');
+const btnPlay = $('#btnPlay');
+const btnPause = $('#btnPause');
+const btnStep = $('#btnStep');
+const btnReset = $('#btnReset');
+const btnLoad = $('#btnLoad');
+const btnRandom = $('#btnRandom');
+const speed = $('#speed');
+const speedLabel = $('#speedLabel');
+
+/* ---------- Config / Drawing ---------- */
+const PAD_L = 80;  // left axis
+const PAD_R = 24;
+const ROW_H = 28;
+const ROW_GAP = 8;
+const BAR_R = 8;
+
+function scaleX(v, min, max) {
+  const w = 1000 - PAD_L - PAD_R;
+  return PAD_L + (max === min ? 0 : (v - min) / (max - min)) * w;
+}
+
+function timeGrid(min, max) {
+  // simple grid ticks at integer steps
+  let ticks = [];
+  const span = max - min;
+  const step = span <= 10 ? 1 : span <= 25 ? 2 : span <= 50 ? 5 : 10;
+  for (let x = Math.ceil(min); x <= Math.floor(max); x += step) ticks.push(x);
+  return { step, ticks };
+}
+
+function colorForStatus(st) {
+  if (st === 'picked') return 'var(--ok)';
+  if (st === 'rejected') return 'var(--danger)';
+  if (st === 'consider') return 'var(--accent)';
+  return 'var(--chip-2)';
+}
+
+/* ---------- Rendering ---------- */
+function render() {
+  const min = Math.min(...rawIntervals.map(d => d.s), 0);
+  const max = Math.max(...rawIntervals.map(d => d.f), 10);
+  const rows = sorted.length;
+  const height = (rows * (ROW_H + ROW_GAP)) + 80;
+  svg.setAttribute('viewBox', `0 0 1000 ${height}`);
+  svg.setAttribute('height', height);
+
+  // Clear
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  // Background
+  const bg = rect(0, 0, 1000, height, 0, 'url(#bgGrad)');
+  bg.setAttribute('fill', 'transparent');
+  svg.appendChild(defs());
+  svg.appendChild(bg);
+
+  // Axis title
+  svg.appendChild(textNode(16, 24, 'time →', '#9aa4d4', 12, 'start'));
+
+  // Grid
+  const { ticks } = timeGrid(min, max);
+  ticks.forEach(t => {
+    const x = scaleX(t, min, max);
+    const ln = line(x, 40, x, height - 24, 'rgba(255,255,255,.06)', 1);
+    svg.appendChild(ln);
+    svg.appendChild(textNode(x, 36, String(t), '#9aa4d4', 12, 'middle'));
+  });
+
+  // last_end guide
+  const leX = scaleX(lastEnd, min, max);
+  const le = line(leX, 32, leX, height - 24, 'rgba(123,227,255,.7)', 2);
+  le.setAttribute('stroke-dasharray', '4 3');
+  svg.appendChild(le);
+  svg.appendChild(textNode(leX + 6, 32, 'last_end', 'var(--accent)', 12, 'start'));
+
+  // Rows
+  sorted.forEach((d, i) => {
+    const y = 56 + i * (ROW_H + ROW_GAP);
+    // labels
+    svg.appendChild(textNode(16, y + ROW_H * .65, `#${i+1}`, '#9aa4d4', 12, 'start'));
+    svg.appendChild(textNode(40, y + ROW_H * .65, `(${fmt(d.s)}, ${fmt(d.f)})`, '#cfe3ff', 12, 'start'));
+
+    // bars
+    const x1 = scaleX(d.s, min, max);
+    const x2 = scaleX(d.f, min, max);
+    const st = d.status ?? 'default';
+    const r = roundedRect(x1, y, Math.max(x2 - x1, 2), ROW_H, BAR_R, colorForStatus(st));
+    r.setAttribute('opacity', st === 'default' ? .8 : 1);
+    r.setAttribute('filter', st === 'picked' ? 'url(#glowOk)' :
+                             st === 'rejected' ? 'url(#glowBad)' :
+                             st === 'consider' ? 'url(#glowFx)' : 'none');
+    svg.appendChild(r);
+  });
+
+  // chosen output
+  chosenOut.textContent = '[' + chosen.map(d => `(${fmt(d.s)}, ${fmt(d.f)})`).join(', ') + ']';
+}
+
+function defs() {
+  const d = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  const grad = document.createElementNS('http://www.w3.org/2000/svg','linearGradient');
+  grad.setAttribute('id','bgGrad'); grad.setAttribute('x1','0'); grad.setAttribute('x2','0'); grad.setAttribute('y1','0'); grad.setAttribute('y2','1');
+  const s1 = stop('0%','rgba(255,255,255,.02)');
+  const s2 = stop('100%','rgba(255,255,255,0)');
+  grad.appendChild(s1); grad.appendChild(s2); d.appendChild(grad);
+
+  d.appendChild(glow('glowFx', 'rgba(123,227,255,.8)'));
+  d.appendChild(glow('glowOk', 'rgba(152,245,161,.8)'));
+  d.appendChild(glow('glowBad', 'rgba(255,123,123,.8)'));
+  return d;
+}
+
+function glow(id, color) {
+  const f = document.createElementNS('http://www.w3.org/2000/svg','filter');
+  f.setAttribute('id', id);
+  const g = document.createElementNS('http://www.w3.org/2000/svg','feDropShadow');
+  g.setAttribute('dx','0'); g.setAttribute('dy','0'); g.setAttribute('stdDeviation','3'); g.setAttribute('flood-color', color);
+  f.appendChild(g);
+  return f;
+}
+
+function rect(x,y,w,h,r,fill) {
+  const R = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  R.setAttribute('x',x); R.setAttribute('y',y); R.setAttribute('width',w); R.setAttribute('height',h); R.setAttribute('rx',r); R.setAttribute('fill',fill);
+  return R;
+}
+function roundedRect(x,y,w,h,r,fill){ return rect(x,y,w,h,r,fill); }
+function line(x1,y1,x2,y2,stroke,sw) {
+  const L = document.createElementNS('http://www.w3.org/2000/svg','line');
+  L.setAttribute('x1',x1); L.setAttribute('y1',y1); L.setAttribute('x2',x2); L.setAttribute('y2',y2);
+  L.setAttribute('stroke',stroke); L.setAttribute('stroke-width',sw);
+  return L;
+}
+function textNode(x,y,txt,fill='#fff',size=12, anchor='start'){
+  const T = document.createElementNS('http://www.w3.org/2000/svg','text');
+  T.setAttribute('x',x); T.setAttribute('y',y); T.setAttribute('fill',fill); T.setAttribute('font-size',size); T.setAttribute('text-anchor',anchor);
+  T.textContent = txt;
+  return T;
+}
+function stop(off, color){
+  const s = document.createElementNS('http://www.w3.org/2000/svg','stop'); s.setAttribute('offset', off); s.setAttribute('stop-color', color); return s;
+}
+const fmt = v => Number.isFinite(v) ? (Math.round(v*100)/100).toString() : v === -Infinity ? '-∞' : v;
+
+/* ---------- Algorithm (stepper) ---------- */
+function resetStatuses() {
+  sorted.forEach(d => d.status = 'default');
+  chosen = [];
+  lastEnd = Number.NEGATIVE_INFINITY;
+  stepIndex = 0;
+  toast.classList.remove('show');
+  updateExplainer('Algorithm reset. Press Play or Step.');
+  render();
+}
+
+function stepOnce() {
+  if (stepIndex >= sorted.length) {
+    updateExplainer('All intervals processed. Algorithm finished.');
+    toast.classList.add('show');
+    stopPlaying();
+    return true;
+  }
+  const d = sorted[stepIndex];
+
+  // Highlight consideration
+  sorted.forEach((x,i) => x.status = (i === stepIndex ? 'consider' : x.status === 'consider' ? 'default' : x.status));
+  render();
+
+  // Decision
+  const canPick = d.s >= lastEnd;
+  if (mode === 'advanced') {
+    updateExplainer(`Considering (${fmt(d.s)}, ${fmt(d.f)}): start ${fmt(d.s)} ${canPick ? '≥' : '<'} last_end ${fmt(lastEnd)} → ${canPick ? 'pick' : 'reject'}.`);
+  } else {
+    updateExplainer(`Considering (${fmt(d.s)}, ${fmt(d.f)}) → ${canPick ? 'pick' : 'reject'}.`);
+  }
+
+  // Apply result
+  if (canPick) {
+    d.status = 'picked';
+    chosen.push({s: d.s, f: d.f});
+    lastEnd = d.f;
+  } else {
+    d.status = 'rejected';
+  }
+
+  stepIndex++;
+  render();
+  if (stepIndex >= sorted.length) {
+    updateExplainer('All intervals processed. Algorithm finished.');
+    toast.classList.add('show');
+    stopPlaying();
+    return true;
+  }
+  return false;
+}
+
+function playLoop() {
+  stopPlaying();
+  playing = true;
+  btnPlay.disabled = true;
+  btnPause.disabled = false;
+
+  const delay = speedToMs(speed.value);
+  playTimer = setInterval(() => {
+    const done = stepOnce();
+    if (done) stopPlaying();
+  }, delay);
+}
+
+function stopPlaying() {
+  playing = false;
+  btnPlay.disabled = false;
+  btnPause.disabled = true;
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+}
+
+/* ---------- Data handling ---------- */
+function parseTextarea() {
+  const lines = $('#inputIntervals').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const arr = [];
+  for (const line of lines) {
+    const m = line.split(/[,\s]+/).filter(Boolean);
+    if (m.length >= 2) {
+      const s = parseFloat(m[0]); const f = parseFloat(m[1]);
+      if (Number.isFinite(s) && Number.isFinite(f) && f >= s) arr.push({ s, f });
+    }
+  }
+  return arr;
+}
+
+function sortByFinish(data) {
+  return data.slice().sort((a,b) => a.f === b.f ? a.s - b.s : a.f - b.f);
+}
+
+function loadFromTextarea() {
+  const arr = parseTextarea();
+  if (!arr.length) {
+    updateExplainer('No valid intervals found. Use "start,finish" per line.');
+    return;
+  }
+  rawIntervals = arr;
+  sorted = sortByFinish(arr).map(d => ({...d, status:'default'}));
+  resetStatuses();
+}
+
+/* ---------- UI text ---------- */
+function updateExplainer(msg) {
+  explainer.innerHTML = msg;
+}
+
+/* ---------- Speed ---------- */
+function speedToMs(v) {
+  // map 0..100 -> 1200ms..160ms (ease-in-ish)
+  const t = v/100;
+  return Math.round(1200 - 1040 * Math.pow(t, 0.65));
+}
+speed.addEventListener('input', () => {
+  const ms = speedToMs(speed.value);
+  const mult = (400/Math.max(160, ms)).toFixed(1); // rough label
+  speedLabel.textContent = `${mult}×`;
+  if (playing) playLoop(); // restart timer with new speed
+});
+
+/* ---------- Buttons ---------- */
+btnPlay.addEventListener('click', playLoop);
+btnPause.addEventListener('click', stopPlaying);
+btnStep.addEventListener('click', () => { stopPlaying(); stepOnce(); });
+btnReset.addEventListener('click', () => { stopPlaying(); resetStatuses(); });
+btnLoad.addEventListener('click', () => { stopPlaying(); loadFromTextarea(); });
+btnRandom.addEventListener('click', () => {
+  stopPlaying();
+  // generate 10 random intervals within 0..20
+  const N = 10;
+  const arr = [];
+  for (let i=0;i<N;i++){
+    const a = +(Math.random()*18).toFixed(1);
+    const b = +(a + (1 + Math.random()*6)).toFixed(1);
+    arr.push({s:a, f:Math.min(b, 24)});
+  }
+  $('#inputIntervals').value = arr.map(d => `${d.s}, ${d.f}`).join('\n');
+  loadFromTextarea();
+});
+
+$$('input[name="mode"]').forEach(r => r.addEventListener('change', (e) => {
+  mode = e.target.value;
+  // visual emphasis: in advanced mode we keep last_end guide always; basic already shows it but explanations are shorter
+  updateExplainer(mode === 'advanced' ? 'Advanced mode: showing comparisons vs last_end.' : 'Basic mode: concise steps.');
+}));
+
+/* ---------- Kickoff ---------- */
+loadFromTextarea();
+
+/* ---------- (Optional) Keyboard shortcuts ---------- */
+document.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === ' ') { e.preventDefault(); playing ? stopPlaying() : playLoop(); }
+  if (e.key.toLowerCase() === 's') { e.preventDefault(); btnStep.click(); }
+  if (e.key.toLowerCase() === 'r') { e.preventDefault(); btnReset.click(); }
+});
+
+/* ---------- End ---------- */
+</script>
+</body>
+</html>
