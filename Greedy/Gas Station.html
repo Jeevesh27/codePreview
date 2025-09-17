@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gas Station — Start Index to Complete Circuit</title>
+<style>
+  :root{
+    --bg:#0e1224; --panel:#151a33; --panel-2:#1b2144; --glass:rgba(255,255,255,.06);
+    --text:#eef2ff; --muted:#9aa4d4; --accent:#7be3ff; --accent-2:#9af0c6; --danger:#ff7b7b;
+    --ok:#98f5a1; --chip:#2a305a; --chip-2:#3a4181; --radius:16px; --shadow:0 12px 28px rgba(0,0,0,.35);
+    --ring:0 0 0 2px rgba(123,227,255,.3), 0 0 0 6px rgba(123,227,255,.12);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background: radial-gradient(1200px 800px at 15% -10%, #1a1f3a 0%, #0f1430 45%, var(--bg) 100%);
+    color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+  }
+  .wrap{max-width:1200px;margin:32px auto;padding:0 16px 48px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+  h1{margin:0;font-size:28px;letter-spacing:.3px}
+  .tag{padding:6px 10px;border-radius:999px;background:var(--chip);color:var(--muted);font-size:12px;border:1px solid #2b3361}
+  .grid{display:grid;gap:16px;grid-template-columns:340px 1fr}
+  @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .panel h2{font-size:16px;margin:0;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06);color:var(--accent)}
+  .panel .content{padding:14px 16px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .controls{display:grid;gap:8px}
+  button, input, textarea, select{
+    background:var(--chip-2);border:1px solid #4a5290;color:var(--text);
+    padding:10px 12px;border-radius:12px;font-weight:600
+  }
+  input[type="range"]{width:180px}
+  textarea{
+    width:100%;min-height:92px;background:#0b0f24;border:1px solid #2a2f57;border-radius:12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--text); padding:10px
+  }
+  button.primary{background:#1e2a6b;border-color:#5aa5c6;box-shadow:var(--ring)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0b0f24;border:1px solid #2a2f52;border-radius:6px;padding:0 6px}
+  .muted{color:var(--muted)}
+  .divider{height:1px;background:rgba(255,255,255,.06);margin:10px 0}
+  .legend{display:flex;gap:10px;flex-wrap:wrap}
+  .chip-sm{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--glass);border:1px solid #2a2f57;font-size:12px}
+  .toast{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(152,245,161,.08);border:1px solid rgba(152,245,161,.25);display:none}
+  .toast.show{display:block}
+  .code{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background:#0c1128;border:1px solid #283067;border-radius:12px;padding:12px;color:#cfe3ff;white-space:pre;overflow:auto
+  }
+  .explainer{margin-top:10px;color:var(--muted);min-height:24px}
+  /* Station ring */
+  #ringWrap{display:flex;justify-content:center;align-items:center}
+  #ring{max-width:760px;width:100%}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #4350a0;background:#0b0f24}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Gas Station (Find Start Index to Complete Circuit)</h1>
+    <span class="tag">Greedy • one pass + restart when tank &lt; 0</span>
+  </header>
+
+  <div class="grid">
+    <!-- Controls -->
+    <section class="panel">
+      <h2>Controls</h2>
+      <div class="content controls">
+        <div class="row">
+          <button id="btnPlay" class="primary">▶ Play</button>
+          <button id="btnPause">⏸ Pause</button>
+          <button id="btnStep">⏭ Step</button>
+          <button id="btnReset">↺ Reset</button>
+        </div>
+
+        <div class="row">
+          <label for="speed" class="muted">Speed</label>
+          <input id="speed" type="range" min="0" max="100" value="55"/>
+          <span id="speedLabel" class="kbd">1.0×</span>
+        </div>
+
+        <div class="row">
+          <label><input type="radio" name="mode" value="basic" checked> Basic</label>
+          <label><input type="radio" name="mode" value="advanced"> Advanced</label>
+        </div>
+
+        <div class="divider"></div>
+
+        <strong>Input Arrays</strong>
+        <p class="muted" style="margin:.4rem 0;">Comma/space separated. Lengths must match.</p>
+        <label>gas</label>
+        <textarea id="gasInp">1,2,3,4,5</textarea>
+        <label>cost</label>
+        <textarea id="costInp">3,4,5,1,2</textarea>
+        <div class="row" style="justify-content:space-between;">
+          <button id="btnLoad">Load</button>
+          <button id="btnRandom">Randomize</button>
+          <span class="muted">n = <span id="nOut" class="kbd">5</span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visualization -->
+    <section class="panel">
+      <h2>Visualization</h2>
+      <div class="content">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="legend">
+            <span class="chip-sm"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="var(--chip-2)"/></svg> station</span>
+            <span class="chip-sm"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="var(--accent)"/></svg> current i</span>
+            <span class="chip-sm"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="var(--ok)"/></svg> start</span>
+            <span class="chip-sm"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="var(--danger)"/></svg> deficit (tank &lt; 0)</span>
+          </div>
+          <div class="muted">
+            start = <span id="startOut" class="kbd">0</span>,
+            i = <span id="iOut" class="kbd">0</span>,
+            tank = <span id="tankOut" class="kbd">0</span>
+          </div>
+        </div>
+
+        <div id="ringWrap">
+          <svg id="ring" viewBox="0 0 800 520" width="100%" height="520" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Circular route of gas stations"></svg>
+        </div>
+
+        <div class="explainer" id="explainer">Algorithm is idle. Press <b>Play</b> or <b>Step</b>.</div>
+        <div class="toast" id="toast">Done! Result start index shown in green.</div>
+
+        <div class="divider"></div>
+
+        <details open>
+          <summary><strong>Pseudo-code</strong> (what we’re animating)</summary>
+          <pre class="code"><span>if sum(gas) &lt; sum(cost): return -1
+start ← 0; tank ← 0
+for i in [0..n-1]:
+    tank += gas[i] - cost[i]
+    if tank &lt; 0:
+        start ← i + 1
+        tank ← 0
+return start</span></pre>
+        </details>
+
+        <details>
+          <summary><strong>Why this works</strong> (greedy correctness)</summary>
+          <div class="content" style="padding-left:0;">
+            If total gas is less than total cost, no start works. Otherwise, anytime the cumulative sum (tank) becomes negative at <span class="pill">i</span>, no station in the just-failed segment can be a valid start (they'd have an even smaller prefix). So we jump start to <span class="pill">i+1</span> and continue. One pass, O(n).
+          </div>
+        </details>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ---------- Helpers ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const sum = a => a.reduce((x,y)=>x+y,0);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ---------- State ---------- */
+let gas = [1,2,3,4,5];
+let cost = [3,4,5,1,2];
+let n = gas.length;
+
+let i = 0;
+let start = 0;
+let tank = 0;
+let playing = false;
+let playTimer = null;
+let mode = 'basic';
+let finished = false;
+
+/* ---------- Elements ---------- */
+const svg = $('#ring');
+const btnPlay = $('#btnPlay');
+const btnPause = $('#btnPause');
+const btnStep = $('#btnStep');
+const btnReset = $('#btnReset');
+const btnLoad = $('#btnLoad');
+const btnRandom = $('#btnRandom');
+const speed = $('#speed');
+const speedLabel = $('#speedLabel');
+const explainer = $('#explainer');
+const toast = $('#toast');
+
+const nOut = $('#nOut');
+const startOut = $('#startOut');
+const iOut = $('#iOut');
+const tankOut = $('#tankOut');
+
+/* ---------- Geometry ---------- */
+const CX = 400, CY = 260, R = 180;
+const stationNodes = []; // cache of drawn nodes
+
+function polar(angleRad, r=R){ return [CX + r*Math.cos(angleRad), CY + r*Math.sin(angleRad)]; }
+
+/* ---------- Rendering ---------- */
+function renderRing() {
+  svg.innerHTML = '';
+  const bg = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  bg.setAttribute('cx',CX); bg.setAttribute('cy',CY); bg.setAttribute('r',R+46);
+  bg.setAttribute('fill','rgba(255,255,255,.03)'); bg.setAttribute('stroke','rgba(255,255,255,.06)'); bg.setAttribute('stroke-width','2');
+  svg.appendChild(bg);
+
+  // title around center
+  svg.appendChild(label(CX, CY-140, `n = ${n}`, '#9aa4d4', 12, 'middle'));
+
+  stationNodes.length = 0;
+  for(let k=0;k<n;k++){
+    const a = -Math.PI/2 + (2*Math.PI*k)/n;
+    const [x,y] = polar(a, R);
+    const group = document.createElementNS('http://www.w3.org/2000/svg','g');
+
+    // edge to next
+    const [nx,ny] = polar(-Math.PI/2 + (2*Math.PI*((k+1)%n))/n, R);
+    const edge = document.createElementNS('http://www.w3.org/2000/svg','path');
+    const midx = (x+nx)/2, midy = (y+ny)/2;
+    edge.setAttribute('d', `M ${x} ${y} Q ${midx} ${midy} ${nx} ${ny}`);
+    edge.setAttribute('stroke','rgba(255,255,255,.15)'); edge.setAttribute('fill','none'); edge.setAttribute('stroke-width','2');
+    svg.appendChild(edge);
+
+    // node
+    const node = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    node.setAttribute('cx',x); node.setAttribute('cy',y); node.setAttribute('r','12');
+    node.setAttribute('fill','var(--chip-2)'); node.setAttribute('stroke','#4a5290'); node.setAttribute('stroke-width','2');
+    group.appendChild(node);
+
+    // values
+    const delta = gas[k]-cost[k];
+    const t1 = label(x, y-22, `g:${gas[k]}`, '#cfe3ff', 11, 'middle');
+    const t2 = label(x, y-8,  `c:${cost[k]}`, '#cfe3ff', 11, 'middle');
+    const t3 = label(x, y+20, `Δ:${delta>=0?'+':''}${delta}`, delta>=0?'var(--ok)':'var(--danger)', 12, 'middle');
+    [t1,t2,t3].forEach(t=>group.appendChild(t));
+
+    svg.appendChild(group);
+    stationNodes.push({node, group, x, y});
+  }
+
+  // center metrics
+  svg.appendChild(panelMetric(CX, CY+140, `start=${start}`, 'var(--ok)'));
+  svg.appendChild(panelMetric(CX, CY+172, `i=${i}`, 'var(--accent)'));
+  svg.appendChild(panelMetric(CX, CY+204, `tank=${tank}`, tank<0?'var(--danger)':'#cfe3ff'));
+
+  // markers
+  highlightMarkers();
+}
+
+function label(x,y,text,fill,size, anchor){
+  const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('fill',fill);
+  t.setAttribute('font-size',size); t.setAttribute('text-anchor',anchor||'start'); t.textContent = text; return t;
+}
+function panelMetric(x,y,text,fill){
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  rect.setAttribute('x',x-60); rect.setAttribute('y',y-14); rect.setAttribute('width',120); rect.setAttribute('height',24);
+  rect.setAttribute('rx',8); rect.setAttribute('fill','#0b0f24'); rect.setAttribute('stroke','#2a2f57');
+  const t = label(x, y+3, text, fill, 13, 'middle');
+  g.appendChild(rect); g.appendChild(t); return g;
+}
+
+function highlightMarkers(){
+  // reset all nodes
+  stationNodes.forEach(n=>{
+    n.node.setAttribute('fill','var(--chip-2)');
+    n.node.setAttribute('filter','');
+  });
+  // current i
+  if (stationNodes[i]) {
+    stationNodes[i].node.setAttribute('fill','var(--accent)');
+    stationNodes[i].node.setAttribute('filter','url(#glowFx)');
+  }
+  // start
+  if (stationNodes[start]) {
+    const s = stationNodes[start];
+    const halo = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    halo.setAttribute('cx',s.x); halo.setAttribute('cy',s.y); halo.setAttribute('r','18');
+    halo.setAttribute('fill','none'); halo.setAttribute('stroke','var(--ok)'); halo.setAttribute('stroke-width','3');
+    halo.setAttribute('filter','url(#glowOk)');
+    svg.appendChild(halo);
+    s.node.setAttribute('fill','var(--ok)');
+  }
+
+  // defs for glow (once)
+  if (!svg.querySelector('#glowFx')) {
+    const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+    defs.appendChild(glow('glowFx','rgba(123,227,255,.8)'));
+    defs.appendChild(glow('glowOk','rgba(152,245,161,.8)'));
+    defs.appendChild(glow('glowBad','rgba(255,123,123,.8)'));
+    svg.appendChild(defs);
+  }
+}
+function glow(id,color){
+  const f = document.createElementNS('http://www.w3.org/2000/svg','filter');
+  f.setAttribute('id',id);
+  const g = document.createElementNS('http://www.w3.org/2000/svg','feDropShadow');
+  g.setAttribute('dx','0'); g.setAttribute('dy','0'); g.setAttribute('stdDeviation','3'); g.setAttribute('flood-color', color);
+  f.appendChild(g); return f;
+}
+
+/* ---------- Algorithm control ---------- */
+function resetAlgo() {
+  playing = false; finished = false;
+  stopPlaying();
+  i = 0; start = 0; tank = 0;
+  toast.classList.remove('show');
+  updateHUD();
+  renderRing();
+  explain('Algorithm reset. Press Play or Step.');
+}
+
+function canSolve() {
+  const ok = sum(gas) >= sum(cost);
+  return { ok, totalGas: sum(gas), totalCost: sum(cost) };
+}
+
+function stepOnce() {
+  if (finished) return true;
+
+  const check = canSolve();
+  if (!check.ok) {
+    explain(`sum(gas) = ${check.totalGas} < sum(cost) = ${check.totalCost} → impossible. Return -1.`);
+    toast.classList.add('show');
+    finished = true;
+    return true;
+  }
+
+  // process current i
+  const gain = gas[i] - cost[i];
+  const prevTank = tank;
+  tank += gain;
+
+  // update markers and HUD before decision message
+  updateHUD();
+  renderRing();
+
+  if (mode === 'advanced') {
+    explain(`i=${i}: tank += gas[i]-cost[i] = ${prevTank} + (${gas[i]}-${cost[i]}) = ${tank}.`);
+  } else {
+    explain(`i=${i}: tank = ${tank}.`);
+  }
+
+  if (tank < 0) {
+    // cannot start anywhere in [start..i], jump start to i+1
+    const oldStart = start;
+    start = i + 1;
+    tank = 0;
+
+    if (mode === 'advanced') {
+      explain(`tank < 0 at i=${i} → segment [${oldStart}..${i}] invalid as start. Set start = ${start}, tank = 0.`);
+    } else {
+      explain(`tank < 0 → start = ${start}, tank = 0.`);
+    }
+  }
+
+  i++;
+  if (i >= n) {
+    // one pass only (because total gas >= total cost guarantees existence)
+    finished = true;
+    explain(`Done. Return start = ${start}.`);
+    toast.classList.add('show');
+  }
+
+  updateHUD();
+  renderRing();
+  return finished;
+}
+
+function playLoop(){
+  stopPlaying();
+  const delay = speedToMs(speed.value);
+  playTimer = setInterval(()=>{
+    const done = stepOnce();
+    if (done) stopPlaying();
+  }, delay);
+  playing = true;
+  btnPlay.disabled = true;
+  btnPause.disabled = false;
+}
+function stopPlaying(){
+  playing = false;
+  btnPlay.disabled = false;
+  btnPause.disabled = true;
+  if (playTimer){ clearInterval(playTimer); playTimer = null; }
+}
+
+/* ---------- UI/HUD ---------- */
+function updateHUD(){
+  nOut.textContent = n;
+  startOut.textContent = start;
+  iOut.textContent = i;
+  tankOut.textContent = tank;
+}
+function explain(msg){ $('#explainer').innerHTML = msg; }
+
+/* ---------- Input handling ---------- */
+function parseNums(text){
+  return text
+    .split(/[\s,]+/).map(s=>s.trim()).filter(Boolean)
+    .map(Number).filter(v=>Number.isFinite(v));
+}
+function loadInputs(){
+  const g = parseNums($('#gasInp').value);
+  const c = parseNums($('#costInp').value);
+  if (!g.length || !c.length || g.length !== c.length) {
+    explain('Please provide equal-length numeric arrays for gas and cost.');
+    return;
+  }
+  gas = g; cost = c; n = gas.length;
+  resetAlgo();
+}
+function randomize(){
+  const N = Math.floor(5 + Math.random()*7); // 5..11
+  const g = [], c = [];
+  for (let k=0;k<N;k++){
+    const gg = Math.floor(1+Math.random()*8);
+    const cc = Math.floor(1+Math.random()*8);
+    g.push(gg); c.push(cc);
+  }
+  $('#gasInp').value = g.join(', ');
+  $('#costInp').value = c.join(', ');
+  loadInputs();
+}
+
+/* ---------- Speed ---------- */
+function speedToMs(v){
+  const t = v/100;
+  return Math.round(1200 - 1040 * Math.pow(t, 0.65)); // 1200ms..160ms
+}
+speed.addEventListener('input', ()=>{
+  const ms = speedToMs(speed.value);
+  const mult = (400/Math.max(160, ms)).toFixed(1);
+  speedLabel.textContent = `${mult}×`;
+  if (playing) playLoop();
+});
+
+/* ---------- Events ---------- */
+btnPlay.addEventListener('click', playLoop);
+btnPause.addEventListener('click', stopPlaying);
+btnStep.addEventListener('click', ()=>{ stopPlaying(); stepOnce(); });
+btnReset.addEventListener('click', ()=>{ stopPlaying(); resetAlgo(); });
+btnLoad.addEventListener('click', ()=>{ stopPlaying(); loadInputs(); });
+btnRandom.addEventListener('click', ()=>{ stopPlaying(); randomize(); });
+$$('input[name="mode"]').forEach(r=>r.addEventListener('change',e=>{
+  mode = e.target.value;
+  explain(mode==='advanced' ? 'Advanced mode: show tank arithmetic and restart reasoning.' : 'Basic mode: concise steps.');
+}));
+
+/* ---------- Kickoff ---------- */
+resetAlgo();
+
+/* ---------- Keyboard shortcuts ---------- */
+document.addEventListener('keydown', (e)=>{
+  const k = e.key.toLowerCase();
+  if (k === ' ') { e.preventDefault(); playing ? stopPlaying() : playLoop(); }
+  if (k === 's') { e.preventDefault(); btnStep.click(); }
+  if (k === 'r') { e.preventDefault(); btnReset.click(); }
+});
+</script>
+</body>
+</html>
